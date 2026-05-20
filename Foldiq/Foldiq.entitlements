@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	Foldiq.entitlements
+
+	Foldiq needs:
+	1. Read-write access to user-selected folders (NSOpenPanel security-scoped bookmarks)
+	2. Network access for CoreLocation reverse-geocoding (GPS → city names)
+	3. App Sandbox for Mac App Store eligibility
+	-->
+
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- Grants RW access to whatever folder the user picks via NSOpenPanel -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Outbound network for CoreLocation reverse geocoding -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- Downloads folder — for exporting CSV reports -->
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+</dict>
+</plist>
