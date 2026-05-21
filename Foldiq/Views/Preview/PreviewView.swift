@@ -8,6 +8,7 @@ import SwiftUI
 import SwiftData
 import AppKit
 import QuickLookUI
+import AVFoundation
 
 struct PreviewView: View {
 
@@ -28,6 +29,9 @@ struct PreviewView: View {
     @State private var showingConfirmation = false
     @State private var planningError: String?
     @State private var exportFeedback: FeedbackMessage?
+
+    // Task handle — stored so the user can cancel planning mid-flight.
+    @State private var planTask: Task<Void, Never>?
 
     // Inspector
     @State private var selectedPlanID: UUID?
@@ -128,6 +132,7 @@ struct PreviewView: View {
             }
         }
         .onAppear { buildPlan() }
+        .onDisappear { planTask?.cancel() }
         .alert(item: $exportFeedback) { item in
             if let revealURL = item.revealURL {
                 Alert(
@@ -161,6 +166,14 @@ struct PreviewView: View {
             Text(planCurrentFile)
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 .frame(maxWidth: 500)
+
+            Button("Cancel") {
+                planTask?.cancel()
+                nav.go(to: .settings)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -171,14 +184,35 @@ struct PreviewView: View {
     var planTable: some View {
         VStack(spacing: 0) {
             // ── Toolbar ───────────────────────────────────────────────────
-            HStack(spacing: 12) {
-                PlanChip(label: "\(plans.count) files", color: .blue)
-                PlanChip(
-                    label: nav.organizationConfig.fileOperation == .move ? "move originals" : "copy only",
-                    color: nav.organizationConfig.fileOperation == .move ? .blue : .green
-                )
-                if duplicatePlanCount > 0 { PlanChip(label: "\(duplicatePlanCount) duplicates", color: .orange) }
-                if unknownDatePlanCount > 0 { PlanChip(label: "\(unknownDatePlanCount) unknown date", color: .yellow) }
+            HStack(spacing: 0) {
+                // Stat summary — icon + number + label, no pill backgrounds
+                HStack(spacing: 16) {
+                    PlanStat(
+                        icon: "doc.fill",
+                        value: "\(plans.count)",
+                        label: "files",
+                        color: .blue
+                    )
+                    PlanStat(
+                        icon: nav.organizationConfig.fileOperation == .move
+                              ? "arrow.right.circle.fill" : "doc.on.doc.fill",
+                        value: nav.organizationConfig.fileOperation == .move ? "Move" : "Copy",
+                        label: "originals",
+                        color: nav.organizationConfig.fileOperation == .move ? .blue : .green
+                    )
+                    if duplicatePlanCount > 0 {
+                        PlanStat(icon: "square.on.square.fill",
+                                 value: "\(duplicatePlanCount)",
+                                 label: "duplicates",
+                                 color: .orange)
+                    }
+                    if unknownDatePlanCount > 0 {
+                        PlanStat(icon: "calendar.badge.exclamationmark",
+                                 value: "\(unknownDatePlanCount)",
+                                 label: "no date",
+                                 color: Color(red: 0.8, green: 0.65, blue: 0.0))
+                    }
+                }
 
                 Spacer()
 
@@ -191,6 +225,7 @@ struct PreviewView: View {
                 TextField("Search paths…", text: $searchQuery)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
+                    .padding(.leading, 12)
 
                 Button {
                     showFolderTree = true
@@ -198,6 +233,7 @@ struct PreviewView: View {
                     Image(systemName: "folder.fill.badge.questionmark")
                 }
                 .help("Preview folder structure")
+                .padding(.leading, 8)
 
                 Button {
                     exportCSV()
@@ -205,6 +241,7 @@ struct PreviewView: View {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .help("Export CSV report")
+                .padding(.leading, 6)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
@@ -381,7 +418,10 @@ struct PreviewView: View {
         let config = nav.organizationConfig
         planTotal = session.totalFiles
 
-        Task {
+        // Cancel any in-flight plan before starting a new one.
+        planTask?.cancel()
+
+        planTask = Task {
             // Remove any previously generated plans for this session.
             // This handles the case where the user went back from Preview,
             // changed settings, and returned — we always want fresh plans
@@ -395,12 +435,17 @@ struct PreviewView: View {
                 try? context.save()
             }
 
+            guard !Task.isCancelled else { return }
+
             let planner = OrganizationPlanner()
             let built = await planner.buildPlan(session: session, config: config) { p in
                 self.planProgress    = p.planned
                 self.planTotal       = p.total
                 self.planCurrentFile = p.currentFile
             }
+
+            // If the user cancelled while the planner was running, bail out.
+            guard !Task.isCancelled else { return }
 
             for plan in built { context.insert(plan) }
 
@@ -472,13 +517,16 @@ struct ApplyPreflightSheet: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
-                    PlanChip(label: "\(planCount) files", color: .blue)
+                HStack(spacing: 16) {
+                    PlanStat(icon: "doc.fill", value: "\(planCount)", label: "files", color: .blue)
                     if duplicateCount > 0 {
-                        PlanChip(label: "\(duplicateCount) duplicates", color: .orange)
+                        PlanStat(icon: "square.on.square.fill",
+                                 value: "\(duplicateCount)", label: "duplicates", color: .orange)
                     }
                     if unknownDateCount > 0 {
-                        PlanChip(label: "\(unknownDateCount) unknown date", color: .yellow)
+                        PlanStat(icon: "calendar.badge.exclamationmark",
+                                 value: "\(unknownDateCount)", label: "no date",
+                                 color: Color(red: 0.8, green: 0.65, blue: 0.0))
                     }
                 }
 
@@ -711,20 +759,44 @@ struct FileInspectorPanel: View {
         let descriptor = FetchDescriptor<MediaFile>(
             predicate: #Predicate { $0.id == fileID }
         )
-        mediaFile = (try? context.fetch(descriptor))?.first
+        let file = (try? context.fetch(descriptor))?.first
+        mediaFile = file
 
-        // Load thumbnail off the main thread
+        // Determine kind: prefer SwiftData value, fall back to file extension.
         let url = plan.sourceURL
+        let isVideo = file?.mediaKind == .video
+                   || MediaTypes.videoExtensions.contains(url.pathExtension.lowercased())
+
+        // Load thumbnail off the main thread.
         let img = await Task.detached(priority: .utility) { () -> NSImage? in
-            guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-            let opts: [String: Any] = [
-                kCGImageSourceThumbnailMaxPixelSize as String: 540,
-                kCGImageSourceCreateThumbnailFromImageAlways as String: true,
-                kCGImageSourceCreateThumbnailWithTransform as String: true,
-            ]
-            guard let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
-            else { return nil }
-            return NSImage(cgImage: cgThumb, size: .zero)
+            if isVideo {
+                // Use AVAssetImageGenerator for a real video frame thumbnail.
+                let asset = AVURLAsset(url: url)
+                let gen = AVAssetImageGenerator(asset: asset)
+                gen.appliesPreferredTrackTransform = true
+                gen.maximumSize = CGSize(width: 540, height: 540)
+                // Grab a frame ~1 s in; fall back to the very first frame.
+                let requestTime = CMTime(seconds: 1.0, preferredTimescale: 600)
+                if let cgImg = try? gen.copyCGImage(at: requestTime, actualTime: nil) {
+                    return NSImage(cgImage: cgImg, size: .zero)
+                }
+                // Retry at t=0 for very short clips.
+                if let cgImg = try? gen.copyCGImage(at: .zero, actualTime: nil) {
+                    return NSImage(cgImage: cgImg, size: .zero)
+                }
+                return nil
+            } else {
+                // Use ImageIO for photos (including HEIC, RAW formats, etc.).
+                guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+                let opts: [String: Any] = [
+                    kCGImageSourceThumbnailMaxPixelSize as String: 540,
+                    kCGImageSourceCreateThumbnailFromImageAlways as String: true,
+                    kCGImageSourceCreateThumbnailWithTransform as String: true,
+                ]
+                guard let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
+                else { return nil }
+                return NSImage(cgImage: cgThumb, size: .zero)
+            }
         }.value
         thumbnail = img
     }
@@ -848,18 +920,32 @@ struct MetaRow: View {
     }
 }
 
-// MARK: ─── Plan Chip ──────────────────────────────────────────────────────────
+// MARK: ─── Plan Stat ─────────────────────────────────────────────────────────
+// Compact icon + value + label in one line. No pill background — reads cleanly
+// at any window size without text wrapping.
 
-struct PlanChip: View {
+struct PlanStat: View {
+    let icon: String
+    let value: String
     let label: String
     let color: Color
 
     var body: some View {
-        Text(label)
-            .font(.caption).fontWeight(.medium)
-            .padding(.horizontal, 10).padding(.vertical, 4)
-            .background(color.opacity(0.12), in: Capsule())
-            .foregroundStyle(color)
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(color)
+            if !value.isEmpty {
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+            }
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .lineLimit(1)
+        .fixedSize()
     }
 }
 

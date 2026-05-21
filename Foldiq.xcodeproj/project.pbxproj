@@ -33,6 +33,7 @@
 		AA000024 /* ZipInflate.c in Sources */ = {isa = PBXBuildFile; fileRef = BB000024 /* ZipInflate.c */; };
 		AA000026 /* ProbableDuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000026 /* ProbableDuplicateDetector.swift */; };
 		AA100001 /* OrganizationPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100001 /* OrganizationPlannerTests.swift */; };
+		AA100002 /* ProbableDuplicateDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100002 /* ProbableDuplicateDetectorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -74,6 +75,7 @@
 		BB000026 /* ProbableDuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbableDuplicateDetector.swift; sourceTree = "<group>"; };
 		CC000001 /* Foldiq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foldiq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB100001 /* OrganizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationPlannerTests.swift; sourceTree = "<group>"; };
+		BB100002 /* ProbableDuplicateDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbableDuplicateDetectorTests.swift; sourceTree = "<group>"; };
 		CC100001 /* FoldiqTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FoldiqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -131,6 +133,7 @@
 			isa = PBXGroup;
 			children = (
 				BB100001 /* OrganizationPlannerTests.swift */,
+				BB100002 /* ProbableDuplicateDetectorTests.swift */,
 			);
 			path = FoldiqTests;
 			sourceTree = "<group>";
@@ -365,6 +368,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA100001 /* OrganizationPlannerTests.swift in Sources */,
+				AA100002 /* ProbableDuplicateDetectorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

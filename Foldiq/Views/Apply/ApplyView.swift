@@ -15,6 +15,10 @@ struct ApplyView: View {
     @State private var cleanedEmptyFolders = 0
     @State private var reviewShelvedFiles = 0
 
+    // Elapsed time counter
+    @State private var elapsedSeconds = 0
+    private let elapsedTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
     private let mover = FileMover()
 
     var body: some View {
@@ -69,8 +73,10 @@ struct ApplyView: View {
                         Text(progress.currentFile.isEmpty ? "Starting…" : progress.currentFile)
                             .font(.caption).foregroundStyle(.secondary)
                             .lineLimit(1).truncationMode(.middle)
-                            .frame(maxWidth: 360)
+                            .frame(maxWidth: 300)
                         Spacer()
+                        Text(elapsedFormatted)
+                            .font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
                         Text("\(progress.done) / \(progress.total)")
                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     }
@@ -118,6 +124,17 @@ struct ApplyView: View {
         .animation(.easeInOut, value: isComplete)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { startApply() }
+        .onReceive(elapsedTimer) { _ in
+            if !isComplete { elapsedSeconds += 1 }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var elapsedFormatted: String {
+        let m = elapsedSeconds / 60
+        let s = elapsedSeconds % 60
+        return String(format: "%d:%02d", m, s)
     }
 
     // MARK: - Apply

@@ -58,10 +58,15 @@ final class ScanCoordinator: ObservableObject {
                     rootURL: rootURL,
                     includeVideos: config.includeVideos,
                     includeArchives: config.includeArchives,
-                    excludedFolderNames: [config.outputFolderName]
-                ) { [weak self] p in
-                    self?.currentFile = p.currentPath
-                }
+                    excludedFolderNames: [config.outputFolderName],
+                    onProgress: { [weak self] p in
+                        self?.currentFile = p.currentPath
+                    },
+                    onArchiveError: { [weak self] archiveURL, message in
+                        // Surface the first archive error; more errors are noted in the app log.
+                        self?.errorMessage = "⚠️ \"\(archiveURL.lastPathComponent)\": \(message)"
+                    }
+                )
                 // Deduplicate by absolute path across all roots
                 for file in partial {
                     if seenPaths.insert(file.filePath).inserted {

@@ -53,12 +53,14 @@ enum ZipError: LocalizedError {
     case invalidFormat(String)
     case unsupportedCompression(UInt16)
     case decompressionFailed
+    case encrypted   // bit 0 of general purpose bit flag is set
 
     var errorDescription: String? {
         switch self {
-        case .invalidFormat(let r):        return "Invalid ZIP: \(r)"
+        case .invalidFormat(let r):          return "Invalid ZIP format: \(r)"
         case .unsupportedCompression(let m): return "Unsupported ZIP compression method \(m)"
-        case .decompressionFailed:         return "DEFLATE decompression failed"
+        case .decompressionFailed:           return "DEFLATE decompression failed"
+        case .encrypted:                     return "This ZIP is password-protected and cannot be extracted automatically. Open it manually and place the files in a regular folder."
         }
     }
 }
@@ -180,6 +182,13 @@ actor ArchiveExtractor {
         for _ in 0 ..< cdCount {
             guard pos + 46 <= data.count else { break }
             guard data.u32LE(at: pos) == kCentralDirSig else { break }
+
+            // Bit 0 of the general purpose bit flag (pos + 8) = encryption.
+            // Throw immediately — a password-protected file cannot be extracted.
+            let generalPurposeBitFlag = data.u16LE(at: pos + 8)
+            if generalPurposeBitFlag & 0x0001 != 0 {
+                throw ZipError.encrypted
+            }
 
             let compressionMethod = data.u16LE(at: pos + 10)
             let compressedSize    = data.u32LE(at: pos + 20)

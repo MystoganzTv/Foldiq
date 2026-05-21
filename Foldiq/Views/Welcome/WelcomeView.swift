@@ -8,6 +8,11 @@ struct WelcomeView: View {
 
     @EnvironmentObject private var nav: AppNavigator
     @State private var isHoveringButton = false
+    @State private var isDragTargeted = false
+
+    // Undo toast (shown after returning from a successful undo)
+    @State private var showUndoToast = false
+    @State private var undoRestoredCount: Int?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,17 +40,46 @@ struct WelcomeView: View {
                     .multilineTextAlignment(.center)
             }
 
-            Spacer().frame(height: 48)
+            Spacer().frame(height: 40)
 
-            // ── Feature bullets ─────────────────────────────────────────────
-            HStack(spacing: 40) {
-                FeaturePill(icon: "shield.checkered",       label: "Safe — preview before\nanything moves")
-                FeaturePill(icon: "clock.arrow.circlepath", label: "Undo any operation\ncompletely")
-                FeaturePill(icon: "icloud.slash",           label: "100% local — no\ncloud or account")
-                FeaturePill(icon: "folder.fill.badge.plus", label: "Physical folders\non your Mac")
+            // ── How it works ─────────────────────────────────────────────────
+            VStack(spacing: 12) {
+                Text("How it works")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+
+                HStack(alignment: .top, spacing: 0) {
+                    WorkflowStep(number: 1, icon: "folder.badge.plus",
+                                 title: "Select",
+                                 detail: "Pick a folder or .zip archive containing your media")
+                    WorkflowConnector()
+                    WorkflowStep(number: 2, icon: "magnifyingglass.circle",
+                                 title: "Scan",
+                                 detail: "Foldiq reads dates, location, and spots duplicates")
+                    WorkflowConnector()
+                    WorkflowStep(number: 3, icon: "eye",
+                                 title: "Review",
+                                 detail: "See every planned file movement before anything changes")
+                    WorkflowConnector()
+                    WorkflowStep(number: 4, icon: "checkmark.circle.fill",
+                                 title: "Apply",
+                                 detail: "Foldiq organizes your library — with a full undo log")
+                }
+                .frame(maxWidth: 680)
             }
 
-            Spacer().frame(height: 48)
+            Spacer().frame(height: 32)
+
+            // ── Feature bullets ─────────────────────────────────────────────
+            HStack(spacing: 32) {
+                FeaturePill(icon: "shield.checkered",       label: "Preview before\nanything moves")
+                FeaturePill(icon: "clock.arrow.circlepath", label: "Full undo\nat any time")
+                FeaturePill(icon: "icloud.slash",           label: "100% local,\nno cloud")
+                FeaturePill(icon: "folder.fill.badge.plus", label: "Real folders\non your Mac")
+            }
+
+            Spacer().frame(height: 40)
 
             // ── Selected items list ──────────────────────────────────────────
             if !nav.selectedFolderURLs.isEmpty {
@@ -137,6 +171,49 @@ struct WelcomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openRootFolder)) { _ in
             selectItems()
         }
+        // ── Drag & drop ──────────────────────────────────────────────────────
+        .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
+            handleDrop(providers: providers)
+            return true
+        }
+        .overlay {
+            if isDragTargeted {
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Color.blue, lineWidth: 3)
+                    .background(Color.blue.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
+                    .overlay {
+                        VStack(spacing: 12) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 44))
+                                .foregroundStyle(.blue)
+                            Text("Drop folders or ZIPs to add them")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+        }
+        // ── Undo toast ───────────────────────────────────────────────────────
+        .overlay(alignment: .bottom) {
+            if showUndoToast, let count = undoRestoredCount {
+                UndoCompletedToast(restoredCount: count)
+                    .padding(.bottom, 28)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .onAppear {
+            if let count = nav.lastUndoRestoredCount {
+                undoRestoredCount = count
+                nav.lastUndoRestoredCount = nil
+                withAnimation(.spring(response: 0.4)) { showUndoToast = true }
+                Task {
+                    try? await Task.sleep(for: .seconds(4))
+                    withAnimation(.easeOut) { showUndoToast = false }
+                }
+            }
+        }
     }
 
     // MARK: - Helpers
@@ -153,6 +230,28 @@ struct WelcomeView: View {
             return folders == 1 ? "Scan Folder" : "Scan \(folders) Folders"
         } else {
             return "Scan \(total) Items"
+        }
+    }
+
+    private func handleDrop(providers: [NSItemProvider]) {
+        let existing = Set(nav.selectedFolderURLs.map(\.path))
+        for provider in providers {
+            _ = provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
+                guard let data = item as? Data,
+                      let urlString = String(data: data, encoding: .utf8)?
+                          .trimmingCharacters(in: .whitespacesAndNewlines),
+                      let url = URL(string: urlString)
+                else { return }
+
+                var isDir: ObjCBool = false
+                FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+                guard isDir.boolValue || url.isZipFile else { return }
+                guard !existing.contains(url.path) else { return }
+
+                DispatchQueue.main.async {
+                    nav.selectedFolderURLs.append(url)
+                }
+            }
         }
     }
 
@@ -182,6 +281,57 @@ struct WelcomeView: View {
     }
 }
 
+// MARK: ─── Workflow Step ─────────────────────────────────────────────────────
+
+struct WorkflowStep: View {
+    let number: Int
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.12))
+                    .frame(width: 52, height: 52)
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(.blue)
+            }
+            .overlay(alignment: .topTrailing) {
+                Text("\(number)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 18, height: 18)
+                    .background(.blue, in: Circle())
+                    .offset(x: 4, y: -4)
+            }
+
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 8)
+    }
+}
+
+struct WorkflowConnector: View {
+    var body: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .padding(.top, 26)   // vertically aligns with center of the icon circle
+    }
+}
+
 // MARK: ─── Feature Pill ───────────────────────────────────────────────────────
 
 struct FeaturePill: View {
@@ -202,5 +352,24 @@ struct FeaturePill: View {
         .frame(width: 130)
         .padding(16)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// MARK: ─── Undo Toast ─────────────────────────────────────────────────────────
+
+struct UndoCompletedToast: View {
+    let restoredCount: Int
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            Text("Undo complete — \(restoredCount) file\(restoredCount == 1 ? "" : "s") restored to their original locations.")
+                .font(.callout)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
     }
 }

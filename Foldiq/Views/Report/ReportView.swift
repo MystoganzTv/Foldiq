@@ -326,6 +326,7 @@ struct ReportView: View {
             Spacer()
 
             Button {
+                nav.lastUndoRestoredCount = undoRestoredCount
                 nav.restart()
             } label: {
                 HStack {

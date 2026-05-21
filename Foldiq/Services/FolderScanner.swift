@@ -32,7 +32,8 @@ actor FolderScanner {
         includeVideos: Bool,
         includeArchives: Bool = true,
         excludedFolderNames: Set<String> = [],
-        onProgress: @MainActor @escaping (ScanProgress) -> Void
+        onProgress: @MainActor @escaping (ScanProgress) -> Void,
+        onArchiveError: (@MainActor @escaping (URL, String) -> Void)? = nil
     ) async throws -> [DiscoveredFile] {
 
         guard FileManager.default.isReadableFile(atPath: rootURL.path) else {
@@ -47,7 +48,7 @@ actor FolderScanner {
             guard MediaTypes.archiveExtensions.contains(ext) else {
                 return []   // single non-archive file selected — nothing to scan
             }
-            return await extractSingleArchive(rootURL, onProgress: onProgress)
+            return await extractSingleArchive(rootURL, onProgress: onProgress, onArchiveError: onArchiveError)
         }
 
         var mediaExtensions = MediaTypes.photoExtensions
@@ -93,7 +94,8 @@ actor FolderScanner {
             // When a .zip is found, extract it and add the media inside.
             // The .zip itself is NOT added to results — it stays untouched on disk.
             if includeArchives && MediaTypes.archiveExtensions.contains(ext) {
-                if let result = try? await archiveExtractor.extract(fileURL) {
+                do {
+                    let result = try await archiveExtractor.extract(fileURL)
                     for mediaURL in result.mediaURLs {
                         let mediaExt = mediaURL.pathExtension.lowercased()
                         guard let mediaKind = MediaTypes.kind(for: mediaExt) else { continue }
@@ -113,6 +115,11 @@ actor FolderScanner {
                             archiveSourceURL: fileURL,
                             tempDirectoryURL: result.tempDirectory
                         ))
+                    }
+                } catch {
+                    // Surface the error to the UI (corrupt, encrypted, unsupported format, etc.)
+                    if let onArchiveError {
+                        await onArchiveError(fileURL, error.localizedDescription)
                     }
                 }
                 if results.count % 25 == 0 {
@@ -164,11 +171,20 @@ actor FolderScanner {
     /// Extracts it and returns the contained media files.
     private func extractSingleArchive(
         _ url: URL,
-        onProgress: @MainActor @escaping (ScanProgress) -> Void
+        onProgress: @MainActor @escaping (ScanProgress) -> Void,
+        onArchiveError: (@MainActor @escaping (URL, String) -> Void)? = nil
     ) async -> [DiscoveredFile] {
         await onProgress(ScanProgress(scannedCount: 0, foundCount: 0, currentPath: url.path))
 
-        guard let result = try? await archiveExtractor.extract(url) else { return [] }
+        let result: ArchiveExtractor.ExtractionResult
+        do {
+            result = try await archiveExtractor.extract(url)
+        } catch {
+            if let onArchiveError {
+                await onArchiveError(url, error.localizedDescription)
+            }
+            return []
+        }
 
         var files: [DiscoveredFile] = []
         for mediaURL in result.mediaURLs {

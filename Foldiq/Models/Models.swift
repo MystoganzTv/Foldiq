@@ -292,17 +292,94 @@ struct OrganizationConfig {
     var useGPSLocation: Bool = true    // for SmartHybrid / ByLocation modes
 }
 
+// MARK: ─── OrganizationConfig persistence ────────────────────────────────────
+
 extension OrganizationConfig {
-    /// Standard output root for a selected folder.
+    // UserDefaults keys — shared with SettingsView @AppStorage bindings.
+    enum UDKey {
+        static let mode               = "org_mode"
+        static let fileOperation      = "org_fileOp"
+        static let includeVideos      = "org_includeVideos"
+        static let includeArchives    = "org_includeArchives"
+        static let separateDuplicates = "org_separateDuplicates"
+        static let useGPSLocation     = "org_useGPS"
+        static let outputFolderName   = "org_outputFolderName"
+    }
+
+    /// Load persisted config from UserDefaults. Falls back to defaults when
+    /// a key has never been written (first launch).
+    static func load() -> OrganizationConfig {
+        var c = OrganizationConfig()
+        let ud = UserDefaults.standard
+
+        if let raw = ud.string(forKey: UDKey.mode),
+           let mode = OrganizationMode(rawValue: raw) {
+            c.mode = mode
+        }
+        if let raw = ud.string(forKey: UDKey.fileOperation),
+           let op = FileOperation(rawValue: raw) {
+            c.fileOperation = op
+        }
+        // Bool keys: only override if the key has been set (object != nil)
+        if ud.object(forKey: UDKey.includeVideos) != nil {
+            c.includeVideos = ud.bool(forKey: UDKey.includeVideos)
+        }
+        if ud.object(forKey: UDKey.includeArchives) != nil {
+            c.includeArchives = ud.bool(forKey: UDKey.includeArchives)
+        }
+        if ud.object(forKey: UDKey.separateDuplicates) != nil {
+            c.separateDuplicates = ud.bool(forKey: UDKey.separateDuplicates)
+        }
+        if ud.object(forKey: UDKey.useGPSLocation) != nil {
+            c.useGPSLocation = ud.bool(forKey: UDKey.useGPSLocation)
+        }
+        if let name = ud.string(forKey: UDKey.outputFolderName), !name.isEmpty {
+            c.outputFolderName = name
+        }
+        return c
+    }
+
+    /// Persist the current config to UserDefaults.
+    func save() {
+        let ud = UserDefaults.standard
+        ud.set(mode.rawValue,           forKey: UDKey.mode)
+        ud.set(fileOperation.rawValue,  forKey: UDKey.fileOperation)
+        ud.set(includeVideos,           forKey: UDKey.includeVideos)
+        ud.set(includeArchives,         forKey: UDKey.includeArchives)
+        ud.set(separateDuplicates,      forKey: UDKey.separateDuplicates)
+        ud.set(useGPSLocation,          forKey: UDKey.useGPSLocation)
+        ud.set(outputFolderName,        forKey: UDKey.outputFolderName)
+    }
+
+    /// Reset all persisted settings to factory defaults.
+    static func resetToDefaults() {
+        let ud = UserDefaults.standard
+        [UDKey.mode, UDKey.fileOperation, UDKey.includeVideos,
+         UDKey.includeArchives, UDKey.separateDuplicates,
+         UDKey.useGPSLocation, UDKey.outputFolderName].forEach { ud.removeObject(forKey: $0) }
+    }
+}
+
+extension OrganizationConfig {
+    /// Standard output root for a selected folder or archive.
     /// If the user already selected the organized output folder itself,
     /// reuse it directly instead of nesting another output folder inside.
+    ///
+    /// When `rootURL` is a file (e.g., a .zip archive), the output is placed
+    /// *next to* the file in its parent directory — never inside the file path.
     func outputRoot(forSelectedRoot rootURL: URL) -> URL {
         if let customOutputParentPath, !customOutputParentPath.isEmpty {
             return URL(fileURLWithPath: customOutputParentPath)
                 .appendingPathComponent(outputFolderName)
         }
-        guard rootURL.lastPathComponent != outputFolderName else { return rootURL }
-        return rootURL.appendingPathComponent(outputFolderName)
+
+        // If rootURL is a file (archive), base the output in its parent directory.
+        var isDir: ObjCBool = false
+        FileManager.default.fileExists(atPath: rootURL.path, isDirectory: &isDir)
+        let base = isDir.boolValue ? rootURL : rootURL.deletingLastPathComponent()
+
+        guard base.lastPathComponent != outputFolderName else { return base }
+        return base.appendingPathComponent(outputFolderName)
     }
 
     var hasCustomOutputParent: Bool {
@@ -313,7 +390,7 @@ extension OrganizationConfig {
     var reviewFolderName: String { "Needs Review" }
 }
 
-enum OrganizationMode: String, CaseIterable {
+enum OrganizationMode: String, CaseIterable, Codable {
     case smartHybrid  = "Smart Hybrid (recommended)"
     case byYear       = "By Year"
     case byYearMonth  = "By Year & Month"

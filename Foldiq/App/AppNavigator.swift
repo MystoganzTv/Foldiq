@@ -42,10 +42,17 @@ final class AppNavigator: ObservableObject {
     /// All folders the user selected for this scan session (multi-select supported).
     @Published var selectedFolderURLs: [URL] = []
     @Published var scanSession: ScanSession?
-    @Published var organizationConfig = OrganizationConfig()
+    // Config is loaded from UserDefaults on first launch and auto-saved whenever it changes.
+    @Published var organizationConfig: OrganizationConfig = .load() {
+        didSet { organizationConfig.save() }
+    }
     /// Temp directories created when extracting .zip archives during scan.
     /// Cleaned up by FileMover after apply, or discarded on restart.
     var archiveTempDirs: [URL] = []
+
+    /// Set by ReportView before calling restart() after a successful undo.
+    /// WelcomeView reads this to show a confirmation toast, then clears it.
+    @Published var lastUndoRestoredCount: Int?
 
     // Error toast
     @Published var errorMessage: String?
@@ -78,7 +85,9 @@ final class AppNavigator: ObservableObject {
         }
         selectedFolderURLs = []
         scanSession = nil
-        organizationConfig = OrganizationConfig()
+        // Intentionally keep organizationConfig — user's settings survive between sessions.
+        // customOutputParentPath is session-specific, so clear it for the new session.
+        organizationConfig.customOutputParentPath = nil
         go(to: .welcome)
     }
 

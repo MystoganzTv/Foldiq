@@ -41,6 +41,9 @@ actor OrganizationPlanner {
         var reservedPaths = Set<String>()
 
         for (idx, file) in files.enumerated() {
+            // Cooperative cancellation — checked every batch so the UI stays responsive.
+            if Task.isCancelled { return plans }
+
             if idx % 20 == 0 {
                 let p = PlanProgress(planned: idx, total: total, currentFile: file.filename)
                 await onProgress(p)

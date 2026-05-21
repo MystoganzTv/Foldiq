@@ -42,14 +42,13 @@ final class FileMover {
         for plan in plans {
             done += 1
 
-            if done % 5 == 0 || done == total {
-                let p = ApplyProgress(
-                    done: done, total: total,
-                    currentFile: plan.sourceURL.lastPathComponent,
-                    errors: errors
-                )
-                onProgress(p)   // already @MainActor, no await needed
-            }
+            // Report progress for every file so the UI shows real-time file names.
+            let p = ApplyProgress(
+                done: done, total: total,
+                currentFile: plan.sourceURL.lastPathComponent,
+                errors: errors
+            )
+            onProgress(p)   // already @MainActor, no await needed
 
             // Create destination directory tree (fast metadata op, fine on main)
             let destDir = plan.destinationURL.deletingLastPathComponent()
@@ -109,10 +108,37 @@ final class FileMover {
                 manifest.entries.append(entry)
 
             } catch {
+                let human = Self.humanizeError(error)
                 plan.status       = .error
-                plan.errorMessage = error.localizedDescription
-                errors.append(srcURL.lastPathComponent + ": " + error.localizedDescription)
+                plan.errorMessage = human
+                errors.append(srcURL.lastPathComponent + ": " + human)
             }
+        }
+    }
+
+    // MARK: - Error humanization
+
+    /// Converts low-level system errors into plain-English messages.
+    private nonisolated static func humanizeError(_ error: Error) -> String {
+        let nsErr = error as NSError
+        // Map common POSIX / Cocoa error codes to friendly messages.
+        switch (nsErr.domain, nsErr.code) {
+        case (NSPOSIXErrorDomain, Int(ENOSPC)),
+             (NSCocoaErrorDomain, 640):   // NSFileWriteOutOfSpaceError
+            return "Disk full — free up space and try again."
+        case (NSPOSIXErrorDomain, Int(EACCES)),
+             (NSPOSIXErrorDomain, Int(EPERM)),
+             (NSCocoaErrorDomain, 513),   // NSFileWriteNoPermissionError
+             (NSCocoaErrorDomain, 642):   // NSFileWriteVolumeReadOnlyError
+            return "Permission denied — check folder access settings."
+        case (NSPOSIXErrorDomain, Int(EROFS)):
+            return "The destination volume is read-only."
+        case (NSPOSIXErrorDomain, Int(EXDEV)):
+            return "Cannot move across volumes — use Copy instead of Move."
+        case (NSCocoaErrorDomain, 516):   // NSFileWriteFileExistsError
+            return "A file with this name already exists at the destination."
+        default:
+            return error.localizedDescription
         }
     }
 

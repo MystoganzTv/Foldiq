@@ -48,16 +48,32 @@ final class MetadataExtractor: Sendable {
             return meta
         }
 
-        // Pixel dimensions
+        // Pixel dimensions — top-level first.
+        // For RAW formats (CR2, NEF, ARW, DNG) the top-level values may reflect
+        // the embedded JPEG thumbnail rather than the full-resolution image.
+        // Fall back to EXIF PixelXDimension / PixelYDimension when available.
         meta.pixelWidth  = props[kCGImagePropertyPixelWidth  as String] as? Int
         meta.pixelHeight = props[kCGImagePropertyPixelHeight as String] as? Int
 
-        // EXIF
+        // EXIF — date and actual pixel dimensions for RAW formats.
+        // RAW files (CR2, NEF, ARW, DNG) often report thumbnail dimensions at the
+        // top level; the real full-resolution size lives in the EXIF subdictionary.
         if let exif = props[kCGImagePropertyExifDictionary as String] as? [String: Any] {
             meta.dateTaken = parseEXIFDate(
                 exif[kCGImagePropertyExifDateTimeOriginal  as String] as? String ??
                 exif[kCGImagePropertyExifDateTimeDigitized as String] as? String
             )
+            // Override top-level pixel dims with EXIF full-res values when present.
+            if let w = exif[kCGImagePropertyExifPixelXDimension as String] as? Int, w > 0 {
+                meta.pixelWidth = w
+            } else if let w = exif[kCGImagePropertyExifPixelXDimension as String] as? Double, w > 0 {
+                meta.pixelWidth = Int(w)
+            }
+            if let h = exif[kCGImagePropertyExifPixelYDimension as String] as? Int, h > 0 {
+                meta.pixelHeight = h
+            } else if let h = exif[kCGImagePropertyExifPixelYDimension as String] as? Double, h > 0 {
+                meta.pixelHeight = Int(h)
+            }
         }
 
         // TIFF (camera make/model, and TIFF datetime as fallback)
