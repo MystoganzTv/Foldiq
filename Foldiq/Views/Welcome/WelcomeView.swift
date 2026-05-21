@@ -2,11 +2,13 @@
 // Step 1: Intro + folder/zip picker (supports selecting multiple folders and .zip files).
 
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 
 struct WelcomeView: View {
 
     @EnvironmentObject private var nav: AppNavigator
+    @Environment(\.modelContext) private var context
     @State private var isHoveringButton = false
     @State private var isDragTargeted = false
 
@@ -79,7 +81,41 @@ struct WelcomeView: View {
                 FeaturePill(icon: "folder.fill.badge.plus", label: "Real folders\non your Mac")
             }
 
-            Spacer().frame(height: 40)
+            Spacer().frame(height: 32)
+
+            // ── Import from Library ──────────────────────────────────────────
+            VStack(spacing: 8) {
+                Text("Or import directly from")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 12) {
+                    LibrarySourceCard(
+                        icon: "photo.on.rectangle.angled",
+                        iconColor: .indigo,
+                        title: "Apple Photos",
+                        detail: "Originals from your\nPhotos library"
+                    ) { addApplePhotosLibrary() }
+
+                    LibrarySourceCard(
+                        icon: "arrow.down.circle.fill",
+                        iconColor: .green,
+                        title: "Google Takeout",
+                        detail: "Select a Google\nPhotos .zip export"
+                    ) { selectItems() }    // opens the file picker — ZIPs allowed
+
+                    LibrarySourceCard(
+                        icon: "icloud.fill",
+                        iconColor: .cyan,
+                        title: "iCloud Drive",
+                        detail: "Browse your iCloud\nDrive folder"
+                    ) { addiCloudDrive() }
+                }
+                .frame(maxWidth: 520)
+            }
+
+            Spacer().frame(height: 24)
 
             // ── Selected items list ──────────────────────────────────────────
             if !nav.selectedFolderURLs.isEmpty {
@@ -204,6 +240,13 @@ struct WelcomeView: View {
             }
         }
         .onAppear {
+            // ── SwiftData cleanup ────────────────────────────────────────────
+            // When we return to WelcomeView (via restart or back navigation),
+            // nav.scanSession is nil. All persisted sessions are stale —
+            // delete them now to prevent SwiftData conflicts and memory growth.
+            purgeStaleSwiftData()
+
+            // ── Undo toast ───────────────────────────────────────────────────
             if let count = nav.lastUndoRestoredCount {
                 undoRestoredCount = count
                 nav.lastUndoRestoredCount = nil
@@ -217,6 +260,29 @@ struct WelcomeView: View {
     }
 
     // MARK: - Helpers
+
+    /// Deletes all persisted SwiftData objects that belong to previous scan sessions.
+    /// Called every time WelcomeView appears so stale data never accumulates.
+    private func purgeStaleSwiftData() {
+        do {
+            // Delete all OrganizationPlans (not keyed to a live session)
+            let plans = try context.fetch(FetchDescriptor<OrganizationPlan>())
+            plans.forEach { context.delete($0) }
+
+            // Delete all UndoManifests and their cascaded UndoEntries
+            let manifests = try context.fetch(FetchDescriptor<UndoManifest>())
+            manifests.forEach { context.delete($0) }
+
+            // Delete all ScanSessions (cascades to their MediaFiles)
+            let sessions = try context.fetch(FetchDescriptor<ScanSession>())
+            sessions.forEach { context.delete($0) }
+
+            try context.save()
+        } catch {
+            // Non-fatal: log and continue — worst case is a slightly larger store
+            print("[WelcomeView] SwiftData purge error: \(error)")
+        }
+    }
 
     /// Label for the Scan button, reflecting the mix of folders and ZIPs selected.
     private var scanButtonLabel: String {
@@ -253,6 +319,31 @@ struct WelcomeView: View {
                 }
             }
         }
+    }
+
+    /// Adds the Apple Photos Library originals folder if it exists.
+    private func addApplePhotosLibrary() {
+        let libraryURL = URL(fileURLWithPath: NSString("~/Pictures/Photos Library.photoslibrary/originals").expandingTildeInPath)
+        guard FileManager.default.fileExists(atPath: libraryURL.path) else {
+            // Library not found — fall back to folder picker
+            selectItems()
+            return
+        }
+        let existing = Set(nav.selectedFolderURLs.map(\.path))
+        guard !existing.contains(libraryURL.path) else { return }
+        nav.selectedFolderURLs.append(libraryURL)
+    }
+
+    /// Adds the iCloud Drive folder if it exists.
+    private func addiCloudDrive() {
+        let iCloudURL = URL(fileURLWithPath: NSString("~/Library/Mobile Documents/com~apple~CloudDocs").expandingTildeInPath)
+        guard FileManager.default.fileExists(atPath: iCloudURL.path) else {
+            selectItems()
+            return
+        }
+        let existing = Set(nav.selectedFolderURLs.map(\.path))
+        guard !existing.contains(iCloudURL.path) else { return }
+        nav.selectedFolderURLs.append(iCloudURL)
     }
 
     private func selectItems() {
@@ -352,6 +443,53 @@ struct FeaturePill: View {
         .frame(width: 130)
         .padding(16)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// MARK: ─── Library Source Card ───────────────────────────────────────────────
+
+struct LibrarySourceCard: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let detail: String
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(iconColor)
+                    .frame(height: 32)
+
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 8)
+            .background(
+                isHovering ? Color.primary.opacity(0.07) : Color.primary.opacity(0.04),
+                in: RoundedRectangle(cornerRadius: 12)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isHovering ? iconColor.opacity(0.35) : Color.primary.opacity(0.08), lineWidth: 1)
+            )
+            .scaleEffect(isHovering ? 1.02 : 1.0)
+            .animation(.spring(response: 0.2), value: isHovering)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 

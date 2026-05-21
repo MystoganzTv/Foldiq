@@ -33,7 +33,7 @@ actor FolderScanner {
         includeArchives: Bool = true,
         excludedFolderNames: Set<String> = [],
         onProgress: @MainActor @escaping (ScanProgress) -> Void,
-        onArchiveError: (@MainActor @escaping (URL, String) -> Void)? = nil
+        onArchiveError: (@MainActor (URL, String) -> Void)? = nil
     ) async throws -> [DiscoveredFile] {
 
         guard FileManager.default.isReadableFile(atPath: rootURL.path) else {
@@ -172,7 +172,7 @@ actor FolderScanner {
     private func extractSingleArchive(
         _ url: URL,
         onProgress: @MainActor @escaping (ScanProgress) -> Void,
-        onArchiveError: (@MainActor @escaping (URL, String) -> Void)? = nil
+        onArchiveError: (@MainActor (URL, String) -> Void)? = nil
     ) async -> [DiscoveredFile] {
         await onProgress(ScanProgress(scannedCount: 0, foundCount: 0, currentPath: url.path))
 
