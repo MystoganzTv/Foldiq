@@ -39,6 +39,8 @@ enum AppScreen: Int, CaseIterable {
 @MainActor
 final class AppNavigator: ObservableObject {
     @Published var screen: AppScreen = .welcome
+    /// True the very first time the app launches — shows OnboardingView overlay.
+    @Published var showOnboarding: Bool = !UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
     /// All folders the user selected for this scan session (multi-select supported).
     @Published var selectedFolderURLs: [URL] = []
     @Published var scanSession: ScanSession?

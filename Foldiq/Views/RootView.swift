@@ -38,6 +38,14 @@ struct RootView: View {
             ))
         }
         .animation(.easeInOut(duration: 0.25), value: nav.screen)
+        // ── First-launch onboarding ──────────────────────────────────────────
+        .overlay {
+            if nav.showOnboarding {
+                OnboardingView()
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.35), value: nav.showOnboarding)
         .alert("Error", isPresented: $nav.showingError) {
             Button("OK") { nav.showingError = false }
         } message: {
