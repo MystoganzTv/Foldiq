@@ -26,17 +26,13 @@ struct SettingsStepView: View {
         return nav.rootFolderURL?.path ?? "No folder selected"
     }
 
-    private var operationHeadline: String {
-        nav.organizationConfig.fileOperation == .move
-            ? "Move originals into the new structure"
-            : "Keep originals where they are and create organized copies"
-    }
-
     private var operationSummary: String {
         nav.organizationConfig.fileOperation == .move
             ? "Best when you are ready to clean up the library now. An undo manifest is still created before changes are made."
             : "Best when you want a lower-risk first pass. It uses more disk space because both the original and organized copy remain."
     }
+
+    @State private var showMoreOptions = false
 
     var body: some View {
         ScrollView {
@@ -46,7 +42,7 @@ struct SettingsStepView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Organization Settings")
                         .font(.largeTitle).fontWeight(.bold)
-                    Text("Choose the rule, the destination, and how your original files should be handled. You will preview every change before anything is applied.")
+                    Text("Pick a rule, where to save the result, and how originals should be handled. You'll preview every change before anything moves.")
                         .foregroundStyle(.secondary)
                 }
 
@@ -54,9 +50,6 @@ struct SettingsStepView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Label("Organization Rule", systemImage: "folder.badge.gearshape")
                         .font(.headline)
-                    Text("This decides how folders are named and how files are grouped inside \(selectedRootName).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
 
                     ForEach(OrganizationMode.allCases, id: \.self) { mode in
                         ModeOptionRow(
@@ -72,11 +65,8 @@ struct SettingsStepView: View {
 
                 // ── File operation ─────────────────────────────────────────
                 VStack(alignment: .leading, spacing: 12) {
-                    Label("How To Handle Originals", systemImage: "arrow.right.doc.on.clipboard")
+                    Label("Originals", systemImage: "arrow.right.doc.on.clipboard")
                         .font(.headline)
-                    Text("Pick whether the originals should be reorganized directly or whether a second organized library should be created.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
 
                     HStack(spacing: 16) {
                         OperationCard(
@@ -90,122 +80,85 @@ struct SettingsStepView: View {
                         ) { nav.organizationConfig.fileOperation = .copy }
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label(operationHeadline, systemImage: "info.circle")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Text(operationSummary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 4)
-                }
-
-                Divider()
-
-                // ── Additional options ─────────────────────────────────────
-                VStack(alignment: .leading, spacing: 14) {
-                    Label("Rules", systemImage: "slider.horizontal.3")
-                        .font(.headline)
-                    Text("These rules affect what gets organized and how special cases are routed.")
+                    Text(operationSummary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-
-                    ToggleRow(
-                        label: "Include videos",
-                        detail: "Organize video files alongside photos",
-                        isOn: $nav.organizationConfig.includeVideos
-                    )
-                    ToggleRow(
-                        label: "Include archives",
-                        detail: "Organize compressed files (zip, rar, 7z…) alongside your media",
-                        isOn: $nav.organizationConfig.includeArchives
-                    )
-                    ToggleRow(
-                        label: "Separate duplicates",
-                        detail: "Move duplicates to a Duplicates/ subfolder instead of organizing normally",
-                        isOn: $nav.organizationConfig.separateDuplicates
-                    )
-                    ToggleRow(
-                        label: "Use GPS location in folder names",
-                        detail: "Requires internet for reverse-geocoding (Smart Hybrid and By Location modes)",
-                        isOn: $nav.organizationConfig.useGPSLocation
-                    )
+                        .padding(.horizontal, 4)
                 }
 
                 Divider()
 
-                // ── Output folder name ─────────────────────────────────────
-                VStack(alignment: .leading, spacing: 12) {
+                // ── Destination ────────────────────────────────────────────
+                VStack(alignment: .leading, spacing: 10) {
                     Label("Destination", systemImage: "folder")
                         .font(.headline)
-                    Text("Choose whether the organized library should be saved inside the scanned folder or in another folder you pick. Existing files at the destination are never overwritten.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        DestinationModeRow(
-                            title: "Inside selected folder",
-                            detail: "Save the organized library inside \(selectedRootName).",
-                            isSelected: !nav.organizationConfig.hasCustomOutputParent
-                        ) {
-                            nav.organizationConfig.customOutputParentPath = nil
-                        }
+                    Text(destinationPreviewPath)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
 
-                        DestinationModeRow(
-                            title: "Custom location",
-                            detail: "Choose a different parent folder for the organized library.",
-                            isSelected: nav.organizationConfig.hasCustomOutputParent
-                        ) {
+                    HStack(spacing: 10) {
+                        Button(nav.organizationConfig.hasCustomOutputParent ? "Change Location" : "Choose Location") {
                             chooseCustomDestinationFolder()
                         }
-                    }
+                        .buttonStyle(.bordered)
 
-                    HStack {
-                        TextField("Organized Media", text: $nav.organizationConfig.outputFolderName)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 280)
-                        Text("(folder name)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Save location")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(destinationBasePath)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-
-                        HStack(spacing: 10) {
-                            Button(nav.organizationConfig.hasCustomOutputParent ? "Change Location" : "Choose Location") {
-                                chooseCustomDestinationFolder()
+                        if nav.organizationConfig.hasCustomOutputParent {
+                            Button("Use Selected Folder") {
+                                nav.organizationConfig.customOutputParentPath = nil
                             }
                             .buttonStyle(.bordered)
-
-                            if nav.organizationConfig.hasCustomOutputParent {
-                                Button("Use Selected Folder Instead") {
-                                    nav.organizationConfig.customOutputParentPath = nil
-                                }
-                                .buttonStyle(.bordered)
-                            }
                         }
                     }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Final destination")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(destinationPreviewPath)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-                    }
                 }
+
+                Divider()
+
+                // ── More options (collapsed by default) ───────────────────
+                DisclosureGroup(isExpanded: $showMoreOptions) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ToggleRow(
+                            label: "Include videos",
+                            detail: "Organize video files alongside photos",
+                            isOn: $nav.organizationConfig.includeVideos
+                        )
+                        ToggleRow(
+                            label: "Include archives",
+                            detail: "Organize compressed files (zip, rar, 7z…) alongside your media",
+                            isOn: $nav.organizationConfig.includeArchives
+                        )
+                        ToggleRow(
+                            label: "Separate duplicates",
+                            detail: "Route duplicates to a Duplicates/ subfolder instead of organizing normally",
+                            isOn: $nav.organizationConfig.separateDuplicates
+                        )
+                        ToggleRow(
+                            label: "Use GPS location in folder names",
+                            detail: "Requires internet for reverse-geocoding (Smart Hybrid and By Location modes)",
+                            isOn: $nav.organizationConfig.useGPSLocation
+                        )
+
+                        Divider().padding(.vertical, 4)
+
+                        HStack {
+                            Text("Output folder name")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Spacer()
+                            TextField("Organized Media", text: $nav.organizationConfig.outputFolderName)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 220)
+                        }
+                    }
+                    .padding(.top, 14)
+                } label: {
+                    Label("More options", systemImage: "slider.horizontal.3")
+                        .font(.headline)
+                }
+                .animation(.easeInOut(duration: 0.2), value: showMoreOptions)
 
             }
             .padding(40)
@@ -370,37 +323,3 @@ struct ToggleRow: View {
     }
 }
 
-struct DestinationModeRow: View {
-    let title: String
-    let detail: String
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .fontWeight(.medium)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(14)
-        .background(isSelected ? Color.accentColor.opacity(0.07) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 10))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(isSelected ? Color.accentColor.opacity(0.4) : Color(.separatorColor), lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { onTap() }
-        .animation(.easeOut(duration: 0.15), value: isSelected)
-    }
-}
