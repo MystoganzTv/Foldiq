@@ -19,6 +19,17 @@ struct ReportView: View {
     @State private var showUndoConfirm = false
     @State private var exportFeedback: FeedbackMessage?
 
+    // Post-org stats
+    @State private var orgStats: OrgStats = OrgStats()
+
+    struct OrgStats {
+        var totalOrganizedSize: Int64 = 0
+        var duplicateSize: Int64 = 0
+        var dateRange: (min: Date, max: Date)? = nil
+        var yearBreakdown: [(year: Int, count: Int)] = []
+        var topCameras: [(camera: String, count: Int)] = []
+    }
+
     // Empty folder cleanup
     @State private var emptyFolderCount  = 0
     @State private var showCleanupConfirm = false
@@ -125,6 +136,91 @@ struct ReportView: View {
                     ReportStatCard(value: done.count,    label: "Organized",  color: .green,  icon: "checkmark.circle.fill")
                     ReportStatCard(value: skipped.count, label: "Skipped",    color: .yellow, icon: "forward.fill")
                     ReportStatCard(value: errors.count,  label: "Errors",     color: .red,    icon: "exclamationmark.triangle.fill")
+                }
+
+                // ── Library stats ──────────────────────────────────────────
+                if orgStats.totalOrganizedSize > 0 {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Label("Library Statistics", systemImage: "chart.bar.fill")
+                            .font(.headline)
+
+                        // Size row
+                        HStack(spacing: 16) {
+                            OrgStatTile(
+                                icon: "internaldrive.fill",
+                                label: "Organized",
+                                value: ByteCountFormatter.string(fromByteCount: orgStats.totalOrganizedSize, countStyle: .file),
+                                color: .blue
+                            )
+                            if orgStats.duplicateSize > 0 {
+                                OrgStatTile(
+                                    icon: "square.on.square.fill",
+                                    label: "In Duplicates",
+                                    value: ByteCountFormatter.string(fromByteCount: orgStats.duplicateSize, countStyle: .file),
+                                    color: .orange
+                                )
+                            }
+                            if let range = orgStats.dateRange {
+                                let fmt: DateFormatter = {
+                                    let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .none; return f
+                                }()
+                                OrgStatTile(
+                                    icon: "calendar",
+                                    label: "Date Range",
+                                    value: "\(fmt.string(from: range.min)) – \(fmt.string(from: range.max))",
+                                    color: .green
+                                )
+                            }
+                        }
+
+                        // Year breakdown
+                        if !orgStats.yearBreakdown.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Files per Year")
+                                    .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
+                                let maxCount = orgStats.yearBreakdown.map(\.count).max() ?? 1
+                                ForEach(orgStats.yearBreakdown, id: \.year) { item in
+                                    HStack(spacing: 8) {
+                                        Text("\(item.year)")
+                                            .font(.caption).monospacedDigit()
+                                            .frame(width: 38, alignment: .leading)
+                                        GeometryReader { geo in
+                                            RoundedRectangle(cornerRadius: 3)
+                                                .fill(Color.blue.opacity(0.7))
+                                                .frame(width: geo.size.width * CGFloat(item.count) / CGFloat(maxCount))
+                                        }
+                                        .frame(height: 12)
+                                        Text("\(item.count)")
+                                            .font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Top cameras
+                        if !orgStats.topCameras.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Top Cameras")
+                                    .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
+                                HStack(spacing: 8) {
+                                    ForEach(orgStats.topCameras.prefix(4), id: \.camera) { item in
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "camera.fill")
+                                                .font(.caption2).foregroundStyle(.secondary)
+                                            Text(item.camera)
+                                                .font(.caption2)
+                                            Text("(\(item.count))")
+                                                .font(.caption2).foregroundStyle(.secondary)
+                                        }
+                                        .padding(.horizontal, 8).padding(.vertical, 4)
+                                        .background(.secondary.opacity(0.1), in: Capsule())
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(16)
+                    .background(.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
                 }
 
                 // ── Errors list ────────────────────────────────────────────
@@ -359,6 +455,9 @@ struct ReportView: View {
         )
         manifests = (try? context.fetch(mDesc)) ?? []
 
+        // Compute library stats from session files
+        computeStats(session: session, plans: plans)
+
         // Count empty folders left behind (only meaningful for Move operations)
         if nav.organizationConfig.fileOperation == .move {
             let roots = nav.selectedFolderURLs
@@ -372,6 +471,39 @@ struct ReportView: View {
                 emptyFolderCount = count
             }
         }
+    }
+
+    private func computeStats(session: ScanSession, plans: [OrganizationPlan]) {
+        let donePlanFileIDs = Set(done.map(\.mediaFileID))
+        let dupFileIDs = Set(done.filter { $0.destinationAbsPath.contains("/Duplicates/") }.map(\.mediaFileID))
+
+        var totalSize: Int64 = 0
+        var dupSize: Int64 = 0
+        var minDate: Date? = nil
+        var maxDate: Date? = nil
+        var yearCounts: [Int: Int] = [:]
+        var cameraCounts: [String: Int] = [:]
+
+        for file in session.files {
+            guard donePlanFileIDs.contains(file.id) else { continue }
+            totalSize += file.fileSize
+            if dupFileIDs.contains(file.id) { dupSize += file.fileSize }
+            if let d = file.dateTaken {
+                if minDate == nil || d < minDate! { minDate = d }
+                if maxDate == nil || d > maxDate! { maxDate = d }
+                let yr = Calendar.current.component(.year, from: d)
+                yearCounts[yr, default: 0] += 1
+            }
+            if let model = file.cameraModel, !model.isEmpty {
+                cameraCounts[model, default: 0] += 1
+            }
+        }
+
+        orgStats.totalOrganizedSize = totalSize
+        orgStats.duplicateSize = dupSize
+        if let mn = minDate, let mx = maxDate { orgStats.dateRange = (mn, mx) }
+        orgStats.yearBreakdown = yearCounts.map { ($0.key, $0.value) }.sorted { $0.year < $1.year }
+        orgStats.topCameras = cameraCounts.map { ($0.key, $0.value) }.sorted { $0.count > $1.count }
     }
 
     private func performCleanup() {
@@ -454,6 +586,34 @@ struct ReportView: View {
             message: "Copied \(errors.count) failed path(s) to the clipboard.",
             revealURL: nil
         )
+    }
+}
+
+// MARK: ─── Org Stat Tile ─────────────────────────────────────────────────────
+
+struct OrgStatTile: View {
+    let icon: String
+    let label: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(color)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.subheadline).fontWeight(.semibold)
+                    .lineLimit(1)
+                Text(label)
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 

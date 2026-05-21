@@ -26,10 +26,10 @@ final class MetadataExtractor: Sendable {
 
     // MARK: Public
 
-    func extract(from url: URL, kind: MediaKind) -> ExtractedMetadata {
+    func extract(from url: URL, kind: MediaKind) async -> ExtractedMetadata {
         switch kind {
         case .photo:   return extractPhoto(url)
-        case .video:   return extractVideo(url)
+        case .video:   return await extractVideo(url)
         case .archive: return extractArchive(url)
         }
     }
@@ -107,34 +107,36 @@ final class MetadataExtractor: Sendable {
 
     // MARK: ─── Video ──────────────────────────────────────────────────────────
 
-    private func extractVideo(_ url: URL) -> ExtractedMetadata {
+    private func extractVideo(_ url: URL) async -> ExtractedMetadata {
         var meta = ExtractedMetadata()
 
         let asset = AVURLAsset(url: url)
 
-        // Duration (synchronous — OK for background threads)
-        let duration = asset.duration
-        if duration.isValid && !duration.isIndefinite {
+        // Duration
+        if let duration = try? await asset.load(.duration),
+           duration.isValid && !duration.isIndefinite {
             meta.durationSeconds = CMTimeGetSeconds(duration)
         }
 
         // Common metadata (creation date, location)
-        for item in asset.commonMetadata {
-            switch item.commonKey {
-            case .commonKeyCreationDate:
-                if let str = item.stringValue {
-                    meta.dateTaken = ISO8601DateFormatter().date(from: str)
-                } else if let date = item.dateValue {
-                    meta.dateTaken = date
+        if let commonMetadata = try? await asset.load(.commonMetadata) {
+            for item in commonMetadata {
+                switch item.commonKey {
+                case .commonKeyCreationDate:
+                    if let str = try? await item.load(.stringValue) {
+                        meta.dateTaken = ISO8601DateFormatter().date(from: str)
+                    } else if let date = try? await item.load(.dateValue) {
+                        meta.dateTaken = date
+                    }
+                case .commonKeyLocation:
+                    if let str = try? await item.load(.stringValue),
+                       let loc = parseISO6709(str) {
+                        meta.latitude  = loc.latitude
+                        meta.longitude = loc.longitude
+                    }
+                default:
+                    break
                 }
-            case .commonKeyLocation:
-                if let str = item.stringValue,
-                   let loc = parseISO6709(str) {
-                    meta.latitude  = loc.latitude
-                    meta.longitude = loc.longitude
-                }
-            default:
-                break
             }
         }
 

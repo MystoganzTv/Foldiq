@@ -129,7 +129,7 @@ final class ScanCoordinator: ObservableObject {
             currentFile    = disc.filename
 
             let meta = await Task.detached(priority: .utility) {
-                MetadataExtractor().extract(from: disc.url, kind: disc.kind)
+                await MetadataExtractor().extract(from: disc.url, kind: disc.kind)
             }.value
 
             let file = MediaFile(

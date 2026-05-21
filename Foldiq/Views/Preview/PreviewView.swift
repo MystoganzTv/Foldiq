@@ -36,6 +36,20 @@ struct PreviewView: View {
     // Inspector
     @State private var selectedPlanID: UUID?
 
+    // Advanced filters
+    @State private var filesByID: [UUID: MediaFile] = [:]
+    @State private var showAdvancedFilters = false
+    @State private var filterDateFrom: Date? = nil
+    @State private var filterDateTo: Date? = nil
+    @State private var filterCamera: String = "All"
+    @State private var filterGPS: GPSFilter = .all
+
+    enum GPSFilter: String, CaseIterable {
+        case all = "All"
+        case withGPS = "With Location"
+        case withoutGPS = "No Location"
+    }
+
     // Folder tree sheet
     @State private var showFolderTree = false
     var selectedPlan: OrganizationPlan? {
@@ -86,6 +100,23 @@ struct PreviewView: View {
             result = result.filter { $0.destinationAbsPath.contains("/Unknown Date/") }
         }
 
+        // Advanced filters
+        if let from = filterDateFrom {
+            result = result.filter { filesByID[$0.mediaFileID]?.dateTaken.map { $0 >= from } ?? false }
+        }
+        if let to = filterDateTo {
+            let endOfDay = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: to) ?? to
+            result = result.filter { filesByID[$0.mediaFileID]?.dateTaken.map { $0 <= endOfDay } ?? false }
+        }
+        if filterCamera != "All" {
+            result = result.filter { filesByID[$0.mediaFileID]?.cameraModel == filterCamera }
+        }
+        switch filterGPS {
+        case .all: break
+        case .withGPS:    result = result.filter { filesByID[$0.mediaFileID]?.hasGPS == true }
+        case .withoutGPS: result = result.filter { !(filesByID[$0.mediaFileID]?.hasGPS == true) }
+        }
+
         result.sort {
             let lhs: String
             let rhs: String
@@ -98,6 +129,19 @@ struct PreviewView: View {
         }
 
         return result
+    }
+
+    var availableCameras: [String] {
+        var seen = Set<String>()
+        for (_, file) in filesByID {
+            if let model = file.cameraModel, !model.isEmpty { seen.insert(model) }
+        }
+        return ["All"] + seen.sorted()
+    }
+
+    var hasActiveAdvancedFilters: Bool {
+        filterDateFrom != nil || filterDateTo != nil ||
+        filterCamera != "All" || filterGPS != .all
     }
 
     var duplicatePlanCount: Int {
@@ -242,10 +286,90 @@ struct PreviewView: View {
                 }
                 .help("Export CSV report")
                 .padding(.leading, 6)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { showAdvancedFilters.toggle() }
+                } label: {
+                    Image(systemName: hasActiveAdvancedFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .foregroundStyle(hasActiveAdvancedFilters ? .blue : .secondary)
+                }
+                .help("Advanced filters")
+                .padding(.leading, 6)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
             .background(.bar)
+
+            // ── Advanced filter panel ─────────────────────────────────────
+            if showAdvancedFilters {
+                VStack(spacing: 0) {
+                    Divider()
+                    HStack(spacing: 20) {
+                        // Date range
+                        HStack(spacing: 6) {
+                            Text("Date:").font(.caption).foregroundStyle(.secondary)
+                            DatePicker("From", selection: Binding(
+                                get: { filterDateFrom ?? Date.distantPast },
+                                set: { filterDateFrom = $0 == Date.distantPast ? nil : $0 }
+                            ), displayedComponents: .date)
+                            .labelsHidden()
+                            .controlSize(.small)
+                            Text("–").foregroundStyle(.secondary)
+                            DatePicker("To", selection: Binding(
+                                get: { filterDateTo ?? Date() },
+                                set: { filterDateTo = $0 }
+                            ), displayedComponents: .date)
+                            .labelsHidden()
+                            .controlSize(.small)
+                            if filterDateFrom != nil || filterDateTo != nil {
+                                Button("✕") { filterDateFrom = nil; filterDateTo = nil }
+                                    .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Divider().frame(height: 20)
+
+                        // Camera
+                        HStack(spacing: 6) {
+                            Text("Camera:").font(.caption).foregroundStyle(.secondary)
+                            Picker("", selection: $filterCamera) {
+                                ForEach(availableCameras, id: \.self) { Text($0).tag($0) }
+                            }
+                            .frame(width: 160)
+                            .controlSize(.small)
+                        }
+
+                        Divider().frame(height: 20)
+
+                        // GPS
+                        HStack(spacing: 6) {
+                            Text("Location:").font(.caption).foregroundStyle(.secondary)
+                            Picker("", selection: $filterGPS) {
+                                ForEach(GPSFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 220)
+                            .controlSize(.small)
+                        }
+
+                        Spacer()
+
+                        if hasActiveAdvancedFilters {
+                            Button("Clear All") {
+                                filterDateFrom = nil; filterDateTo = nil
+                                filterCamera = "All"; filterGPS = .all
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .tint(.orange)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(.bar)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
 
             Divider()
 
@@ -461,6 +585,11 @@ struct PreviewView: View {
             }
 
             try? context.save()
+
+            // Build file lookup for advanced filters
+            var lookup: [UUID: MediaFile] = [:]
+            for file in session.files { lookup[file.id] = file }
+            filesByID = lookup
 
             plans = built
             isPlanning = false
