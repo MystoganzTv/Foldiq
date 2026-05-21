@@ -159,51 +159,6 @@ struct WelcomeView: View {
             }
             .animation(.spring(response: 0.3), value: nav.selectedFolderURLs.isEmpty)
 
-            // ── Quick Sources ────────────────────────────────────────────────
-            let sources = quickSources
-            if !sources.isEmpty {
-                VStack(spacing: 8) {
-                    Text("Quick Sources")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 8) {
-                        ForEach(sources, id: \.url.path) { source in
-                            Button {
-                                let url = source.url
-                                if !nav.selectedFolderURLs.contains(where: { $0.path == url.path }) {
-                                    nav.selectedFolderURLs.append(url)
-                                }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: source.icon)
-                                        .font(.caption)
-                                    Text(source.name)
-                                        .font(.caption)
-                                        .fontWeight(.medium)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(
-                                    nav.selectedFolderURLs.contains(where: { $0.path == source.url.path })
-                                        ? Color.blue.opacity(0.15)
-                                        : Color.secondary.opacity(0.1),
-                                    in: Capsule()
-                                )
-                                .foregroundStyle(
-                                    nav.selectedFolderURLs.contains(where: { $0.path == source.url.path })
-                                        ? Color.blue
-                                        : Color.primary
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .padding(.top, 14)
-                .transition(.opacity)
-            }
-
             Spacer()
 
             // ── Disclaimer ───────────────────────────────────────────────────
@@ -262,29 +217,6 @@ struct WelcomeView: View {
     }
 
     // MARK: - Helpers
-
-    /// Detects common photo library locations on this Mac and returns them as quick-add shortcuts.
-    var quickSources: [(name: String, icon: String, url: URL)] {
-        let fm = FileManager.default
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        var sources: [(name: String, icon: String, url: URL)] = []
-
-        let candidates: [(String, String, URL)] = [
-            ("iCloud Drive", "icloud.fill",
-             URL(fileURLWithPath: NSHomeDirectory() + "/Library/Mobile Documents/com~apple~CloudDocs")),
-            ("Pictures", "photo.fill",        home.appendingPathComponent("Pictures")),
-            ("Desktop",  "desktopcomputer",   home.appendingPathComponent("Desktop")),
-            ("Downloads","arrow.down.circle.fill", home.appendingPathComponent("Downloads")),
-        ]
-
-        for (name, icon, url) in candidates {
-            var isDir: ObjCBool = false
-            if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-                sources.append((name, icon, url))
-            }
-        }
-        return sources
-    }
 
     /// Label for the Scan button, reflecting the mix of folders and ZIPs selected.
     private var scanButtonLabel: String {
