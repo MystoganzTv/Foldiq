@@ -594,11 +594,13 @@
   <div style="max-width:700px;margin:0 auto;">
     <div class="section-label" style="text-align:center;">Available now</div>
     <h2>Ready to clean up your library?</h2>
-    <p>macOS 14 Sonoma or later required. Free to download.</p>
-    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
-      <a class="btn-primary" href="#">⬇ Download for Mac</a>
+    <p>One-time purchase · No subscription · Yours forever.</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;align-items:center;">
+      <button class="btn-primary" id="buy-btn" onclick="startCheckout()">
+        <span id="buy-label">⬇ Download for Mac — $4.99</span>
+      </button>
     </div>
-    <p style="margin-top:24px;font-size:14px;color:#94A3B8;">Requires macOS 14 Sonoma or later · Apple Silicon & Intel</p>
+    <p style="margin-top:24px;font-size:14px;color:#94A3B8;">macOS 14 Sonoma or later · Apple Silicon & Intel · Secure checkout by Stripe</p>
   </div>
 </section>
 
@@ -618,5 +620,28 @@
   <div class="footer-copy">© 2026 Foldiq. All rights reserved. Made for Mac.</div>
 </footer>
 
+<script>
+  async function startCheckout() {
+    const btn = document.getElementById('buy-btn');
+    const label = document.getElementById('buy-label');
+    btn.disabled = true;
+    label.textContent = 'Loading…';
+
+    try {
+      const res = await fetch('/.netlify/functions/create-checkout', { method: 'POST' });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error(data.error || 'Unknown error');
+      }
+    } catch (err) {
+      label.textContent = '⬇ Download for Mac — $4.99';
+      btn.disabled = false;
+      alert('Something went wrong. Please try again.');
+      console.error(err);
+    }
+  }
+</script>
 </body>
 </html>
