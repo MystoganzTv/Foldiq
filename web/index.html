@@ -278,6 +278,45 @@
     .footer-links a:hover { color: #fff; }
     .footer-copy { font-size: 13px; color: #475569; }
 
+    /* ── SCREENSHOTS ── */
+    .screenshots-section { background: var(--slate-50); overflow: hidden; }
+    .screenshots-track {
+      display: flex; gap: 24px; margin-top: 56px;
+      overflow-x: auto; padding-bottom: 20px;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .screenshots-track::-webkit-scrollbar { display: none; }
+    .screenshot-frame {
+      flex-shrink: 0; scroll-snap-align: start;
+      width: min(720px, 85vw);
+      background: #1C2333; border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.06);
+    }
+    .screenshot-titlebar {
+      background: #1C2333; padding: 12px 16px;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .screenshot-titlebar .d { width: 11px; height: 11px; border-radius: 50%; }
+    .screenshot-titlebar .d.r { background: #FF5F56; }
+    .screenshot-titlebar .d.y { background: #FFBD2E; }
+    .screenshot-titlebar .d.g { background: #27C93F; }
+    .screenshot-frame img {
+      width: 100%; display: block;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+    .screenshot-caption {
+      padding: 14px 16px;
+      font-size: 13px; font-weight: 600; color: #64748B;
+      background: #1C2333;
+    }
+    .screenshots-hint {
+      text-align: center; margin-top: 20px;
+      font-size: 13px; color: var(--slate-400);
+    }
+
     /* ── RESPONSIVE ── */
     @media (max-width: 640px) {
       nav .nav-links { display: none; }
@@ -390,6 +429,58 @@
       </div>
     </div>
   </div>
+</section>
+
+<!-- SCREENSHOTS -->
+<section class="screenshots-section" id="screenshots" style="padding:100px 0 80px;">
+  <div style="max-width:1100px;margin:0 auto;padding:0 5%;">
+    <div class="section-label">See it in action</div>
+    <h2 class="section-title">Every step, built for clarity</h2>
+    <p class="section-sub">From scan to report — you see exactly what's happening at every stage.</p>
+  </div>
+  <div class="screenshots-track" style="padding-left:5%;padding-right:5%;">
+    <!-- 1. Welcome -->
+    <div class="screenshot-frame">
+      <div class="screenshot-titlebar">
+        <div class="d r"></div><div class="d y"></div><div class="d g"></div>
+      </div>
+      <img src="screenshots/welcome.png" alt="Foldiq — Select your folder to organize" loading="lazy" />
+      <div class="screenshot-caption">① Select a folder — or drag it straight onto the window</div>
+    </div>
+    <!-- 2. Scan Results -->
+    <div class="screenshot-frame">
+      <div class="screenshot-titlebar">
+        <div class="d r"></div><div class="d y"></div><div class="d g"></div>
+      </div>
+      <img src="screenshots/scan.png" alt="Foldiq — Scan Complete with file stats" loading="lazy" />
+      <div class="screenshot-caption">② Scan results — photos, videos, duplicates, and missing dates at a glance</div>
+    </div>
+    <!-- 3. Organization Settings -->
+    <div class="screenshot-frame">
+      <div class="screenshot-titlebar">
+        <div class="d r"></div><div class="d y"></div><div class="d g"></div>
+      </div>
+      <img src="screenshots/settings.png" alt="Foldiq — Organization Settings with four modes" loading="lazy" />
+      <div class="screenshot-caption">③ Pick your folder structure — Smart Hybrid, By Year, Month, or Exact Date</div>
+    </div>
+    <!-- 4. Applying -->
+    <div class="screenshot-frame">
+      <div class="screenshot-titlebar">
+        <div class="d r"></div><div class="d y"></div><div class="d g"></div>
+      </div>
+      <img src="screenshots/applying.png" alt="Foldiq — Applying changes, Done!" loading="lazy" />
+      <div class="screenshot-caption">④ Foldiq moves your files — live progress, file by file</div>
+    </div>
+    <!-- 5. Report -->
+    <div class="screenshot-frame">
+      <div class="screenshot-titlebar">
+        <div class="d r"></div><div class="d y"></div><div class="d g"></div>
+      </div>
+      <img src="screenshots/report.png" alt="Foldiq — Organization Complete report" loading="lazy" />
+      <div class="screenshot-caption">⑤ Report — stats, camera breakdown, and one-click undo if you change your mind</div>
+    </div>
+  </div>
+  <p class="screenshots-hint">← Scroll to see all screens →</p>
 </section>
 
 <!-- FEATURES -->
