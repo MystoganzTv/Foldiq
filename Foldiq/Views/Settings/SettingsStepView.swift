@@ -118,47 +118,64 @@ struct SettingsStepView: View {
                 Divider()
 
                 // ── More options (collapsed by default) ───────────────────
-                DisclosureGroup(isExpanded: $showMoreOptions) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        ToggleRow(
-                            label: "Include videos",
-                            detail: "Organize video files alongside photos",
-                            isOn: $nav.organizationConfig.includeVideos
-                        )
-                        ToggleRow(
-                            label: "Include archives",
-                            detail: "Organize compressed files (zip, rar, 7z…) alongside your media",
-                            isOn: $nav.organizationConfig.includeArchives
-                        )
-                        ToggleRow(
-                            label: "Separate duplicates",
-                            detail: "Route duplicates to a Duplicates/ subfolder instead of organizing normally",
-                            isOn: $nav.organizationConfig.separateDuplicates
-                        )
-                        ToggleRow(
-                            label: "Use GPS location in folder names",
-                            detail: "Requires internet for reverse-geocoding (Smart Hybrid and By Location modes)",
-                            isOn: $nav.organizationConfig.useGPSLocation
-                        )
-
-                        Divider().padding(.vertical, 4)
-
+                VStack(alignment: .leading, spacing: 0) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.22)) { showMoreOptions.toggle() }
+                    } label: {
                         HStack {
-                            Text("Output folder name")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
+                            Label("More options", systemImage: "slider.horizontal.3")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
                             Spacer()
-                            TextField("Organized Media", text: $nav.organizationConfig.outputFolderName)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(maxWidth: 220)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .rotationEffect(.degrees(showMoreOptions ? 90 : 0))
+                                .animation(.easeInOut(duration: 0.22), value: showMoreOptions)
                         }
+                        .contentShape(Rectangle())
                     }
-                    .padding(.top, 14)
-                } label: {
-                    Label("More options", systemImage: "slider.horizontal.3")
-                        .font(.headline)
+                    .buttonStyle(.plain)
+
+                    if showMoreOptions {
+                        VStack(alignment: .leading, spacing: 14) {
+                            ToggleRow(
+                                label: "Include videos",
+                                detail: "Organize video files alongside photos",
+                                isOn: $nav.organizationConfig.includeVideos
+                            )
+                            ToggleRow(
+                                label: "Include archives",
+                                detail: "Organize compressed files (zip, rar, 7z…) alongside your media",
+                                isOn: $nav.organizationConfig.includeArchives
+                            )
+                            ToggleRow(
+                                label: "Separate duplicates",
+                                detail: "Route duplicates to a Duplicates/ subfolder instead of organizing normally",
+                                isOn: $nav.organizationConfig.separateDuplicates
+                            )
+                            ToggleRow(
+                                label: "Use GPS location in folder names",
+                                detail: "Requires internet for reverse-geocoding (Smart Hybrid and By Location modes)",
+                                isOn: $nav.organizationConfig.useGPSLocation
+                            )
+
+                            Divider().padding(.vertical, 4)
+
+                            HStack {
+                                Text("Output folder name")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                Spacer()
+                                TextField("Organized Media", text: $nav.organizationConfig.outputFolderName)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(maxWidth: 220)
+                            }
+                        }
+                        .padding(.top, 14)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                 }
-                .animation(.easeInOut(duration: 0.2), value: showMoreOptions)
 
             }
             .padding(40)
