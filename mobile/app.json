@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Foldiq",
+    "slug": "foldiq-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.MystoganzTv.FoldiqMobile",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Foldiq needs access to your photo library to back up and organize your photos and videos.",
+        "NSPhotoLibraryAddUsageDescription": "Foldiq needs permission to save organized photos to your library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.MystoganzTv.FoldiqMobile",
+      "permissions": [
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Foldiq needs access to your photos to back them up.",
+          "savePhotosPermission": "Allow Foldiq to save photos.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ],
+    "extra": {
+      "googleClientId": "YOUR_GOOGLE_CLIENT_ID",
+      "dropboxAppKey": "YOUR_DROPBOX_APP_KEY"
+    }
+  }
+}
