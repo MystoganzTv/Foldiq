@@ -648,24 +648,6 @@
   </div>
 </section>
 
-<!-- CONTACT -->
-<section class="contact-section" id="contact">
-  <div class="contact-card">
-    <div class="section-label">Contact</div>
-    <h2>Get in touch</h2>
-    <p>Have a question, found a bug, or just want to say hi? We read every message.</p>
-    <form class="contact-form" name="contact" method="POST" data-netlify="true" netlify-honeypot="bot-field">
-      <input type="hidden" name="form-name" value="contact" />
-      <input type="hidden" name="bot-field" />
-      <input type="text" name="name" placeholder="Your name" required />
-      <input type="email" name="email" placeholder="Your email" required />
-      <textarea name="message" placeholder="Your message…" required></textarea>
-      <button type="submit" id="contact-btn">Send message</button>
-    </form>
-    <div class="contact-success" id="contact-success">✓ Message sent — we'll get back to you soon!</div>
-  </div>
-</section>
-
 <!-- FOOTER -->
 <footer>
   <div class="footer-logo">
@@ -677,27 +659,12 @@
     <a href="#features">Features</a>
     <a href="privacy-policy.html">Privacy Policy</a>
     <a href="terms.html">Terms of Service</a>
-    <a href="#contact">Contact</a>
+    <a href="/contact.html">Contact</a>
   </div>
   <div class="footer-copy">© 2026 Foldiq. All rights reserved. Made for Mac.</div>
 </footer>
 
 <script>
-  // Contact form — show inline success, no page reload
-  const contactForm = document.querySelector('.contact-form');
-  if (contactForm) {
-    contactForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('contact-btn');
-      btn.disabled = true;
-      btn.textContent = 'Sending…';
-      const data = new URLSearchParams(new FormData(contactForm));
-      await fetch('/', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: data });
-      contactForm.style.display = 'none';
-      document.getElementById('contact-success').style.display = 'block';
-    });
-  }
-
   async function startCheckout() {
     const btn = document.getElementById('buy-btn');
     const label = document.getElementById('buy-label');

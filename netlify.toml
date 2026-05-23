@@ -4,6 +4,11 @@
   command = "cd netlify/functions && npm install"
 
 [[redirects]]
+  from = "/contact"
+  to = "/contact.html"
+  status = 301
+
+[[redirects]]
   from = "/privacy"
   to = "/privacy-policy.html"
   status = 301
