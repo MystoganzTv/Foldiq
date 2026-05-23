@@ -33,3 +33,9 @@ Carthage/Build/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Electron / Node — never commit binaries or build output
+desktop/node_modules/
+desktop/dist-electron/
+desktop/dist/
+FoldiqMobile/node_modules/
