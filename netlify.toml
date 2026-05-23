@@ -1,6 +1,7 @@
 [build]
   publish = "web"
   functions = "netlify/functions"
+  command = "cd netlify/functions && npm install"
 
 [[redirects]]
   from = "/privacy"
