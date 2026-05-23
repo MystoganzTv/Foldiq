@@ -4,7 +4,7 @@ import {
   ScrollView, Alert, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import * as MediaLibrary from 'expo-media-library';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -70,7 +70,7 @@ export default function HomeScreen({ navigation }: Props) {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoRow}>
-            <Ionicons name="folder-open" size={36} color="#3B82F6" />
+            <Icon name="folder-open" size={36} color="#3B82F6" />
             <Text style={styles.logoText}>Foldiq</Text>
           </View>
           <Text style={styles.headline}>Back up your photos</Text>
@@ -82,12 +82,12 @@ export default function HomeScreen({ navigation }: Props) {
         {/* Permission banner */}
         {!granted && (
           <TouchableOpacity style={styles.permissionBanner} onPress={handlePermission}>
-            <Ionicons name="images-outline" size={22} color="#3B82F6" />
+            <Icon name="images-outline" size={22} color="#3B82F6" />
             <View style={styles.permissionText}>
               <Text style={styles.permissionTitle}>Allow photo access</Text>
               <Text style={styles.permissionDetail}>Tap to grant access to your library</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            <Icon name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
         )}
 
@@ -111,7 +111,7 @@ export default function HomeScreen({ navigation }: Props) {
             { icon: 'cloud-upload-outline', text: 'Export to your phone, iCloud, Google Drive, or Dropbox' },
           ].map((step, i) => (
             <View key={i} style={styles.stepRow}>
-              <Ionicons name={step.icon as any} size={20} color="#3B82F6" />
+              <Icon name={step.icon as any} size={20} color="#3B82F6" />
               <Text style={styles.stepText}>{step.text}</Text>
             </View>
           ))}
@@ -124,7 +124,7 @@ export default function HomeScreen({ navigation }: Props) {
             onPress={() => granted && navigation.navigate('Select')}
             disabled={!granted}
           >
-            <Ionicons name="images" size={22} color="#fff" />
+            <Icon name="images" size={22} color="#fff" />
             <Text style={styles.ctaPrimaryText}>Browse & Select Photos</Text>
           </TouchableOpacity>
 
@@ -137,7 +137,7 @@ export default function HomeScreen({ navigation }: Props) {
             }}
             disabled={!granted}
           >
-            <Ionicons name="download-outline" size={20} color="#3B82F6" />
+            <Icon name="download-outline" size={20} color="#3B82F6" />
             <Text style={styles.ctaSecondaryText}>Export Entire Library</Text>
           </TouchableOpacity>
         </View>
@@ -150,7 +150,7 @@ export default function HomeScreen({ navigation }: Props) {
 function StatCard({ icon, value, label, color }: { icon: string; value: string; label: string; color: string }) {
   return (
     <View style={styles.statCard}>
-      <Ionicons name={icon as any} size={22} color={color} />
+      <Icon name={icon as any} size={22} color={color} />
       <Text style={[styles.statValue, { color }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>

@@ -4,7 +4,7 @@ import {
   ScrollView, TextInput, Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
@@ -151,7 +151,7 @@ export default function ExportScreen({ navigation, route }: Props) {
       {/* Navbar */}
       <View style={styles.navbar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navBtn}>
-          <Ionicons name="chevron-back" size={24} color="#3B82F6" />
+          <Icon name="chevron-back" size={24} color="#3B82F6" />
         </TouchableOpacity>
         <Text style={styles.navTitle}>Export Settings</Text>
         <View style={{ width: 40 }} />
@@ -161,7 +161,7 @@ export default function ExportScreen({ navigation, route }: Props) {
 
         {/* Count summary */}
         <View style={styles.summaryBanner}>
-          <Ionicons name="images-outline" size={20} color="#3B82F6" />
+          <Icon name="images-outline" size={20} color="#3B82F6" />
           <Text style={styles.summaryText}>
             {assetCount !== null
               ? `${assetCount.toLocaleString()} items selected`
@@ -177,7 +177,7 @@ export default function ExportScreen({ navigation, route }: Props) {
               <Text style={styles.modeLabel}>{selectedMode.label}</Text>
               <Text style={styles.modeDetail} numberOfLines={1}>{selectedMode.detail}</Text>
             </View>
-            <Ionicons name={showModes ? 'chevron-up' : 'chevron-down'} size={18} color="#94A3B8" />
+            <Icon name={showModes ? 'chevron-up' : 'chevron-down'} size={18} color="#94A3B8" />
           </TouchableOpacity>
 
           {showModes && ORGANIZATION_MODES.map(m => (
@@ -191,7 +191,7 @@ export default function ExportScreen({ navigation, route }: Props) {
                 <Text style={styles.modeOptionDetail}>{m.detail}</Text>
                 <Text style={styles.modeExample}>{m.example}</Text>
               </View>
-              {m.key === mode && <Ionicons name="checkmark-circle" size={20} color="#3B82F6" />}
+              {m.key === mode && <Icon name="checkmark-circle" size={20} color="#3B82F6" />}
             </TouchableOpacity>
           ))}
         </View>
@@ -209,7 +209,7 @@ export default function ExportScreen({ navigation, route }: Props) {
                 onPress={() => handleSelectDestination(d.key)}
               >
                 <View style={[styles.destIcon, { backgroundColor: d.color + '18' }]}>
-                  <Ionicons name={d.icon as any} size={22} color={d.color} />
+                  <Icon name={d.icon as any} size={22} color={d.color} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.destLabel, active && { color: '#3B82F6' }]}>{d.label}</Text>
@@ -217,7 +217,7 @@ export default function ExportScreen({ navigation, route }: Props) {
                     {connected ? '✓ Connected' : d.detail}
                   </Text>
                 </View>
-                {active && <Ionicons name="checkmark-circle" size={20} color="#3B82F6" />}
+                {active && <Icon name="checkmark-circle" size={20} color="#3B82F6" />}
               </TouchableOpacity>
             );
           })}
@@ -250,7 +250,7 @@ export default function ExportScreen({ navigation, route }: Props) {
           onPress={startExport}
           disabled={!canStart()}
         >
-          <Ionicons name="download" size={20} color="#fff" />
+          <Icon name="download" size={20} color="#fff" />
           <Text style={styles.startText}>Start Export</Text>
         </TouchableOpacity>
         {!canStart() && (

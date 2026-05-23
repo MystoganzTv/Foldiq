@@ -4,7 +4,7 @@ import {
   ScrollView, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -67,9 +67,9 @@ export default function ProgressScreen({ navigation, route }: Props) {
         {/* Icon */}
         <View style={[styles.iconCircle, finished && styles.iconCircleDone]}>
           {finished ? (
-            <Ionicons name="checkmark" size={48} color="#fff" />
+            <Icon name="checkmark" size={48} color="#fff" />
           ) : (
-            <Ionicons name="cloud-upload-outline" size={48} color="#3B82F6" />
+            <Icon name="cloud-upload-outline" size={48} color="#3B82F6" />
           )}
         </View>
 
@@ -140,7 +140,7 @@ export default function ProgressScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.doneBtn} onPress={done}>
-            <Ionicons name="home-outline" size={20} color="#fff" />
+            <Icon name="home-outline" size={20} color="#fff" />
             <Text style={styles.doneText}>Back to Home</Text>
           </TouchableOpacity>
         )}

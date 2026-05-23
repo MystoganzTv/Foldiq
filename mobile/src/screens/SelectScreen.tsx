@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import * as MediaLibrary from 'expo-media-library';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -84,11 +84,11 @@ export default function SelectScreen({ navigation }: Props) {
         />
         {item.mediaType === 'video' && (
           <View style={styles.videoBadge}>
-            <Ionicons name="videocam" size={12} color="#fff" />
+            <Icon name="videocam" size={12} color="#fff" />
           </View>
         )}
         <View style={[styles.checkCircle, sel && styles.checkCircleSelected]}>
-          {sel && <Ionicons name="checkmark" size={14} color="#fff" />}
+          {sel && <Icon name="checkmark" size={14} color="#fff" />}
         </View>
         {sel && <View style={styles.tileOverlay} />}
       </TouchableOpacity>
@@ -100,7 +100,7 @@ export default function SelectScreen({ navigation }: Props) {
       {/* Navbar */}
       <View style={styles.navbar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navBtn}>
-          <Ionicons name="chevron-back" size={24} color="#3B82F6" />
+          <Icon name="chevron-back" size={24} color="#3B82F6" />
         </TouchableOpacity>
         <Text style={styles.navTitle}>Select Photos</Text>
         <TouchableOpacity onPress={toggleAll} style={styles.navBtn}>
@@ -143,7 +143,7 @@ export default function SelectScreen({ navigation }: Props) {
             <Text style={styles.proceedText}>
               Export {selected.size.toLocaleString()} {selected.size === 1 ? 'item' : 'items'}
             </Text>
-            <Ionicons name="arrow-forward" size={20} color="#fff" />
+            <Icon name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
       )}
