@@ -32,6 +32,7 @@
 		AA000023 /* ArchiveExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000023 /* ArchiveExtractor.swift */; };
 		AA000024 /* ZipInflate.c in Sources */ = {isa = PBXBuildFile; fileRef = BB000024 /* ZipInflate.c */; };
 		AA000026 /* ProbableDuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000026 /* ProbableDuplicateDetector.swift */; };
+		AA000027 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000027 /* OnboardingView.swift */; };
 		AA100001 /* OrganizationPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100001 /* OrganizationPlannerTests.swift */; };
 		AA100002 /* ProbableDuplicateDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100002 /* ProbableDuplicateDetectorTests.swift */; };
 /* End PBXBuildFile section */
@@ -73,6 +74,7 @@
 		BB000024 /* ZipInflate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ZipInflate.c; sourceTree = "<group>"; };
 		BB000025 /* Foldiq-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Foldiq-Bridging-Header.h"; sourceTree = "<group>"; };
 		BB000026 /* ProbableDuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbableDuplicateDetector.swift; sourceTree = "<group>"; };
+		BB000027 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		CC000001 /* Foldiq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foldiq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB100001 /* OrganizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationPlannerTests.swift; sourceTree = "<group>"; };
 		BB100002 /* ProbableDuplicateDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbableDuplicateDetectorTests.swift; sourceTree = "<group>"; };
@@ -233,6 +235,7 @@
 			isa = PBXGroup;
 			children = (
 				BB000015 /* WelcomeView.swift */,
+				BB000027 /* OnboardingView.swift */,
 			);
 			path = Welcome;
 			sourceTree = "<group>";
@@ -351,6 +354,7 @@
 				AA000013 /* ScanCoordinator.swift in Sources */,
 				AA000014 /* RootView.swift in Sources */,
 				AA000015 /* WelcomeView.swift in Sources */,
+				AA000027 /* OnboardingView.swift in Sources */,
 				AA000016 /* ScanView.swift in Sources */,
 				AA000017 /* SettingsStepView.swift in Sources */,
 				AA000018 /* PreviewView.swift in Sources */,
