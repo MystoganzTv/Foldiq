@@ -3,8 +3,8 @@ name: Build & Release
 on:
   push:
     tags:
-      - 'v*'          # triggers on v1.0.1, v1.1.0, etc.
-  workflow_dispatch:  # lets you trigger manually from GitHub UI
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   # ── Windows x64 ────────────────────────────────────────────────────────────
@@ -27,10 +27,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Vite + Electron (Windows x64)
-        run: npm run build:win -- --x64
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      - name: Build (Vite + Electron Windows x64)
+        run: npx vite build && npx electron-builder --win --x64
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
@@ -38,7 +36,7 @@ jobs:
           name: windows-installer
           path: desktop/dist-electron/Foldiq Setup*.exe
 
-  # ── macOS (ARM + Intel universal) ──────────────────────────────────────────
+  # ── macOS ──────────────────────────────────────────────────────────────────
   build-mac:
     runs-on: macos-latest
     defaults:
@@ -58,10 +56,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Vite + Electron (macOS)
-        run: npm run build:mac
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      - name: Generate icon.icns from icon.png
+        run: |
+          mkdir -p assets/icon.iconset
+          sips -z 16 16     assets/icon.png --out assets/icon.iconset/icon_16x16.png
+          sips -z 32 32     assets/icon.png --out assets/icon.iconset/icon_16x16@2x.png
+          sips -z 32 32     assets/icon.png --out assets/icon.iconset/icon_32x32.png
+          sips -z 64 64     assets/icon.png --out assets/icon.iconset/icon_32x32@2x.png
+          sips -z 128 128   assets/icon.png --out assets/icon.iconset/icon_128x128.png
+          sips -z 256 256   assets/icon.png --out assets/icon.iconset/icon_128x128@2x.png
+          sips -z 256 256   assets/icon.png --out assets/icon.iconset/icon_256x256.png
+          sips -z 512 512   assets/icon.png --out assets/icon.iconset/icon_256x256@2x.png
+          sips -z 512 512   assets/icon.png --out assets/icon.iconset/icon_512x512.png
+          cp assets/icon.png assets/icon.iconset/icon_512x512@2x.png
+          iconutil -c icns assets/icon.iconset -o assets/icon.icns
+
+      - name: Build (Vite + Electron macOS)
+        run: npx vite build && npx electron-builder --mac
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
@@ -69,7 +80,7 @@ jobs:
           name: mac-dmg
           path: desktop/dist-electron/*.dmg
 
-  # ── Create GitHub Release with both installers ─────────────────────────────
+  # ── GitHub Release ─────────────────────────────────────────────────────────
   release:
     needs: [build-windows, build-mac]
     runs-on: ubuntu-latest
@@ -88,17 +99,15 @@ jobs:
           name: mac-dmg
           path: artifacts/mac
 
-      - name: Rename artifacts for clean URLs
+      - name: Rename for clean URLs
         run: |
-          mv artifacts/windows/*.exe artifacts/windows/Foldiq-Setup.exe || true
-          mv artifacts/mac/*.dmg      artifacts/mac/Foldiq.dmg          || true
+          mv artifacts/windows/*.exe artifacts/windows/Foldiq-Setup.exe   2>/dev/null || true
+          mv artifacts/mac/*.dmg      artifacts/mac/Foldiq.dmg             2>/dev/null || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "Foldiq ${{ github.ref_name }}"
-          draft: false
-          prerelease: false
           files: |
             artifacts/windows/Foldiq-Setup.exe
             artifacts/mac/Foldiq.dmg
