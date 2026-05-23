@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Foldiq</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue: #3B82F6; --slate-900: #0F172A; --slate-800: #1E293B;
+      --slate-600: #475569; --slate-400: #94A3B8; --slate-50: #F8FAFC;
+    }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #fff; color: var(--slate-800); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 5%; height: 64px;
+      background: rgba(255,255,255,0.9); backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(0,0,0,0.06); position: sticky; top: 0; z-index: 10;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo-icon { width: 30px; height: 30px; background: var(--blue); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .nav-logo-text { font-size: 17px; font-weight: 800; color: var(--slate-900); }
+    nav a.back { font-size: 14px; color: var(--blue); text-decoration: none; font-weight: 500; }
+
+    .page-header {
+      background: var(--slate-50); border-bottom: 1px solid #E2E8F0;
+      padding: 56px 5% 48px;
+    }
+    .page-header h1 { font-size: 36px; font-weight: 900; color: var(--slate-900); margin-bottom: 10px; }
+    .page-header .meta { font-size: 14px; color: var(--slate-400); }
+
+    .content { max-width: 720px; margin: 0 auto; padding: 64px 5% 100px; }
+    h2 { font-size: 21px; font-weight: 700; color: var(--slate-900); margin: 48px 0 14px; }
+    h2:first-child { margin-top: 0; }
+    p { font-size: 16px; color: var(--slate-600); margin-bottom: 16px; }
+    ul { padding-left: 20px; margin-bottom: 16px; }
+    li { font-size: 16px; color: var(--slate-600); margin-bottom: 8px; }
+    strong { color: var(--slate-800); }
+    .highlight {
+      background: #ECFDF5; border-left: 4px solid #10B981;
+      border-radius: 0 10px 10px 0; padding: 18px 22px; margin: 32px 0;
+    }
+    .highlight p { color: #065F46; margin: 0; font-weight: 500; }
+    a { color: var(--blue); }
+
+    footer {
+      background: var(--slate-900); color: #64748B; text-align: center;
+      padding: 32px 5%; font-size: 13px;
+    }
+    footer a { color: #94A3B8; text-decoration: none; margin: 0 12px; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/">
+    <div class="nav-logo-icon">📁</div>
+    <span class="nav-logo-text">Foldiq</span>
+  </a>
+  <a class="back" href="/">← Back to home</a>
+</nav>
+
+<div class="page-header">
+  <div style="max-width:720px;margin:0 auto;">
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective date: May 23, 2026 · Last updated: May 23, 2026</p>
+  </div>
+</div>
+
+<div class="content">
+
+  <div class="highlight">
+    <p>🔒 The short version: Foldiq does not collect, transmit, or store any personal data — ever. All processing happens entirely on your Mac. The app makes zero network connections.</p>
+  </div>
+
+  <h2>1. Who we are</h2>
+  <p>Foldiq ("the app", "we", "our") is a macOS application developed by Enrique Padrón. If you have any questions about this privacy policy, you can contact us at <a href="mailto:enrique.padron853@gmail.com">enrique.padron853@gmail.com</a>.</p>
+
+  <h2>2. Information we collect</h2>
+  <p><strong>We collect no information whatsoever.</strong> Foldiq does not collect, record, transmit, or share any personal data, usage data, analytics, telemetry, crash reports, or any other form of information from your device or your photo library.</p>
+  <p>Specifically, Foldiq does not collect:</p>
+  <ul>
+    <li>Your name, email address, or any account information</li>
+    <li>Your photos, videos, or any media files</li>
+    <li>File names, folder paths, or metadata from your library</li>
+    <li>Device identifiers, IP addresses, or location data</li>
+    <li>Usage statistics, feature interaction data, or crash logs</li>
+    <li>Any information about your Mac or operating system</li>
+  </ul>
+
+  <h2>3. How the app processes your files</h2>
+  <p>Foldiq reads and reorganizes files stored on your Mac's local storage or any directly connected drive. This processing happens entirely on your device using Apple's built-in system frameworks (FileManager, ImageIO, AVFoundation).</p>
+  <p>At no point does Foldiq transmit any file content, metadata, or path information to any server, cloud service, or third party. The app has no backend, no API, and no network connections of any kind.</p>
+
+  <h2>4. File access</h2>
+  <p>Foldiq only accesses folders that you explicitly select using the macOS file picker or by dragging them onto the app. The app will not access, scan, or read any folder you have not deliberately chosen.</p>
+  <p>On macOS, file access is governed by the operating system's sandbox and security-scoped bookmarks mechanism. Foldiq stores bookmarks for selected folders to allow re-access within the same session. These bookmarks are stored locally on your device using macOS UserDefaults and are never transmitted anywhere.</p>
+
+  <h2>5. Network access</h2>
+  <p>Foldiq makes <strong>no network connections</strong> of any kind. There are no outbound requests, no analytics endpoints, no update checks, no crash reporting services, and no cloud integrations. The app functions entirely offline.</p>
+  <p>You can verify this using macOS's built-in Network monitor or Little Snitch — Foldiq will show zero outbound connections.</p>
+
+  <h2>6. Third-party services</h2>
+  <p>Foldiq does not integrate with, depend on, or communicate with any third-party services, SDKs, libraries, or APIs that collect data. There are no advertising networks, analytics providers, or tracking frameworks included in the app.</p>
+
+  <h2>7. Data storage</h2>
+  <p>The only data Foldiq stores locally on your Mac is:</p>
+  <ul>
+    <li><strong>App preferences</strong> — organization mode, folder name preference, and other settings you configure. Stored in macOS UserDefaults.</li>
+    <li><strong>Undo manifests</strong> — a log of every file movement performed, stored as a local JSON or CSV file in a location you choose. This file stays entirely on your Mac and is never transmitted anywhere.</li>
+    <li><strong>Security-scoped bookmarks</strong> — macOS file access tokens for folders you select. Stored in UserDefaults, used only to re-access the same folder within the app.</li>
+  </ul>
+  <p>You can delete all of this data at any time by deleting the app and its associated preferences using macOS's standard uninstall mechanisms.</p>
+
+  <h2>8. Children's privacy</h2>
+  <p>Foldiq does not collect any information from anyone, including children under 13. Because we collect no data at all, there are no special considerations for children's privacy beyond our general policy of collecting nothing.</p>
+
+  <h2>9. Changes to this policy</h2>
+  <p>If we ever make material changes to this privacy policy, we will update the effective date at the top of this page. Because the app collects no data, any future changes would only reflect updates to how the app works locally on your device.</p>
+
+  <h2>10. Contact</h2>
+  <p>If you have any questions or concerns about this privacy policy, please contact us at:</p>
+  <p><strong>Email:</strong> <a href="mailto:enrique.padron853@gmail.com">enrique.padron853@gmail.com</a><br/>
+  <strong>Website:</strong> <a href="https://foldiq.netlify.app">foldiq.netlify.app</a></p>
+
+</div>
+
+<footer>
+  <div>© 2026 Foldiq · <a href="/">Home</a><a href="privacy-policy.html">Privacy Policy</a><a href="terms.html">Terms of Service</a></div>
+</footer>
+
+</body>
+</html>
