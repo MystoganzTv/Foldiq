@@ -638,7 +638,7 @@
     } catch (err) {
       label.textContent = '⬇ Download for Mac — $4.99';
       btn.disabled = false;
-      alert('Something went wrong. Please try again.');
+      alert('Error: ' + (err.message || 'Something went wrong. Please try again.'));
       console.error(err);
     }
   }

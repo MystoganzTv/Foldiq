@@ -22,7 +22,11 @@ exports.handler = async (event) => {
         {
           price_data: {
             currency: 'usd',
-            product: 'prod_UZPuCVJcnhdgNy',
+            product_data: {
+              name: 'Foldiq for Mac',
+              description: 'One-time purchase — lifetime license, all future updates included.',
+              images: ['https://foldiq.netlify.app/icon.png'],
+            },
             unit_amount: 499, // $4.99
           },
           quantity: 1,
