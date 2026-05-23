@@ -1,17 +1,37 @@
+/* ── Layout ── */
 .screen {
-  padding: 48px 48px 32px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fff;
+}
+
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 48px 24px;
   display: flex;
   flex-direction: column;
   gap: 28px;
-  min-height: 100%;
 }
 
-/* Header */
-.header { display: flex; flex-direction: column; gap: 6px; }
-.title  { font-size: 26px; font-weight: 800; color: var(--slate-900); }
-.sub    { font-size: 15px; color: var(--slate-600); }
+.bottomBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  border-top: 1px solid var(--slate-200);
+  background: #fff;
+  gap: 12px;
+}
 
-/* Dropzone */
+.bottomBarRight { display: flex; gap: 12px; align-items: center; }
+
+/* ── Header ── */
+.title { font-size: 28px; font-weight: 800; color: var(--slate-900); margin-bottom: 6px; }
+.sub   { font-size: 15px; color: var(--slate-600); line-height: 1.5; max-width: 700px; }
+
+/* ── Dropzone (Welcome) ── */
 .dropzone {
   border: 2px dashed var(--slate-200);
   border-radius: 16px;
@@ -21,160 +41,178 @@
   transition: border-color .15s, background .15s;
   background: var(--white);
 }
-.dropzone:hover, .dragging {
-  border-color: var(--blue);
-  background: var(--blue-light);
-}
-.dropIcon  { font-size: 40px; margin-bottom: 12px; }
-.dropTitle { font-size: 16px; font-weight: 600; color: var(--slate-700); margin-bottom: 6px; }
+.dropzone:hover, .dragging { border-color: var(--blue); background: var(--blue-light); }
+.dropIcon  { font-size: 48px; margin-bottom: 14px; }
+.dropTitle { font-size: 17px; font-weight: 600; color: var(--slate-700); margin-bottom: 6px; }
 .dropSub   { font-size: 13px; color: var(--slate-400); }
 
-/* Folder list */
+/* ── Folder pills ── */
 .folderList { display: flex; flex-direction: column; gap: 8px; }
 .folderItem {
   display: flex; align-items: center; gap: 10px;
-  background: var(--white); border: 1px solid var(--slate-200);
-  border-radius: 10px; padding: 12px 14px;
+  background: var(--slate-50); border: 1px solid var(--slate-200);
+  border-radius: 10px; padding: 11px 14px;
 }
 .folderIcon   { font-size: 18px; flex-shrink: 0; }
 .folderPath   { flex: 1; font-size: 13px; color: var(--slate-700); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.folderRemove { background: none; border: none; color: var(--slate-400); font-size: 14px; padding: 2px 6px; border-radius: 4px; cursor: pointer; }
-.folderRemove:hover { color: var(--red); background: #FEF2F2; }
+.folderRemove { background: none; border: none; color: var(--slate-400); font-size: 16px; padding: 0 4px; cursor: pointer; line-height: 1; }
+.folderRemove:hover { color: var(--red); }
 
-/* Progress */
+/* ── Progress ── */
 .progressBlock { display: flex; flex-direction: column; gap: 10px; }
-.progressBar   { height: 8px; background: var(--slate-200); border-radius: 4px; overflow: hidden; }
-.progressFill  { height: 100%; background: var(--blue); border-radius: 4px; transition: width .2s; }
-.progressLabel { font-size: 13px; color: var(--slate-400); font-family: monospace; }
+.progressBar   { height: 6px; background: var(--slate-100); border-radius: 3px; overflow: hidden; }
+.progressFill  { height: 100%; background: var(--blue); border-radius: 3px; transition: width .25s; }
+.progressLabel { font-size: 12px; color: var(--slate-400); font-family: monospace; }
 
-/* Stats */
+/* ── Stat grid (scan) ── */
 .statsGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
 }
 .statCard {
-  background: var(--white);
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 20px;
   border: 1px solid var(--slate-200);
   border-radius: 14px;
-  padding: 20px;
-  text-align: center;
+  background: #fff;
 }
-.statNum   { font-size: 32px; font-weight: 800; color: var(--slate-900); }
-.statLabel { font-size: 13px; color: var(--slate-400); margin-top: 4px; }
-.green { color: var(--green); }
-.red   { color: var(--red);   }
+.statIcon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.statNum   { font-size: 24px; font-weight: 800; color: var(--slate-900); }
+.statLabel { font-size: 12px; color: var(--slate-400); margin-top: 2px; }
 
-/* Form */
-.form { display: flex; flex-direction: column; gap: 24px; }
-.formGroup { display: flex; flex-direction: column; gap: 10px; }
-.label { font-size: 13px; font-weight: 600; color: var(--slate-700); }
+/* ── Settings form ── */
+.sectionTitle {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 700; color: var(--slate-800);
+  margin-bottom: 12px;
+}
+.radioCard {
+  border: 1.5px solid var(--slate-200);
+  border-radius: 14px; padding: 18px 20px;
+  cursor: pointer; transition: border-color .15s, background .15s;
+  margin-bottom: 10px;
+}
+.radioCard:hover      { border-color: var(--blue); }
+.radioCard.selected   { border-color: var(--blue); background: var(--blue-light); }
+.radioHeader          { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.radioCircle          { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--slate-300); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.radioCircle.checked  { border-color: var(--blue); background: var(--blue); }
+.radioDot             { width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+.radioLabel           { font-size: 15px; font-weight: 600; color: var(--slate-900); }
+.radioSub             { font-size: 13px; color: var(--slate-500); margin-left: 32px; }
+.radioPreview         { margin: 10px 0 0 32px; background: var(--slate-100); border-radius: 8px; padding: 10px 14px; }
+.radioPreview code    { font-size: 12px; color: var(--slate-600); white-space: pre; font-family: monospace; }
+.badge                { font-size: 11px; font-weight: 700; background: var(--blue); color: #fff; padding: 2px 8px; border-radius: 99px; }
 
+/* ── Folder picker (settings) ── */
+.formGroup  { margin-bottom: 24px; }
+.label      { font-size: 13px; font-weight: 600; color: var(--slate-700); margin-bottom: 8px; display: block; }
 .folderPicker {
   display: flex; align-items: center; gap: 10px;
-  background: var(--white); border: 1.5px solid var(--slate-200);
-  border-radius: 10px; padding: 12px 14px;
+  background: var(--slate-50); border: 1.5px solid var(--slate-200);
+  border-radius: 10px; padding: 11px 14px;
 }
-.folderPickerPath { flex: 1; font-size: 13px; color: var(--slate-600); font-family: monospace; overflow: hidden; text-overflow: ellipsis; }
+.folderPickerPath { flex: 1; font-size: 13px; color: var(--slate-600); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.preview {
-  background: var(--slate-900); border-radius: 10px;
-  padding: 16px 20px;
-}
-.preview code { font-size: 13px; color: #7DD3FC; white-space: pre; font-family: monospace; }
-
-/* Toggles */
-.toggle {
+/* ── Toggle row ── */
+.toggleRow {
   display: flex; align-items: center; gap: 14px;
   padding: 14px 16px;
-  background: var(--white); border: 1px solid var(--slate-200);
+  background: #fff; border: 1px solid var(--slate-200);
   border-radius: 12px; cursor: pointer;
   transition: border-color .15s;
+  margin-bottom: 8px;
 }
-.toggle:hover { border-color: var(--blue); }
+.toggleRow:hover { border-color: var(--blue); }
 .toggleSwitch {
-  width: 40px; height: 24px; border-radius: 12px;
+  width: 44px; height: 26px; border-radius: 13px;
   background: var(--slate-200); flex-shrink: 0;
   position: relative; transition: background .2s;
 }
 .toggleSwitch::after {
-  content: '';
-  position: absolute; top: 3px; left: 3px;
-  width: 18px; height: 18px; border-radius: 50%;
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 20px; height: 20px; border-radius: 50%;
   background: #fff; transition: transform .2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }
 .toggleSwitch.on { background: var(--blue); }
-.toggleSwitch.on::after { transform: translateX(16px); }
+.toggleSwitch.on::after { transform: translateX(18px); }
 .toggleLabel { font-size: 14px; font-weight: 600; color: var(--slate-800); }
 .toggleSub   { font-size: 12px; color: var(--slate-400); margin-top: 2px; }
 
-/* Filter row */
+/* ── File list (preview) ── */
 .filterRow { display: flex; gap: 8px; flex-wrap: wrap; }
 .filterBtn {
-  padding: 6px 14px; border-radius: 8px;
+  padding: 6px 14px; border-radius: 99px;
   background: var(--slate-100); color: var(--slate-600);
   font-size: 13px; font-weight: 500; border: none; cursor: pointer;
-  transition: background .15s, color .15s;
+  transition: background .15s;
 }
-.filterBtn:hover { background: var(--slate-200); }
+.filterBtn:hover  { background: var(--slate-200); }
 .filterBtn.active { background: var(--blue); color: #fff; }
-
-/* File list */
-.fileList { display: flex; flex-direction: column; gap: 2px; max-height: 340px; overflow-y: auto; }
+.fileList         { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 360px; }
 .fileRow {
   display: flex; align-items: center; gap: 12px;
   padding: 9px 12px; border-radius: 8px;
-  background: var(--white); border: 1px solid var(--slate-100);
+  background: #fff; border: 1px solid var(--slate-100);
 }
-.fileExt  { font-size: 10px; font-weight: 700; color: var(--blue); background: var(--blue-light); padding: 2px 6px; border-radius: 4px; min-width: 36px; text-align: center; }
-.fileInfo { flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.fileExt  { font-size: 10px; font-weight: 700; color: var(--blue); background: var(--blue-light); padding: 3px 7px; border-radius: 6px; min-width: 40px; text-align: center; }
+.fileInfo { flex: 1; overflow: hidden; }
 .fileName { font-size: 13px; font-weight: 500; color: var(--slate-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fileDest { font-size: 11px; color: var(--slate-400); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fileDest { font-size: 11px; color: var(--slate-400); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .fileSize { font-size: 12px; color: var(--slate-400); flex-shrink: 0; }
 .moreRow  { text-align: center; padding: 10px; font-size: 13px; color: var(--slate-400); }
 
-/* Error list */
+/* ── Apply center ── */
+.centerBlock { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 12px; padding: 40px; }
+.bigIcon     { font-size: 64px; line-height: 1; }
+
+/* ── Error list ── */
 .errorList  { background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 .errorTitle { font-size: 13px; font-weight: 700; color: var(--red); }
 .errorRow   { display: flex; gap: 12px; font-size: 12px; }
 .errorFile  { font-family: monospace; color: var(--slate-700); }
 .errorMsg   { color: var(--red); }
 
-/* Center block */
-.centerBlock { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 12px; }
-.bigIcon { font-size: 56px; }
-
-/* Actions */
-.actions { display: flex; gap: 12px; flex-wrap: wrap; }
-
-/* Buttons */
+/* ── Buttons ── */
 .btnPrimary {
-  padding: 12px 24px; background: var(--blue); color: #fff;
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 22px; background: var(--blue); color: #fff;
   border-radius: 10px; font-size: 15px; font-weight: 700;
   border: none; cursor: pointer; transition: background .15s;
+  white-space: nowrap;
 }
 .btnPrimary:hover:not(:disabled) { background: var(--blue-dark); }
 .btnPrimary:disabled { background: #93C5FD; cursor: default; }
 
 .btnSecondary {
-  padding: 12px 24px; background: var(--slate-100); color: var(--slate-700);
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 22px; background: var(--slate-100); color: var(--slate-700);
   border-radius: 10px; font-size: 15px; font-weight: 600;
   border: none; cursor: pointer; transition: background .15s;
 }
 .btnSecondary:hover { background: var(--slate-200); }
 
 .btnOutline {
-  padding: 12px 24px; background: transparent; color: var(--blue);
+  padding: 11px 22px; background: transparent; color: var(--blue);
   border-radius: 10px; font-size: 15px; font-weight: 600;
   border: 1.5px solid var(--blue); cursor: pointer; transition: background .15s;
 }
 .btnOutline:hover { background: var(--blue-light); }
 
 .btnDanger {
-  padding: 12px 24px; background: #FEF2F2; color: var(--red);
+  padding: 11px 22px; background: #FEF2F2; color: var(--red);
   border-radius: 10px; font-size: 15px; font-weight: 600;
   border: 1.5px solid #FECACA; cursor: pointer; transition: background .15s;
 }
 .btnDanger:hover:not(:disabled) { background: #FEE2E2; }
 .btnDanger:disabled { opacity: .5; cursor: default; }
+
+/* colors */
+.green { color: var(--green); }
+.red   { color: var(--red); }

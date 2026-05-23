@@ -1,14 +1,12 @@
 import { useState } from 'react';
-import Sidebar    from './components/Sidebar';
+import StepBar    from './components/StepBar';
 import Welcome    from './screens/WelcomeScreen';
 import Scan       from './screens/ScanScreen';
 import Settings   from './screens/SettingsScreen';
 import Preview    from './screens/PreviewScreen';
 import Apply      from './screens/ApplyScreen';
 import Report     from './screens/ReportScreen';
-import styles     from './App.module.css';
-
-const SCREENS = ['welcome', 'scan', 'settings', 'preview', 'apply', 'report'];
+import './styles/global.css';
 
 export default function App() {
   const [screen, setScreen]   = useState('welcome');
@@ -22,23 +20,25 @@ export default function App() {
     copyMode:       false,
     skipDuplicates: true,
   });
-  const [result, setResult]   = useState(null);
+  const [result, setResult] = useState(null);
 
   function go(s) { setScreen(s); }
 
   const screenProps = { go, folders, setFolders, files, setFiles, plan, setPlan, config, setConfig, result, setResult };
 
+  const showStepBar = screen !== 'welcome';
+
   return (
-    <div className={styles.layout}>
-      <Sidebar screen={screen} screens={SCREENS} />
-      <main className={styles.main}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#fff' }}>
+      {showStepBar && <StepBar screen={screen} />}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {screen === 'welcome'  && <Welcome  {...screenProps} />}
         {screen === 'scan'     && <Scan     {...screenProps} />}
         {screen === 'settings' && <Settings {...screenProps} />}
         {screen === 'preview'  && <Preview  {...screenProps} />}
         {screen === 'apply'    && <Apply    {...screenProps} />}
         {screen === 'report'   && <Report   {...screenProps} />}
-      </main>
+      </div>
     </div>
   );
 }

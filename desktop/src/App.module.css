@@ -1,11 +1,1 @@
-.layout {
-  display: flex;
-  height: 100vh;
-  overflow: hidden;
-}
-
-.main {
-  flex: 1;
-  overflow-y: auto;
-  background: var(--slate-50);
-}
+/* unused — layout is inline in App.jsx */
