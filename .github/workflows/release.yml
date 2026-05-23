@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   # ── Windows x64 ────────────────────────────────────────────────────────────
   build-windows:
