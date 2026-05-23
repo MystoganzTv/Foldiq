@@ -9,6 +9,9 @@
   <meta property="og:description" content="Finally organize your photo library the way you've always meant to. Smart folders, duplicate detection, and a full undo — all on your Mac." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://foldiq.netlify.app" />
+  <meta property="og:image" content="https://foldiq.netlify.app/icon.png" />
+  <link rel="icon" type="image/png" href="icon.png" />
+  <link rel="apple-touch-icon" href="icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -53,10 +56,10 @@
     }
     .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
     .nav-logo-icon {
-      width: 32px; height: 32px; background: var(--blue); border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px;
+      width: 32px; height: 32px; border-radius: 8px;
+      overflow: hidden; flex-shrink: 0;
     }
+    .nav-logo-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .nav-logo-text { font-size: 18px; font-weight: 800; color: var(--slate-900); }
     .nav-links { display: flex; gap: 32px; }
     .nav-links a { font-size: 14px; font-weight: 500; color: var(--slate-600); text-decoration: none; transition: color .15s; }
@@ -306,6 +309,13 @@
     .screenshot-frame img {
       width: 100%; display: block;
       border-top: 1px solid rgba(255,255,255,0.05);
+      min-height: 400px;
+      background: #0F172A;
+      object-fit: cover;
+    }
+    .screenshot-frame img[src=""] ,
+    .screenshot-frame img:not([src]) {
+      display: none;
     }
     .screenshot-caption {
       padding: 14px 16px;
@@ -331,7 +341,7 @@
 <!-- NAV -->
 <nav>
   <a class="nav-logo" href="/">
-    <div class="nav-logo-icon">📁</div>
+    <div class="nav-logo-icon"><img src="icon.png" alt="Foldiq" /></div>
     <span class="nav-logo-text">Foldiq</span>
   </a>
   <div class="nav-links">
@@ -345,6 +355,7 @@
 
 <!-- HERO -->
 <section class="hero">
+  <img src="icon.png" alt="Foldiq" style="width:96px;height:96px;border-radius:22px;margin-bottom:24px;box-shadow:0 12px 40px rgba(99,102,241,0.25);" />
   <div class="hero-badge">
     <div class="hero-badge-dot"></div>
     macOS · Local-only · No subscription
@@ -624,7 +635,7 @@
 <!-- FOOTER -->
 <footer>
   <div class="footer-logo">
-    <div class="footer-logo-icon">📁</div>
+    <img src="icon.png" alt="Foldiq" style="width:28px;height:28px;border-radius:7px;" />
     <span class="footer-logo-text">Foldiq</span>
   </div>
   <div class="footer-links">
