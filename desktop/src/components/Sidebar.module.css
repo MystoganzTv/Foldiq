@@ -1,0 +1,77 @@
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--slate-900);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 20px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.logoIcon { font-size: 22px; }
+.logoText  { font-size: 17px; font-weight: 800; color: #fff; }
+
+.steps {
+  flex: 1;
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-radius: 0;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.stepDot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  color: var(--slate-400);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stepLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--slate-400);
+}
+
+.step.active .stepDot {
+  background: var(--blue);
+  color: #fff;
+}
+.step.active .stepLabel { color: #fff; }
+
+.step.done .stepDot {
+  background: var(--green);
+  color: #fff;
+}
+.step.done .stepLabel { color: rgba(255,255,255,0.6); }
+
+.footer {
+  padding: 16px 20px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.2);
+  border-top: 1px solid rgba(255,255,255,0.06);
+}

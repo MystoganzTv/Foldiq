@@ -1,0 +1,58 @@
+{
+  "name": "foldiq-desktop",
+  "version": "1.0.0",
+  "description": "Foldiq — Photo & Video Organizer for Windows",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build && electron-builder",
+    "build:win": "vite build && electron-builder --win",
+    "build:mac": "vite build && electron-builder --mac",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "exiftool-vendored": "^24.0.0",
+    "crypto": "^1.0.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.0",
+    "concurrently": "^8.2.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "vite": "^5.0.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "app.foldiq.desktop",
+    "productName": "Foldiq",
+    "copyright": "© 2026 Foldiq",
+    "icon": "assets/icon",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.photography"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "assets/**/*"
+    ]
+  }
+}
