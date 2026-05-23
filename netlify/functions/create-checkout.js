@@ -16,6 +16,15 @@ exports.handler = async (event) => {
   }
 
   try {
+    let body = {};
+    try { body = JSON.parse(event.body || '{}'); } catch (_) {}
+    const platform = body.platform === 'windows' ? 'windows' : 'mac';
+
+    const productName = platform === 'windows' ? 'Foldiq for Windows' : 'Foldiq for Mac';
+    const productDesc = platform === 'windows'
+      ? 'One-time purchase — lifetime license, all future updates included. Windows 10/11 64-bit.'
+      : 'One-time purchase — lifetime license, all future updates included. macOS 14 Sonoma or later.';
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -23,8 +32,8 @@ exports.handler = async (event) => {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: 'Foldiq for Mac',
-              description: 'One-time purchase — lifetime license, all future updates included.',
+              name: productName,
+              description: productDesc,
               images: ['https://foldiq.netlify.app/icon.png'],
             },
             unit_amount: 499, // $4.99
@@ -33,8 +42,9 @@ exports.handler = async (event) => {
         },
       ],
       mode: 'payment',
-      success_url: 'https://foldiq.netlify.app/success.html?session_id={CHECKOUT_SESSION_ID}',
+      success_url: `https://foldiq.netlify.app/success.html?session_id={CHECKOUT_SESSION_ID}&platform=${platform}`,
       cancel_url: 'https://foldiq.netlify.app/',
+      metadata: { platform },
     });
 
     return {

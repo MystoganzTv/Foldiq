@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Foldiq — Photo & Video Organizer for Mac</title>
+  <title>Foldiq — Photo & Video Organizer for Mac & Windows</title>
   <meta name="description" content="Foldiq scans your messy photo library and automatically builds a clean, dated folder structure — locally, with full undo. No cloud. No subscription." />
-  <meta property="og:title" content="Foldiq — Photo & Video Organizer for Mac" />
-  <meta property="og:description" content="Finally organize your photo library the way you've always meant to. Smart folders, duplicate detection, and a full undo — all on your Mac." />
+  <meta property="og:title" content="Foldiq — Photo & Video Organizer for Mac & Windows" />
+  <meta property="og:description" content="Finally organize your photo library the way you've always meant to. Smart folders, duplicate detection, and a full undo — available for Mac and Windows." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://foldiq.netlify.app" />
   <meta property="og:image" content="https://foldiq.netlify.app/icon.png" />
@@ -380,19 +380,26 @@
     <a href="#formats">Formats</a>
     <a href="privacy-policy.html">Privacy</a>
   </div>
-  <a class="btn-nav" href="#download" onclick="event.preventDefault(); startCheckout()">Download for Mac</a>
+  <a class="btn-nav" href="#download">Download — $4.99</a>
 </nav>
 
 <!-- HERO -->
 <section class="hero">
   <div class="hero-badge">
     <div class="hero-badge-dot"></div>
-    macOS · Local-only · No subscription
+    Mac &amp; Windows · Local-only · No subscription
   </div>
   <h1>Your photo library,<br /><span>finally organized.</span></h1>
   <p>Foldiq scans any folder of photos and videos, reads the real EXIF date, and builds a clean folder structure automatically — with full undo if you change your mind.</p>
   <div class="hero-ctas">
-    <a class="btn-primary" href="#download">⬇ Download for Mac</a>
+    <a class="btn-primary" href="#download" id="hero-mac-btn" onclick="event.preventDefault(); startCheckout('mac')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px;vertical-align:middle"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+      Download for Mac
+    </a>
+    <a class="btn-primary" href="#download" id="hero-win-btn" onclick="event.preventDefault(); startCheckout('windows')" style="background:#1E293B;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px;vertical-align:middle"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5l-9 1.68V12h9zm0 1H12v5.28L20 20v-7zm-17 0h6v5.57l-6-1.32V13z"/></svg>
+      Download for Windows
+    </a>
     <a class="btn-secondary" href="#how-it-works">See how it works</a>
   </div>
 
@@ -639,12 +646,25 @@
     <div class="section-label" style="text-align:center;">Available now</div>
     <h2>Ready to clean up your library?</h2>
     <p>One-time purchase · No subscription · Yours forever.</p>
+
+    <!-- Platform picker -->
+    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:24px;flex-wrap:wrap;">
+      <button id="tab-mac" onclick="selectPlatform('mac')" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;border:2px solid #3B82F6;background:#3B82F6;color:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+        macOS
+      </button>
+      <button id="tab-windows" onclick="selectPlatform('windows')" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;border:2px solid #334155;background:transparent;color:#475569;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5l-9 1.68V12h9zm0 1H12v5.28L20 20v-7zm-17 0h6v5.57l-6-1.32V13z"/></svg>
+        Windows
+      </button>
+    </div>
+
     <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;align-items:center;">
-      <button class="btn-primary" id="buy-btn" onclick="startCheckout()">
+      <button class="btn-primary" id="buy-btn" onclick="startCheckout(currentPlatform)">
         <span id="buy-label">⬇ Download for Mac — $4.99</span>
       </button>
     </div>
-    <p style="margin-top:24px;font-size:14px;color:#94A3B8;">macOS 14 Sonoma or later · Apple Silicon & Intel · Secure checkout by Stripe</p>
+    <p id="platform-note" style="margin-top:24px;font-size:14px;color:#94A3B8;">macOS 14 Sonoma or later · Apple Silicon &amp; Intel · Secure checkout by Stripe</p>
   </div>
 </section>
 
@@ -661,18 +681,59 @@
     <a href="terms.html">Terms of Service</a>
     <a href="/contact.html">Contact</a>
   </div>
-  <div class="footer-copy">© 2026 Foldiq. All rights reserved. Made for Mac.</div>
+  <div class="footer-copy">© 2026 Foldiq. All rights reserved. Mac &amp; Windows.</div>
 </footer>
 
 <script>
-  async function startCheckout() {
+  let currentPlatform = 'mac';
+
+  function selectPlatform(platform) {
+    currentPlatform = platform;
+    const tabMac = document.getElementById('tab-mac');
+    const tabWin = document.getElementById('tab-windows');
+    const label  = document.getElementById('buy-label');
+    const note   = document.getElementById('platform-note');
+
+    if (platform === 'mac') {
+      tabMac.style.background = '#3B82F6';
+      tabMac.style.borderColor = '#3B82F6';
+      tabMac.style.color = '#fff';
+      tabWin.style.background = 'transparent';
+      tabWin.style.borderColor = '#334155';
+      tabWin.style.color = '#475569';
+      label.textContent = '⬇ Download for Mac — $4.99';
+      note.textContent = 'macOS 14 Sonoma or later · Apple Silicon & Intel · Secure checkout by Stripe';
+    } else {
+      tabWin.style.background = '#1E293B';
+      tabWin.style.borderColor = '#1E293B';
+      tabWin.style.color = '#fff';
+      tabMac.style.background = 'transparent';
+      tabMac.style.borderColor = '#334155';
+      tabMac.style.color = '#475569';
+      label.textContent = '⬇ Download for Windows — $4.99';
+      note.textContent = 'Windows 10 / 11 · 64-bit · Secure checkout by Stripe';
+    }
+  }
+
+  // Auto-detect OS on page load
+  (function() {
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes('win')) selectPlatform('windows');
+  })();
+
+  async function startCheckout(platform) {
     const btn = document.getElementById('buy-btn');
     const label = document.getElementById('buy-label');
+    const plat = platform || currentPlatform;
     btn.disabled = true;
     label.textContent = 'Loading…';
 
     try {
-      const res = await fetch('/.netlify/functions/create-checkout', { method: 'POST' });
+      const res = await fetch('/.netlify/functions/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: plat }),
+      });
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url;
@@ -680,7 +741,7 @@
         throw new Error(data.error || 'Unknown error');
       }
     } catch (err) {
-      label.textContent = '⬇ Download for Mac — $4.99';
+      label.textContent = plat === 'windows' ? '⬇ Download for Windows — $4.99' : '⬇ Download for Mac — $4.99';
       btn.disabled = false;
       alert('Error: ' + (err.message || 'Something went wrong. Please try again.'));
       console.error(err);
