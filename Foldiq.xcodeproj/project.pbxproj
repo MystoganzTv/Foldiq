@@ -98,6 +98,24 @@
 		};
 /* End PBXFrameworksBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		VersionBumpPhase /* Auto Version Bump */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Auto Version Bump";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "sh \"${SRCROOT}/Scripts/bump_version.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXGroup section */
 		AppGroup /* App */ = {
 			isa = PBXGroup;
@@ -250,6 +268,7 @@
 				SourcesPhase /* Sources */,
 				ResourcesPhase /* Resources */,
 				FrameworksPhase /* Frameworks */,
+				VersionBumpPhase /* Auto Version Bump */,
 			);
 			buildRules = (
 			);

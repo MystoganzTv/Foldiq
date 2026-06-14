@@ -152,6 +152,11 @@ struct WelcomeView: View {
                         .underline()
                 }
                 .buttonStyle(.plain)
+
+                Text(AppInfo.versionString)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .help("App version (build number)")
             }
             .padding(.bottom, 24)
         }
@@ -316,4 +321,23 @@ struct UndoCompletedToast: View {
         .background(.regularMaterial, in: Capsule())
         .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
     }
+}
+
+// MARK: ─── App Version ────────────────────────────────────────────────────────
+
+/// Reads the app version and build number from the bundle's Info.plist.
+/// These values are stamped automatically on every build by Scripts/bump_version.sh.
+enum AppInfo {
+    /// Marketing version, e.g. "1.0.3".
+    static var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+
+    /// Build number, e.g. "23".
+    static var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+    }
+
+    /// Combined string for display, e.g. "v1.0.3 (23)".
+    static var versionString: String { "v\(version) (\(build))" }
 }

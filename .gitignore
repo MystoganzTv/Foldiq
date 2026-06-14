@@ -39,3 +39,8 @@ desktop/node_modules/
 desktop/dist-electron/
 desktop/dist/
 FoldiqMobile/node_modules/
+
+# Expo / mobile (folder renamed from FoldiqMobile -> mobile)
+mobile/node_modules/
+mobile/.expo/
+.expo/
