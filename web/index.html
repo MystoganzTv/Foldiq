@@ -812,6 +812,25 @@
       console.error(err);
     }
   }
+
+  // Smooth-scroll in-page anchor links without putting "#section" in the URL bar
+  document.querySelectorAll('a[href^="#"]').forEach(function (link) {
+    link.addEventListener('click', function (e) {
+      if (link.hasAttribute('onclick')) return; // leave checkout buttons alone
+      const id = link.getAttribute('href').slice(1);
+      if (!id) return;
+      const target = document.getElementById(id);
+      if (!target) return;
+      e.preventDefault();
+      const y = target.getBoundingClientRect().top + window.pageYOffset - 72; // offset for sticky nav
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    });
+  });
+
+  // If someone lands with a #hash already in the URL, clean it up
+  if (window.location.hash) {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
 </script>
 </body>
 </html>
