@@ -397,6 +397,7 @@
     <a href="#how-it-works">How it works</a>
     <a href="#features">Features</a>
     <a href="#formats">Formats</a>
+    <a href="#faq">FAQ</a>
   </div>
   <a class="btn-nav" href="#download">Download — $4.99</a>
 </nav>
@@ -420,6 +421,7 @@
     </a>
     <a class="btn-secondary" href="#how-it-works">See how it works</a>
   </div>
+  <p style="margin-top:18px;font-size:14px;color:var(--slate-400);">One-time $4.99 · Lifetime license · No subscription</p>
 
   <!-- Mockup -->
   <div class="app-mockup">
@@ -716,6 +718,7 @@
         <span id="buy-label">⬇ Download for Mac — $4.99</span>
       </button>
     </div>
+    <p style="margin-top:16px;font-size:14px;color:#334155;font-weight:600;">✓ One-time payment&nbsp;&nbsp;·&nbsp;&nbsp;✓ Lifetime license&nbsp;&nbsp;·&nbsp;&nbsp;✓ No subscription</p>
     <p id="platform-note" style="margin-top:24px;font-size:14px;color:#94A3B8;">macOS 14 Sonoma or later · Apple Silicon &amp; Intel · Secure checkout by Stripe</p>
   </div>
 </section>
@@ -770,7 +773,17 @@
   // Auto-detect OS on page load
   (function() {
     const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes('win')) selectPlatform('windows');
+    if (ua.includes('win')) {
+      selectPlatform('windows');
+      // Promote the Windows button in the hero, demote macOS
+      const macBtn = document.getElementById('hero-mac-btn');
+      const winBtn = document.getElementById('hero-win-btn');
+      if (macBtn && winBtn) {
+        winBtn.style.background = '';        // primary blue (btn-primary default)
+        macBtn.style.background = '#1E293B'; // secondary dark
+        winBtn.parentNode.insertBefore(winBtn, macBtn); // show Windows first
+      }
+    }
   })();
 
   async function startCheckout(platform) {
