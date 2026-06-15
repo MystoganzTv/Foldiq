@@ -253,6 +253,25 @@
     }
 
     /* ── CTA BOTTOM ── */
+    /* ── FAQ ── */
+    .faq-wrap { max-width: 720px; margin: 48px auto 0; }
+    .faq-item {
+      border: 1px solid #E2E8F0; border-radius: 14px;
+      background: var(--white); margin-bottom: 12px; overflow: hidden;
+    }
+    .faq-item summary {
+      list-style: none; cursor: pointer;
+      padding: 20px 24px; font-size: 16px; font-weight: 600; color: var(--slate-900);
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .faq-item summary::-webkit-details-marker { display: none; }
+    .faq-item summary::after {
+      content: "+"; font-size: 24px; font-weight: 300; line-height: 1; color: var(--blue);
+      transition: transform .2s ease;
+    }
+    .faq-item[open] summary::after { transform: rotate(45deg); }
+    .faq-item p { padding: 0 24px 20px; font-size: 15px; color: var(--slate-600); line-height: 1.65; margin: 0; }
+
     .cta-section {
       text-align: center;
       background: linear-gradient(180deg, #F0F7FF 0%, #fff 100%);
@@ -636,6 +655,40 @@
       <div class="format-tag">M4V</div>
       <div class="format-tag">ZIP</div>
     </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div style="max-width:720px;margin:0 auto;text-align:center;">
+    <div class="section-label">FAQ</div>
+    <h2 class="section-title" style="margin:0 auto;">Frequently asked questions</h2>
+  </div>
+  <div class="faq-wrap">
+    <details class="faq-item">
+      <summary>Will Foldiq delete or change my original photos?</summary>
+      <p>No. Foldiq only moves and organizes your files into folders — it never edits or deletes the photos themselves. You see a complete preview of every planned change before anything happens, and a one-click undo restores everything to its original location.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Does it work on both Mac and Windows?</summary>
+      <p>Yes. There's a native app for both macOS (14 Sonoma or later, Apple Silicon &amp; Intel) and Windows 10/11 64-bit. Just pick your platform on the download button.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Is it a one-time payment or a subscription?</summary>
+      <p>A single one-time payment of $4.99 — no subscription, no recurring fees. You get a lifetime license with all future updates included.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Do my photos get uploaded anywhere?</summary>
+      <p>Never. Foldiq makes zero network connections — no accounts, no cloud uploads, no analytics. All processing happens entirely on your own computer, so your photos never leave your device.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Which formats does it support?</summary>
+      <p>Photos (JPG, HEIC, PNG, TIFF), RAW files (CR2, NEF, ARW, DNG), and videos (MOV, MP4, M4V). Foldiq can also read media inside ZIP archives.</p>
+    </details>
+    <details class="faq-item">
+      <summary>How does Foldiq decide where files go?</summary>
+      <p>It reads each file's real capture date from its EXIF metadata (falling back to the filename or file date when needed) and builds a clean, dated folder structure. You choose the organization style, review the full plan, and confirm before any file moves.</p>
+    </details>
   </div>
 </section>
 
