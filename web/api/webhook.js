@@ -1,19 +1,39 @@
-// webhook.js — Stripe webhook handler
-// Listens for checkout.session.completed and sends a professional invoice email
-// via Resend to the customer + a copy to the owner.
+// Vercel Serverless Function — Stripe webhook handler.
+// Listens for checkout.session.completed and emails a receipt + download link
+// via Resend to the customer, plus a copy to the owner.
 //
-// Required env vars (set in Netlify Dashboard → Environment variables):
+// IMPORTANT: bodyParser is disabled so Stripe can verify the raw request body.
+//
+// Required env vars (Vercel → Project → Settings → Environment Variables):
 //   STRIPE_SECRET_KEY       — sk_live_...
 //   STRIPE_WEBHOOK_SECRET   — whsec_... (from Stripe Dashboard → Webhooks)
 //   RESEND_API_KEY          — re_...    (from resend.com)
 
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { Resend } = require('resend');
+import Stripe from 'stripe';
+import { Resend } from 'resend';
 
+// Disable Vercel's automatic body parsing — Stripe needs the raw bytes.
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+const SITE = 'https://foldiq.app';
 const OWNER_EMAIL = 'enrique.padron853@gmail.com';
 const DOWNLOAD_URL = 'https://github.com/MystoganzTv/Foldiq/releases/download/1.0/Foldiq-1.0.dmg';
+
+// Read the raw request body as a Buffer.
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+  }
+  return Buffer.concat(chunks);
+}
 
 // ── Email template ────────────────────────────────────────────────────────────
 function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount }) {
@@ -31,7 +51,7 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
 
         <!-- Logo -->
         <tr><td align="center" style="padding-bottom:32px;">
-          <img src="https://foldiq.netlify.app/icon.png" width="56" height="56"
+          <img src="${SITE}/icon.png" width="56" height="56"
                style="border-radius:14px;display:block;margin:0 auto 12px;" alt="Foldiq" />
           <span style="font-size:22px;font-weight:800;color:#0F172A;letter-spacing:-.3px;">Foldiq</span>
         </td></tr>
@@ -113,7 +133,7 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
         <tr><td align="center" style="padding-top:32px;">
           <p style="margin:0;font-size:13px;color:#94A3B8;line-height:1.7;">
             Questions? Reply to this email or visit
-            <a href="https://foldiq.netlify.app/contact" style="color:#3B82F6;text-decoration:none;">foldiq.netlify.app/contact</a>
+            <a href="${SITE}/contact" style="color:#3B82F6;text-decoration:none;">foldiq.app/contact</a>
           </p>
           <p style="margin:8px 0 0;font-size:12px;color:#CBD5E1;">
             © 2026 Foldiq · Made for Mac
@@ -128,29 +148,31 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method not allowed' };
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method not allowed');
+    return;
   }
 
-  // Verify Stripe signature
-  const sig = event.headers['stripe-signature'];
+  const rawBody = await readRawBody(req);
+  const sig = req.headers['stripe-signature'];
   let stripeEvent;
 
   try {
     stripeEvent = stripe.webhooks.constructEvent(
-      event.body,
+      rawBody,
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
     console.error('Webhook signature failed:', err.message);
-    return { statusCode: 400, body: `Webhook Error: ${err.message}` };
+    res.status(400).send(`Webhook Error: ${err.message}`);
+    return;
   }
 
-  // Only handle successful checkouts
   if (stripeEvent.type !== 'checkout.session.completed') {
-    return { statusCode: 200, body: 'Ignored' };
+    res.status(200).send('Ignored');
+    return;
   }
 
   const session = stripeEvent.data.object;
@@ -163,13 +185,13 @@ exports.handler = async (event) => {
 
   if (!customerEmail) {
     console.error('No customer email found in session');
-    return { statusCode: 200, body: 'No email' };
+    res.status(200).send('No email');
+    return;
   }
 
   const html = buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount });
 
   try {
-    // Send to customer
     await resend.emails.send({
       from: 'Foldiq <receipts@foldiq.app>',
       to: customerEmail,
@@ -177,7 +199,6 @@ exports.handler = async (event) => {
       html,
     });
 
-    // Send copy to owner
     await resend.emails.send({
       from: 'Foldiq <receipts@foldiq.app>',
       to: OWNER_EMAIL,
@@ -186,10 +207,9 @@ exports.handler = async (event) => {
     });
 
     console.log(`Receipt sent to ${customerEmail} and ${OWNER_EMAIL}`);
-    return { statusCode: 200, body: 'OK' };
-
+    res.status(200).send('OK');
   } catch (err) {
     console.error('Email send failed:', err.message);
-    return { statusCode: 500, body: 'Email failed' };
+    res.status(500).send('Email failed');
   }
-};
+}
