@@ -72,7 +72,7 @@ struct FoldiqApp: App {
         }
         #else
         WindowGroup {
-            RootView()
+            IOSPhotosExportView()
                 .modelContainer(container)
                 .environmentObject(nav)
         }

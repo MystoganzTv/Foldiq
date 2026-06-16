@@ -28,13 +28,19 @@ struct PhotoLibraryItem: Identifiable, Hashable {
 
 @MainActor
 final class PhotoLibraryExporter: ObservableObject {
+    struct FailedExport: Equatable, Identifiable {
+        let id: String
+        let filename: String
+        let reason: String
+    }
+
     enum Phase: Equatable {
         case idle
         case requestingAccess
         case scanning
         case ready
         case exporting
-        case completed(URL, Int)
+        case completed(URL, Int, [FailedExport])
         case failed(String)
     }
 
@@ -57,6 +63,34 @@ final class PhotoLibraryExporter: ObservableObject {
     var selectedItems: [PhotoLibraryItem] { items.filter { selectedItemIDs.contains($0.id) } }
     var selectedCount: Int { selectedItemIDs.count }
 
+    var hasLoadedItems: Bool { !items.isEmpty }
+
+    func loadSelectedItems(localIdentifiers: [String]) async {
+        let identifiers = Array(Set(localIdentifiers))
+        guard !identifiers.isEmpty else {
+            resetToStart()
+            return
+        }
+
+        phase = .scanning
+        items = await Task.detached(priority: .userInitiated) {
+            Self.fetchSelectedItems(localIdentifiers: identifiers)
+        }.value
+
+        if Task.isCancelled {
+            phase = .idle
+            return
+        }
+
+        if items.isEmpty {
+            phase = .failed("No photos or videos were loaded from the selection.")
+        } else {
+            selectedItemIDs = Set(items.map(\.id))
+            progress = ExportProgress(done: 0, total: items.count, currentFile: "")
+            phase = .ready
+        }
+    }
+
     func requestAccessAndScan() async {
         phase = .requestingAccess
 
@@ -77,6 +111,11 @@ final class PhotoLibraryExporter: ObservableObject {
         items = await Task.detached(priority: .userInitiated) {
             Self.fetchLibraryItems()
         }.value
+
+        if Task.isCancelled {
+            phase = .idle
+            return
+        }
 
         if items.isEmpty {
             phase = .failed("No photos or videos were found in the Photos Library selection.")
@@ -135,6 +174,7 @@ final class PhotoLibraryExporter: ObservableObject {
         progress = ExportProgress(done: 0, total: exportItems.count, currentFile: "")
 
         var exported = 0
+        var failures: [FailedExport] = []
         var reservedPaths = Set<String>()
 
         for (index, item) in exportItems.enumerated() {
@@ -143,7 +183,7 @@ final class PhotoLibraryExporter: ObservableObject {
                 return
             }
 
-            progress = ExportProgress(done: index + 1, total: items.count, currentFile: item.filename)
+            progress = ExportProgress(done: index + 1, total: exportItems.count, currentFile: item.filename)
 
             do {
                 let folder = await organizedDestinationFolder(
@@ -164,12 +204,30 @@ final class PhotoLibraryExporter: ObservableObject {
                 try preserveCreationDate(item.date, at: destination)
                 exported += 1
             } catch {
-                phase = .failed("Could not export \(item.filename): \(Self.humanize(error))")
-                return
+                failures.append(FailedExport(
+                    id: item.id,
+                    filename: item.filename,
+                    reason: Self.humanize(error)
+                ))
             }
         }
 
-        phase = .completed(outputRoot, exported)
+        phase = .completed(outputRoot, exported, failures)
+    }
+
+    func returnToReview() {
+        guard hasLoadedItems else {
+            phase = .idle
+            return
+        }
+
+        progress = ExportProgress(done: 0, total: items.count, currentFile: "")
+        phase = .ready
+    }
+
+    func resetToStart() {
+        progress = ExportProgress()
+        phase = .idle
     }
 
     private func organizedDestinationFolder(
@@ -258,7 +316,7 @@ final class PhotoLibraryExporter: ObservableObject {
 
     private nonisolated static func fetchLibraryItems() -> [PhotoLibraryItem] {
         let options = PHFetchOptions()
-        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         options.predicate = NSPredicate(
             format: "mediaType == %d || mediaType == %d",
             PHAssetMediaType.image.rawValue,
@@ -273,17 +331,43 @@ final class PhotoLibraryExporter: ObservableObject {
             guard let resource = preferredResource(for: asset) else { return }
             let filename = (resource.originalFilename.nonEmpty ?? fallbackFilename(for: asset, resource: resource)).filenameSafe
             let kind: PhotoLibraryItem.Kind = asset.mediaType == .video ? .video : .photo
+            let resolvedDate = resolvedLibraryDate(for: asset, filename: filename)
             items.append(PhotoLibraryItem(
                 id: asset.localIdentifier,
                 asset: asset,
                 filename: filename,
                 kind: kind,
-                date: asset.creationDate,
+                date: resolvedDate,
                 location: asset.location
             ))
         }
 
         return items
+    }
+
+    private nonisolated static func fetchSelectedItems(localIdentifiers: [String]) -> [PhotoLibraryItem] {
+        let fetched = PHAsset.fetchAssets(withLocalIdentifiers: localIdentifiers, options: nil)
+        var items: [PhotoLibraryItem] = []
+        items.reserveCapacity(fetched.count)
+
+        fetched.enumerateObjects { asset, _, _ in
+            guard let resource = preferredResource(for: asset) else { return }
+            let filename = (resource.originalFilename.nonEmpty ?? fallbackFilename(for: asset, resource: resource)).filenameSafe
+            let kind: PhotoLibraryItem.Kind = asset.mediaType == .video ? .video : .photo
+            let resolvedDate = resolvedLibraryDate(for: asset, filename: filename)
+            items.append(PhotoLibraryItem(
+                id: asset.localIdentifier,
+                asset: asset,
+                filename: filename,
+                kind: kind,
+                date: resolvedDate,
+                location: asset.location
+            ))
+        }
+
+        return items.sorted { lhs, rhs in
+            lhs.dateOrFallback > rhs.dateOrFallback
+        }
     }
 
     private nonisolated static func writeOriginalResource(for asset: PHAsset, to destination: URL) async throws {
@@ -326,6 +410,54 @@ final class PhotoLibraryExporter: ObservableObject {
         let ext = preferredFilenameExtension(for: resource, mediaType: asset.mediaType)
         let prefix = asset.mediaType == .video ? "VID" : "IMG"
         return "\(prefix)_\(asset.localIdentifier.stableFilenameComponent).\(ext)"
+    }
+
+    private nonisolated static func resolvedLibraryDate(for asset: PHAsset, filename: String) -> Date? {
+        asset.creationDate
+            ?? filenameDate(from: filename)
+            ?? asset.modificationDate
+    }
+
+    private nonisolated static func filenameDate(from filename: String) -> Date? {
+        let name = URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent
+
+        let candidates: [(String, Int, String)] = [
+            (#"(?:IMG|VID)-(\d{8})-WA\d+"#, 1, "yyyyMMdd"),
+            (#"(?:IMG|VID|PANO|BURST|MVIMG|PORTRAIT|SLOW)_(\d{8}_\d{6})"#, 1, "yyyyMMdd_HHmmss"),
+            (#"(?<!\d)(\d{8}_\d{6})(?!\d)"#, 1, "yyyyMMdd_HHmmss"),
+            (#"(?<!\d)(\d{8}-\d{6})(?!\d)"#, 1, "yyyyMMdd-HHmmss"),
+            (#"(\d{4}-\d{2}-\d{2}) at (\d{2}\.\d{2}\.\d{2})"#, 0, "yyyy-MM-dd HH.mm.ss"),
+            (#"(?<!\d)(\d{4}-\d{2}-\d{2})(?!\d)"#, 1, "yyyy-MM-dd"),
+        ]
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let lowerBound = Date(timeIntervalSince1970: 631152000) // 1990-01-01
+
+        for (pattern, groupIndex, format) in candidates {
+            guard let regex = try? NSRegularExpression(pattern: pattern),
+                  let match = regex.firstMatch(in: name, range: NSRange(name.startIndex..., in: name))
+            else { continue }
+
+            let dateString: String
+            if groupIndex == 0 {
+                guard match.numberOfRanges >= 3,
+                      let r1 = Range(match.range(at: 1), in: name),
+                      let r2 = Range(match.range(at: 2), in: name) else { continue }
+                dateString = String(name[r1]) + " " + String(name[r2])
+            } else {
+                guard match.numberOfRanges > groupIndex,
+                      let range = Range(match.range(at: groupIndex), in: name) else { continue }
+                dateString = String(name[range])
+            }
+
+            formatter.dateFormat = format
+            if let date = formatter.date(from: dateString), date >= lowerBound, date <= Date() {
+                return date
+            }
+        }
+
+        return nil
     }
 
     private nonisolated static func preferredFilenameExtension(

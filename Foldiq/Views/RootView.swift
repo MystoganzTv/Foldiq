@@ -12,7 +12,6 @@ struct RootView: View {
     private var isCompact: Bool { horizontalSizeClass == .compact }
 
     var body: some View {
-        #if os(macOS)
         VStack(spacing: 0) {
 
             // ── Step indicator (hidden on welcome) ──────────────────────────
@@ -55,9 +54,6 @@ struct RootView: View {
         } message: {
             Text(nav.errorMessage ?? "An unknown error occurred.")
         }
-        #else
-        IOSPhotosExportView()
-        #endif
     }
 }
 
