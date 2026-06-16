@@ -18,7 +18,6 @@ struct IOSPhotosExportView: View {
     @State private var activeTask: Task<Void, Never>?
     @State private var showingSystemPicker = false
     @State private var pickedAssetIdentifiers: [String] = []
-    @State private var showingSelectionOptions = false
 
     private var filteredItems: [PhotoLibraryItem] {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -65,21 +64,6 @@ struct IOSPhotosExportView: View {
                 ) { identifiers in
                     handlePickerSelection(identifiers)
                 }
-            }
-            .confirmationDialog(
-                "Choose what to export",
-                isPresented: $showingSelectionOptions,
-                titleVisibility: .visible
-            ) {
-                Button("Choose Specific Items") {
-                    showingSystemPicker = true
-                }
-                Button("Select Entire Library") {
-                    startScan()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Pick individual photos and videos, or include the entire library.")
             }
             .onDisappear {
                 activeTask?.cancel()
@@ -146,7 +130,7 @@ struct IOSPhotosExportView: View {
         VStack(spacing: 12) {
             Label("Choose only what you want", systemImage: "hand.tap")
                 .font(.title3.bold())
-            Text("Open the system photo picker, choose specific photos or videos, and then continue with organization and export.")
+            Text("Pick specific photos and videos, or scan the full Photos Library and choose what to export in Foldiq before saving.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -259,7 +243,7 @@ struct IOSPhotosExportView: View {
 
     @ViewBuilder
     private var selectionButtons: some View {
-        Button("All") { exporter.selectAll() }
+        Button("Select All") { exporter.selectAll() }
             .buttonStyle(.bordered)
         Button("Photos") { exporter.selectPhotosOnly() }
             .buttonStyle(.bordered)
@@ -339,12 +323,21 @@ struct IOSPhotosExportView: View {
         case .idle:
             VStack(spacing: 12) {
                 Button {
-                    showingSelectionOptions = true
+                    showingSystemPicker = true
                 } label: {
                     Label("Choose Photos and Videos", systemImage: "photo.on.rectangle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button {
+                    startScan()
+                } label: {
+                    Label("Select Entire Library", systemImage: "photo.stack")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
                 .controlSize(.large)
             }
         case .requestingAccess, .scanning:
@@ -361,9 +354,18 @@ struct IOSPhotosExportView: View {
         case .ready, .completed:
             VStack(spacing: 12) {
                 Button {
-                    showingSelectionOptions = true
+                    showingSystemPicker = true
                 } label: {
                     Label("Change Selected Photos", systemImage: "photo.badge.arrow.down")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
+                Button {
+                    startScan()
+                } label: {
+                    Label("Select Entire Library", systemImage: "photo.stack")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
