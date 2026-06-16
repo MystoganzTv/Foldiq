@@ -96,7 +96,7 @@
       font-size: clamp(17px, 2vw, 20px); color: var(--slate-600);
       max-width: 580px; margin-bottom: 44px; line-height: 1.65;
     }
-    .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-bottom: 64px; }
+    .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-bottom: 18px; }
     .btn-primary {
       display: inline-flex; align-items: center; gap: 8px;
       background: var(--blue); color: #fff; font-size: 16px; font-weight: 700;
@@ -112,6 +112,42 @@
       transition: border-color .15s;
     }
     .btn-secondary:hover { border-color: var(--blue); color: var(--blue); }
+    .store-link {
+      display: inline-flex; align-items: center; gap: 8px; position: relative;
+      isolation: isolate; overflow: hidden;
+      background: linear-gradient(90deg, #2563EB, #7C3AED, #DB2777, #F97316, #2563EB);
+      background-size: 300% 100%;
+      border: 1px solid rgba(255,255,255,0.65);
+      color: #fff; font-size: 14px; font-weight: 800; text-decoration: none;
+      padding: 10px 18px; border-radius: 999px;
+      box-shadow: 0 12px 30px rgba(79,70,229,0.25), 0 0 0 4px rgba(124,58,237,0.08);
+      animation: store-link-shift 5s ease infinite;
+      transition: transform .12s, box-shadow .15s;
+    }
+    .store-link::before {
+      content: ""; position: absolute; inset: 1px; z-index: -1;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(255,255,255,0.18), rgba(255,255,255,0.05), rgba(255,255,255,0.18));
+      transform: translateX(-120%);
+      animation: store-link-shine 2.8s ease-in-out infinite;
+    }
+    .store-link:hover {
+      transform: translateY(-1px) scale(1.02);
+      box-shadow: 0 16px 36px rgba(79,70,229,0.34), 0 0 0 5px rgba(124,58,237,0.12);
+    }
+    @keyframes store-link-shift {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+    @keyframes store-link-shine {
+      0%, 45% { transform: translateX(-120%); }
+      75%, 100% { transform: translateX(120%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .store-link { animation: none; }
+      .store-link::before { animation: none; display: none; }
+    }
+    .hero-store-link { margin-bottom: 46px; }
 
     /* ── APP WINDOW MOCKUP ── */
     .app-mockup {
@@ -421,7 +457,13 @@
     </a>
     <a class="btn-secondary" href="#how-it-works">See how it works</a>
   </div>
-  <p style="margin-top:18px;font-size:14px;color:var(--slate-400);">One-time $4.99 · Lifetime license · No subscription</p>
+  <div class="hero-store-link">
+    <a class="store-link" href="https://apps.apple.com/us/app/foldiq/id6772513569" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+      Prefer Apple? Open on the Mac App Store
+    </a>
+  </div>
+  <p style="margin-top:0;font-size:14px;color:var(--slate-400);">One-time $4.99 · Lifetime license · No subscription</p>
 
   <!-- Mockup -->
   <div class="app-mockup">
@@ -718,6 +760,12 @@
         <span id="buy-label">⬇ Download for Mac — $4.99</span>
       </button>
     </div>
+    <div style="margin-top:18px;">
+      <a class="store-link" href="https://apps.apple.com/us/app/foldiq/id6772513569" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+        Prefer Apple? Open on the Mac App Store
+      </a>
+    </div>
     <p style="margin-top:16px;font-size:14px;color:#334155;font-weight:600;">✓ One-time payment&nbsp;&nbsp;·&nbsp;&nbsp;✓ Lifetime license&nbsp;&nbsp;·&nbsp;&nbsp;✓ No subscription</p>
     <p id="platform-note" style="margin-top:24px;font-size:14px;color:#94A3B8;">macOS 14 Sonoma or later · Apple Silicon &amp; Intel · Secure checkout by Stripe</p>
   </div>
@@ -735,6 +783,7 @@
     <a href="privacy-policy.html">Privacy Policy</a>
     <a href="terms.html">Terms of Service</a>
     <a href="/contact.html">Contact</a>
+    <a href="https://apps.apple.com/us/app/foldiq/id6772513569" target="_blank" rel="noopener">Mac App Store</a>
   </div>
   <div class="footer-copy">© 2026 Foldiq. All rights reserved. Mac &amp; Windows.</div>
 </footer>
