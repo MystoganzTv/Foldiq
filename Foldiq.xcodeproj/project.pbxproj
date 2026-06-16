@@ -34,6 +34,8 @@
 		AA000026 /* ProbableDuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000026 /* ProbableDuplicateDetector.swift */; };
 		AA000027 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000027 /* OnboardingView.swift */; };
 		AA000028 /* PlatformSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000028 /* PlatformSupport.swift */; };
+		AA000029 /* PhotoLibraryExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000029 /* PhotoLibraryExporter.swift */; };
+		AA000030 /* IOSPhotosExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* IOSPhotosExportView.swift */; };
 		AA100001 /* OrganizationPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100001 /* OrganizationPlannerTests.swift */; };
 		AA100002 /* ProbableDuplicateDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100002 /* ProbableDuplicateDetectorTests.swift */; };
 		AA200001 /* FoldiqApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000001 /* FoldiqApp.swift */; };
@@ -62,6 +64,8 @@
 		AA200025 /* ZipInflate.c in Sources */ = {isa = PBXBuildFile; fileRef = BB000024 /* ZipInflate.c */; };
 		AA200026 /* ProbableDuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000026 /* ProbableDuplicateDetector.swift */; };
 		AA200027 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB000022 /* Assets.xcassets */; };
+		AA200028 /* PhotoLibraryExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000029 /* PhotoLibraryExporter.swift */; };
+		AA200029 /* IOSPhotosExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* IOSPhotosExportView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,6 +107,8 @@
 		BB000026 /* ProbableDuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbableDuplicateDetector.swift; sourceTree = "<group>"; };
 		BB000027 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		BB000028 /* PlatformSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformSupport.swift; sourceTree = "<group>"; };
+		BB000029 /* PhotoLibraryExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryExporter.swift; sourceTree = "<group>"; };
+		BB000030 /* IOSPhotosExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPhotosExportView.swift; sourceTree = "<group>"; };
 		BB100001 /* OrganizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationPlannerTests.swift; sourceTree = "<group>"; };
 		BB100002 /* ProbableDuplicateDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbableDuplicateDetectorTests.swift; sourceTree = "<group>"; };
 		CC000001 /* Foldiq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foldiq.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -242,6 +248,7 @@
 				BB000013 /* ScanCoordinator.swift */,
 				BB000023 /* ArchiveExtractor.swift */,
 				BB000026 /* ProbableDuplicateDetector.swift */,
+				BB000029 /* PhotoLibraryExporter.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -258,6 +265,7 @@
 			isa = PBXGroup;
 			children = (
 				BB000014 /* RootView.swift */,
+				BB000030 /* IOSPhotosExportView.swift */,
 				BB000021 /* SettingsView.swift */,
 				WelcomeGroup /* Welcome */,
 				ScanGroup /* Scan */,
@@ -451,6 +459,8 @@
 				AA000023 /* ArchiveExtractor.swift in Sources */,
 				AA000024 /* ZipInflate.c in Sources */,
 				AA000026 /* ProbableDuplicateDetector.swift in Sources */,
+				AA000029 /* PhotoLibraryExporter.swift in Sources */,
+				AA000030 /* IOSPhotosExportView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -492,6 +502,8 @@
 				AA200024 /* ArchiveExtractor.swift in Sources */,
 				AA200025 /* ZipInflate.c in Sources */,
 				AA200026 /* ProbableDuplicateDetector.swift in Sources */,
+				AA200028 /* PhotoLibraryExporter.swift in Sources */,
+				AA200029 /* IOSPhotosExportView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -633,6 +645,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Foldiq;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Foldiq reads your Photos Library so it can export organized copies. Your originals stay in Photos.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -662,6 +675,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Foldiq;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Foldiq reads your Photos Library so it can export organized copies. Your originals stay in Photos.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
