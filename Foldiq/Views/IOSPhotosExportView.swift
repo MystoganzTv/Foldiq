@@ -219,7 +219,7 @@ struct IOSPhotosExportView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) { selectionButtons }
                         .buttonStyle(.bordered)
-                        .controlSize(.regular)
+                        .controlSize(.small)
                         .buttonBorderShape(.capsule)
                         .padding(.vertical, 2)
                 }
@@ -384,14 +384,25 @@ struct IOSPhotosExportView: View {
         case .ready, .completed:
             VStack(spacing: 12) {
                 // Primary action first: pick the destination, then export.
-                Button {
-                    showingDestinationPicker = true
-                } label: {
-                    Label(destinationFolder == nil ? "Choose Export Folder" : "Change Export Folder", systemImage: "folder.badge.plus")
-                        .frame(maxWidth: .infinity)
+                if destinationFolder == nil {
+                    Button {
+                        showingDestinationPicker = true
+                    } label: {
+                        Label("Choose Export Folder", systemImage: "folder.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                } else {
+                    Button {
+                        showingDestinationPicker = true
+                    } label: {
+                        Label("Change Export Folder", systemImage: "folder.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
-                .buttonStyle(destinationFolder == nil ? .borderedProminent : .bordered)
-                .controlSize(.large)
 
                 if let destinationFolder {
                     Text(destinationFolder.path)
@@ -556,6 +567,9 @@ struct IOSPhotosExportView: View {
                 .foregroundStyle(.blue)
             Text(value)
                 .font(.title2.bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .padding(.horizontal, 4)
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
