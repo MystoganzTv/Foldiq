@@ -17,7 +17,7 @@ struct IOSPhotosExportView: View {
     @State private var searchText = ""
     @State private var activeTask: Task<Void, Never>?
     @State private var showingSystemPicker = false
-    @State private var pickedAssetIdentifiers: [String] = []
+    @State private var pickedPhotoItems: [PhotosPickerItem] = []
 
     private var filteredItems: [PhotoLibraryItem] {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -55,15 +55,34 @@ struct IOSPhotosExportView: View {
                 allowedContentTypes: [.folder],
                 allowsMultipleSelection: false
             ) { result in
-                guard case .success(let urls) = result, let url = urls.first else { return }
-                destinationFolder = url
-            }
-            .sheet(isPresented: $showingSystemPicker) {
-                PhotoLibraryAssetPicker(
-                    preselectedAssetIdentifiers: exporter.items.map(\.id)
-                ) { identifiers in
-                    handlePickerSelection(identifiers)
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else {
+                        exporter.fail("No export folder was selected.")
+                        return
+                    }
+                    destinationFolder = url
+                case .failure(let error):
+                    let nsError = error as NSError
+                    guard nsError.domain != NSCocoaErrorDomain || nsError.code != NSUserCancelledError else {
+                        return
+                    }
+                    exporter.fail("Could not open the export folder. \(error.localizedDescription)")
                 }
+            }
+            .photosPicker(
+                isPresented: $showingSystemPicker,
+                selection: $pickedPhotoItems,
+                maxSelectionCount: nil,
+                selectionBehavior: .default,
+                matching: .any(of: [.images, .videos]),
+                preferredItemEncoding: .automatic,
+                photoLibrary: .shared()
+            )
+            .photosPickerDisabledCapabilities(.stagingArea)
+            .photosPickerAccessoryVisibility(.hidden, edges: .bottom)
+            .onChange(of: pickedPhotoItems) { _, newItems in
+                handlePickerSelection(newItems.compactMap(\.itemIdentifier))
             }
             .onDisappear {
                 activeTask?.cancel()
@@ -197,9 +216,9 @@ struct IOSPhotosExportView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                ViewThatFits(in: .horizontal) {
+                ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) { selectionButtons }
-                    VStack(spacing: 8) { selectionButtons }
+                        .padding(.vertical, 2)
                 }
 
                 TextField("Search by filename, type, or date", text: $searchText)
@@ -245,12 +264,16 @@ struct IOSPhotosExportView: View {
     private var selectionButtons: some View {
         Button("Select All") { exporter.selectAll() }
             .buttonStyle(.bordered)
+            .controlSize(.small)
         Button("Photos") { exporter.selectPhotosOnly() }
             .buttonStyle(.bordered)
+            .controlSize(.small)
         Button("Videos") { exporter.selectVideosOnly() }
             .buttonStyle(.bordered)
+            .controlSize(.small)
         Button("Clear") { exporter.clearSelection() }
             .buttonStyle(.bordered)
+            .controlSize(.small)
     }
 
     private var exportProgress: some View {
@@ -323,7 +346,7 @@ struct IOSPhotosExportView: View {
         case .idle:
             VStack(spacing: 12) {
                 Button {
-                    showingSystemPicker = true
+                    openSystemPicker()
                 } label: {
                     Label("Choose Photos and Videos", systemImage: "photo.on.rectangle")
                         .frame(maxWidth: .infinity)
@@ -354,18 +377,9 @@ struct IOSPhotosExportView: View {
         case .ready, .completed:
             VStack(spacing: 12) {
                 Button {
-                    showingSystemPicker = true
+                    returnToStart()
                 } label: {
-                    Label("Change Selected Photos", systemImage: "photo.badge.arrow.down")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-
-                Button {
-                    startScan()
-                } label: {
-                    Label("Select Entire Library", systemImage: "photo.stack")
+                    Label("Back to Start", systemImage: "arrow.backward")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -484,15 +498,22 @@ struct IOSPhotosExportView: View {
         activeTask = nil
 
         if resetToStart {
-            exporter.resetToStart()
+            returnToStart()
         } else {
             exporter.returnToReview()
         }
     }
 
+    private func returnToStart() {
+        exporter.resetToStart()
+        destinationFolder = nil
+        searchText = ""
+        pickedPhotoItems = []
+        showingItemChooser = true
+    }
+
     private func handlePickerSelection(_ identifiers: [String]) {
         let uniqueIdentifiers = Array(NSOrderedSet(array: identifiers)) as? [String] ?? identifiers
-        pickedAssetIdentifiers = uniqueIdentifiers
 
         guard !uniqueIdentifiers.isEmpty else {
             if !exporter.hasLoadedItems {
@@ -502,6 +523,11 @@ struct IOSPhotosExportView: View {
         }
 
         startLoadSelectedItems(uniqueIdentifiers)
+    }
+
+    private func openSystemPicker() {
+        pickedPhotoItems = exporter.items.map { PhotosPickerItem(itemIdentifier: $0.id) }
+        showingSystemPicker = true
     }
 
     private var safetyNotes: some View {
@@ -649,44 +675,6 @@ private extension PhotoLibraryItem {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
-    }
-}
-
-private struct PhotoLibraryAssetPicker: UIViewControllerRepresentable {
-    let preselectedAssetIdentifiers: [String]
-    let onFinish: ([String]) -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onFinish: onFinish)
-    }
-
-    func makeUIViewController(context: Context) -> PHPickerViewController {
-        var configuration = PHPickerConfiguration(photoLibrary: .shared())
-        configuration.filter = .any(of: [.images, .videos])
-        configuration.selectionLimit = 0
-        configuration.selection = .ordered
-        configuration.preferredAssetRepresentationMode = .current
-        configuration.preselectedAssetIdentifiers = preselectedAssetIdentifiers
-
-        let controller = PHPickerViewController(configuration: configuration)
-        controller.delegate = context.coordinator
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
-
-    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        let onFinish: ([String]) -> Void
-
-        init(onFinish: @escaping ([String]) -> Void) {
-            self.onFinish = onFinish
-        }
-
-        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            picker.dismiss(animated: true)
-            let identifiers = results.compactMap(\.assetIdentifier)
-            onFinish(identifiers)
-        }
     }
 }
 #endif

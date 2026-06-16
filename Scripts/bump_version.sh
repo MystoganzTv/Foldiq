@@ -2,8 +2,9 @@
 # Foldiq — build-number stamp.
 #
 # Runs as a late build phase. Its ONLY job is to stamp the built product's
-# CFBundleVersion from the shared repo baseline, or from Xcode Cloud's
-# CI_BUILD_NUMBER when available.
+# CFBundleVersion from the target-specific repo baseline. Xcode Cloud's
+# CI_BUILD_NUMBER is allowed for iOS/iPadOS only; Mac stays frozen until an
+# intentional Mac release.
 #
 # The marketing version (CFBundleShortVersionString) is NOT touched here — it
 # comes from the target's MARKETING_VERSION build setting, which you control in
@@ -15,10 +16,26 @@
 set -e
 
 CONFIG="${SRCROOT}/version.config"
-B="${CI_BUILD_NUMBER:-}"
+B=""
+CONFIG_KEY="MAC_CURRENT_PROJECT_VERSION"
+ALLOW_CI_BUILD_NUMBER="NO"
+
+case "${PRODUCT_BUNDLE_IDENTIFIER:-}" in
+  com.MystoganzTv.Foldiq.iOS)
+    CONFIG_KEY="IOS_CURRENT_PROJECT_VERSION"
+    ALLOW_CI_BUILD_NUMBER="YES"
+    ;;
+  *)
+    CONFIG_KEY="MAC_CURRENT_PROJECT_VERSION"
+    ;;
+esac
+
+if [ "$ALLOW_CI_BUILD_NUMBER" = "YES" ] && [ -n "${CI_BUILD_NUMBER:-}" ]; then
+  B="${CI_BUILD_NUMBER}"
+fi
 
 if [ -z "$B" ] && [ -f "$CONFIG" ]; then
-  B=$(grep '^CURRENT_PROJECT_VERSION' "$CONFIG" | cut -d= -f2 | tr -d ' "')
+  B=$(grep "^${CONFIG_KEY}=" "$CONFIG" | cut -d= -f2 | tr -d ' "')
 fi
 
 if [ -z "$B" ]; then
@@ -34,4 +51,4 @@ else
   echo "warning: Info.plist not found at $PLIST — built app not stamped"
 fi
 
-echo "Foldiq build stamp → ${MARKETING_VERSION:-?} ($B)"
+echo "Foldiq build stamp → ${TARGET_NAME:-?} ${MARKETING_VERSION:-?} ($B)"

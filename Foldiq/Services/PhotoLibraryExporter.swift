@@ -173,6 +173,13 @@ final class PhotoLibraryExporter: ObservableObject {
         phase = .exporting
         progress = ExportProgress(done: 0, total: exportItems.count, currentFile: "")
 
+        do {
+            try FileManager.default.createDirectory(at: outputRoot, withIntermediateDirectories: true)
+        } catch {
+            phase = .failed("Could not create the export folder. \(Self.humanize(error))")
+            return
+        }
+
         var exported = 0
         var failures: [FailedExport] = []
         var reservedPaths = Set<String>()
@@ -215,6 +222,10 @@ final class PhotoLibraryExporter: ObservableObject {
         phase = .completed(outputRoot, exported, failures)
     }
 
+    func fail(_ message: String) {
+        phase = .failed(message)
+    }
+
     func returnToReview() {
         guard hasLoadedItems else {
             phase = .idle
@@ -227,6 +238,8 @@ final class PhotoLibraryExporter: ObservableObject {
 
     func resetToStart() {
         progress = ExportProgress()
+        items = []
+        selectedItemIDs.removeAll()
         phase = .idle
     }
 
