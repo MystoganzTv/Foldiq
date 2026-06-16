@@ -40,7 +40,7 @@ final class PhotoLibraryExporter: ObservableObject {
         case scanning
         case ready
         case exporting
-        case completed(URL, Int, [FailedExport])
+        case completed(URL, Int, Int, [FailedExport])
         case failed(String)
     }
 
@@ -188,8 +188,13 @@ final class PhotoLibraryExporter: ObservableObject {
         }
 
         var exported = 0
+        var skipped = 0
         var failures: [FailedExport] = []
         var reservedPaths = Set<String>()
+
+        // Incremental re-export: a manifest of asset IDs already exported to this
+        // folder lets repeat runs skip what's done — without re-downloading from iCloud.
+        var manifest = Self.loadManifest(at: outputRoot)
 
         for (index, item) in exportItems.enumerated() {
             if Task.isCancelled {
@@ -198,6 +203,12 @@ final class PhotoLibraryExporter: ObservableObject {
             }
 
             progress = ExportProgress(done: index + 1, total: exportItems.count, currentFile: item.filename)
+
+            // Already exported here in a previous run → skip, no download.
+            if manifest.contains(item.id) {
+                skipped += 1
+                continue
+            }
 
             do {
                 let folder = await organizedDestinationFolder(
@@ -208,14 +219,23 @@ final class PhotoLibraryExporter: ObservableObject {
                 )
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
-                let destination = Self.resolveCollision(
-                    folder.appendingPathComponent(item.filename),
-                    reserved: &reservedPaths
-                )
+                let intended = folder.appendingPathComponent(item.filename)
+
+                // A matching file is already on disk from an earlier export (manifest
+                // missing/old). Treat it as done so we don't duplicate or re-download.
+                if !reservedPaths.contains(intended.path),
+                   FileManager.default.fileExists(atPath: intended.path) {
+                    manifest.insert(item.id)
+                    skipped += 1
+                    continue
+                }
+
+                let destination = Self.resolveCollision(intended, reserved: &reservedPaths)
                 reservedPaths.insert(destination.path)
 
                 try await Self.writeOriginalResource(for: item.asset, to: destination)
                 try preserveCreationDate(item.date, at: destination)
+                manifest.insert(item.id)
                 exported += 1
             } catch {
                 failures.append(FailedExport(
@@ -226,7 +246,8 @@ final class PhotoLibraryExporter: ObservableObject {
             }
         }
 
-        phase = .completed(outputRoot, exported, failures)
+        Self.saveManifest(manifest, at: outputRoot)
+        phase = .completed(outputRoot, exported, skipped, failures)
     }
 
     func fail(_ message: String) {
@@ -524,6 +545,26 @@ final class PhotoLibraryExporter: ObservableObject {
             return ext
         }
         return mediaType == .video ? "mov" : "heic"
+    }
+
+    // MARK: - Incremental export manifest
+
+    private nonisolated static let manifestFilename = ".foldiq-export-manifest.json"
+
+    /// Asset IDs already exported into this output folder (empty if none/first run).
+    private nonisolated static func loadManifest(at outputRoot: URL) -> Set<String> {
+        let url = outputRoot.appendingPathComponent(manifestFilename)
+        guard let data = try? Data(contentsOf: url),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return Set(ids)
+    }
+
+    private nonisolated static func saveManifest(_ ids: Set<String>, at outputRoot: URL) {
+        let url = outputRoot.appendingPathComponent(manifestFilename)
+        guard let data = try? JSONEncoder().encode(Array(ids).sorted()) else { return }
+        try? data.write(to: url, options: .atomic)
     }
 
     private nonisolated static func resolveCollision(_ url: URL, reserved: inout Set<String>) -> URL {

@@ -128,8 +128,8 @@ struct IOSPhotosExportView: View {
                 summary
             case .exporting:
                 exportProgress
-            case .completed(let folder, let count, let failures):
-                completionSummary(folder: folder, exportedCount: count, failures: failures)
+            case .completed(let folder, let count, let skipped, let failures):
+                completionSummary(folder: folder, exportedCount: count, skippedCount: skipped, failures: failures)
             case .failed(let message):
                 Label("Needs attention", systemImage: "exclamationmark.triangle.fill")
                     .font(.title3.bold())
@@ -211,9 +211,9 @@ struct IOSPhotosExportView: View {
                     Label("Choose Items", systemImage: "checklist")
                         .font(.headline)
                     Spacer()
-                    Text("\(exporter.selectedCount)/\(exporter.items.count)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                    Text("\(exporter.selectedCount) selected")
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.blue)
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -302,11 +302,21 @@ struct IOSPhotosExportView: View {
     private func completionSummary(
         folder: URL,
         exportedCount: Int,
+        skippedCount: Int,
         failures: [PhotoLibraryExporter.FailedExport]
     ) -> some View {
-        let exportedLabel = failures.isEmpty ? "Exported \(exportedCount) items" : "Exported \(exportedCount) items with \(failures.count) skipped"
-        let exportedColor: Color = failures.isEmpty ? .green : .orange
-        let exportedIcon = failures.isEmpty ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+        let hasFailures = !failures.isEmpty
+        let exportedLabel: String = {
+            if exportedCount == 0 && skippedCount > 0 && !hasFailures {
+                return "Already up to date — \(skippedCount) already exported"
+            }
+            var parts = ["Exported \(exportedCount)"]
+            if skippedCount > 0 { parts.append("\(skippedCount) already there") }
+            if hasFailures { parts.append("\(failures.count) failed") }
+            return parts.joined(separator: " · ")
+        }()
+        let exportedColor: Color = hasFailures ? .orange : .green
+        let exportedIcon = hasFailures ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
 
         VStack(spacing: 12) {
             Label(exportedLabel, systemImage: exportedIcon)
