@@ -391,6 +391,41 @@ final class PhotoLibraryExporter: ObservableObject {
     }
 
     private nonisolated static func writeOriginalResource(for asset: PHAsset, to destination: URL) async throws {
+        // Photos and videos use different APIs. PHImageManager reliably downloads
+        // photo originals from iCloud (Optimize Storage); PHAssetResourceManager
+        // handles videos. Both allow network access so iCloud originals stream down.
+        if asset.mediaType == .image {
+            try await writePhotoData(for: asset, to: destination)
+        } else {
+            try await writeResourceData(for: asset, to: destination)
+        }
+    }
+
+    private nonisolated static func writePhotoData(for asset: PHAsset, to destination: URL) async throws {
+        let options = PHImageRequestOptions()
+        options.isNetworkAccessAllowed = true            // download from iCloud if needed
+        options.deliveryMode = .highQualityFormat
+        options.version = .current
+        options.isSynchronous = false
+
+        let data: Data = try await withCheckedThrowingContinuation { continuation in
+            var didResume = false
+            PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { data, _, _, info in
+                guard !didResume else { return }
+                didResume = true
+                if let data {
+                    continuation.resume(returning: data)
+                } else {
+                    let underlying = (info?[PHImageErrorKey] as? Error) ?? ExportError.noOriginalResource
+                    continuation.resume(throwing: underlying)
+                }
+            }
+        }
+
+        try data.write(to: destination)
+    }
+
+    private nonisolated static func writeResourceData(for asset: PHAsset, to destination: URL) async throws {
         guard let resource = preferredResource(for: asset) else {
             throw ExportError.noOriginalResource
         }
@@ -522,6 +557,9 @@ final class PhotoLibraryExporter: ObservableObject {
              (NSCocoaErrorDomain, 513),
              (NSCocoaErrorDomain, 642):
             return "Foldiq does not have permission to write there."
+        case ("CloudPhotoLibraryErrorDomain", _),
+             (PHPhotosErrorDomain, _):
+            return "Couldn't download this item from iCloud. Connect to Wi-Fi and keep Foldiq open so originals can download, then try again."
         default:
             return error.localizedDescription
         }
