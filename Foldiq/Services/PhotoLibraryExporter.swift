@@ -60,6 +60,13 @@ final class PhotoLibraryExporter: ObservableObject {
     var photoCount: Int { items.filter { $0.kind == .photo }.count }
     var videoCount: Int { items.filter { $0.kind == .video }.count }
     var missingDateCount: Int { items.filter { $0.date == nil }.count }
+
+    /// Year span of the loaded items, e.g. "2019–2025" (or a single year, or "—" if unknown).
+    var dateRangeText: String {
+        let years = items.compactMap { $0.date }.map { Calendar.current.component(.year, from: $0) }
+        guard let minYear = years.min(), let maxYear = years.max() else { return "—" }
+        return minYear == maxYear ? "\(minYear)" : "\(minYear)–\(maxYear)"
+    }
     var selectedItems: [PhotoLibraryItem] { items.filter { selectedItemIDs.contains($0.id) } }
     var selectedCount: Int { selectedItemIDs.count }
 

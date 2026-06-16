@@ -13,7 +13,7 @@ struct IOSPhotosExportView: View {
     @State private var destinationFolder: URL?
     @State private var organizationMode: OrganizationMode = .smartHybrid
     @State private var includeLocation = true
-    @State private var showingItemChooser = true
+    @State private var showingItemChooser = false
     @State private var searchText = ""
     @State private var activeTask: Task<Void, Never>?
     @State private var showingSystemPicker = false
@@ -161,7 +161,7 @@ struct IOSPhotosExportView: View {
             HStack(spacing: 12) {
                 stat("\(exporter.photoCount)", "Photos", "photo")
                 stat("\(exporter.videoCount)", "Videos", "video")
-                stat("\(exporter.missingDateCount)", "No Date", "calendar.badge.exclamationmark")
+                stat(exporter.dateRangeText, "Date Range", "calendar")
             }
 
             Text("\(exporter.selectedCount) of \(exporter.items.count) items selected for export.")
@@ -218,6 +218,9 @@ struct IOSPhotosExportView: View {
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) { selectionButtons }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                        .buttonBorderShape(.capsule)
                         .padding(.vertical, 2)
                 }
 
@@ -262,18 +265,22 @@ struct IOSPhotosExportView: View {
 
     @ViewBuilder
     private var selectionButtons: some View {
-        Button("Select All") { exporter.selectAll() }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        Button("Photos") { exporter.selectPhotosOnly() }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        Button("Videos") { exporter.selectVideosOnly() }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        Button("Clear") { exporter.clearSelection() }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+        Button { exporter.selectAll() } label: {
+            Label("Select All", systemImage: "checkmark.circle.fill")
+        }
+        .tint(.blue)
+        Button { exporter.selectPhotosOnly() } label: {
+            Label("Photos", systemImage: "photo")
+        }
+        .tint(.blue)
+        Button { exporter.selectVideosOnly() } label: {
+            Label("Videos", systemImage: "video")
+        }
+        .tint(.purple)
+        Button { exporter.clearSelection() } label: {
+            Label("Clear", systemImage: "xmark.circle")
+        }
+        .tint(.gray)
     }
 
     private var exportProgress: some View {
@@ -376,33 +383,14 @@ struct IOSPhotosExportView: View {
             }
         case .ready, .completed:
             VStack(spacing: 12) {
-                Button {
-                    returnToStart()
-                } label: {
-                    Label("Back to Start", systemImage: "arrow.backward")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-
-                if case .completed = exporter.phase {
-                    Button {
-                        exporter.returnToReview()
-                    } label: {
-                        Label("Back to Review", systemImage: "arrow.backward")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                }
-
+                // Primary action first: pick the destination, then export.
                 Button {
                     showingDestinationPicker = true
                 } label: {
                     Label(destinationFolder == nil ? "Choose Export Folder" : "Change Export Folder", systemImage: "folder.badge.plus")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(destinationFolder == nil ? .borderedProminent : .bordered)
                 .controlSize(.large)
 
                 if let destinationFolder {
@@ -428,6 +416,27 @@ struct IOSPhotosExportView: View {
                     .controlSize(.large)
                     .disabled(exporter.selectedCount == 0)
                 }
+
+                // Secondary navigation last.
+                if case .completed = exporter.phase {
+                    Button {
+                        exporter.returnToReview()
+                    } label: {
+                        Label("Back to Review", systemImage: "arrow.backward")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                }
+
+                Button {
+                    returnToStart()
+                } label: {
+                    Label("Back to Start", systemImage: "arrow.backward")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
             }
         case .exporting:
             VStack(spacing: 12) {
@@ -509,7 +518,7 @@ struct IOSPhotosExportView: View {
         destinationFolder = nil
         searchText = ""
         pickedPhotoItems = []
-        showingItemChooser = true
+        showingItemChooser = false
     }
 
     private func handlePickerSelection(_ identifiers: [String]) {
