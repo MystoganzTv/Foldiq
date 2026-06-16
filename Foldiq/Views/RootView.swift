@@ -7,6 +7,9 @@ import SwiftUI
 struct RootView: View {
 
     @EnvironmentObject private var nav: AppNavigator
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool { horizontalSizeClass == .compact }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,7 +17,7 @@ struct RootView: View {
             // ── Step indicator (hidden on welcome) ──────────────────────────
             if nav.screen != .welcome {
                 StepIndicator(current: nav.screen)
-                    .padding(.horizontal, 40)
+                    .padding(.horizontal, isCompact ? 14 : 40)
                     .padding(.vertical, 14)
                     .background(.bar)
 
@@ -58,14 +61,16 @@ struct RootView: View {
 
 struct StepIndicator: View {
     let current: AppScreen
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     // Only show the wizard steps (not welcome)
     private let steps: [AppScreen] = [.scan, .settings, .preview, .apply, .report]
+    private var isCompact: Bool { horizontalSizeClass == .compact }
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Array(steps.enumerated()), id: \.element) { idx, step in
-                StepDot(step: step, state: dotState(for: step))
+                StepDot(step: step, state: dotState(for: step), showTitle: !isCompact)
 
                 if idx < steps.count - 1 {
                     Rectangle()
@@ -88,13 +93,14 @@ enum StepDotState { case done, active, future }
 struct StepDot: View {
     let step: AppScreen
     let state: StepDotState
+    let showTitle: Bool
 
     var body: some View {
         VStack(spacing: 4) {
             ZStack {
                 Circle()
                     .fill(fillColor)
-                    .frame(width: 28, height: 28)
+                    .frame(width: showTitle ? 28 : 24, height: showTitle ? 28 : 24)
 
                 if state == .done {
                     Image(systemName: "checkmark")
@@ -106,9 +112,11 @@ struct StepDot: View {
                         .foregroundStyle(state == .active ? .white : .secondary)
                 }
             }
-            Text(step.title)
-                .font(.caption2)
-                .foregroundStyle(state == .future ? .secondary : .primary)
+            if showTitle {
+                Text(step.title)
+                    .font(.caption2)
+                    .foregroundStyle(state == .future ? .secondary : .primary)
+            }
         }
     }
 

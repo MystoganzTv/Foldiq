@@ -4,8 +4,12 @@
 
 import SwiftUI
 import SwiftData
+#if os(macOS)
 import AppKit
 import QuickLookUI
+#else
+import QuickLook
+#endif
 
 struct ScanView: View {
 
@@ -149,7 +153,7 @@ struct ScanProgressPanel: View {
             if isActive {
                 VStack(spacing: 6) {
                     ProgressView(value: progress > 0 ? progress : nil)
-                        .frame(width: 400)
+                        .frame(maxWidth: 400)
                         .tint(.blue)
 
                     HStack(spacing: 20) {
@@ -159,6 +163,7 @@ struct ScanProgressPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
+                .padding(.horizontal, 24)
             }
 
             // Action buttons
@@ -513,7 +518,7 @@ struct FileDrillSheet: View {
 
                         // Show in Finder
                         Button {
-                            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                            PlatformActions.revealInFileManager(fileURL)
                         } label: {
                             Image(systemName: "arrow.up.forward.square")
                                 .foregroundStyle(.secondary)
@@ -583,7 +588,7 @@ private struct QuickLookPreviewContainer: View {
             Button(action: onClose) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.secondary, Color(.windowBackgroundColor))
+                    .foregroundStyle(.secondary, PlatformColors.windowBackground)
                     .padding(14)
             }
             .buttonStyle(.plain)
@@ -592,9 +597,10 @@ private struct QuickLookPreviewContainer: View {
     }
 }
 
-private struct QuickLookPreviewSheet: NSViewRepresentable {
+private struct QuickLookPreviewSheet: PlatformQuickLookRepresentable {
     let url: URL
 
+    #if os(macOS)
     func makeNSView(context: Context) -> QLPreviewView {
         guard let previewView = QLPreviewView(frame: .zero, style: .normal) else {
             preconditionFailure("Failed to create QLPreviewView")
@@ -607,6 +613,38 @@ private struct QuickLookPreviewSheet: NSViewRepresentable {
     func updateNSView(_ nsView: QLPreviewView, context: Context) {
         nsView.previewItem = url as NSURL
     }
+    #else
+    func makeCoordinator() -> Coordinator {
+        Coordinator(url: url)
+    }
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ controller: QLPreviewController, context: Context) {
+        context.coordinator.url = url
+        controller.reloadData()
+    }
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        var url: URL
+
+        init(url: URL) {
+            self.url = url
+        }
+
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+            1
+        }
+
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            url as NSURL
+        }
+    }
+    #endif
 }
 
 // MARK: ─── Tappable Stat Card ─────────────────────────────────────────────────
@@ -645,7 +683,7 @@ struct TappableStatCard: View {
             }
             .padding(16)
             .background(
-                isHovering ? color.opacity(0.08) : Color(.windowBackgroundColor).opacity(0.5),
+                isHovering ? color.opacity(0.08) : PlatformColors.windowBackground.opacity(0.5),
                 in: RoundedRectangle(cornerRadius: 12)
             )
             .overlay(

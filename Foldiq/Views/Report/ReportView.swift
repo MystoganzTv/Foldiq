@@ -3,7 +3,9 @@
 
 import SwiftUI
 import SwiftData
+#if os(macOS)
 import AppKit
+#endif
 
 struct ReportView: View {
 
@@ -68,7 +70,7 @@ struct ReportView: View {
                     title: Text(item.title),
                     message: Text(item.message),
                     primaryButton: .default(Text("Reveal in Finder")) {
-                        NSWorkspace.shared.activateFileViewerSelecting([revealURL])
+                        PlatformActions.revealInFileManager(revealURL)
                     },
                     secondaryButton: .cancel(Text("OK"))
                 )
@@ -260,15 +262,14 @@ struct ReportView: View {
 
                                 HStack(spacing: 8) {
                                     Button {
-                                        NSWorkspace.shared.activateFileViewerSelecting([plan.sourceURL])
+                                        PlatformActions.revealInFileManager(plan.sourceURL)
                                     } label: {
                                         Label("Reveal", systemImage: "folder")
                                     }
                                     .buttonStyle(.bordered)
 
                                     Button {
-                                        NSPasteboard.general.clearContents()
-                                        NSPasteboard.general.setString(plan.sourceAbsPath, forType: .string)
+                                        PlatformActions.copyToClipboard(plan.sourceAbsPath)
                                     } label: {
                                         Label("Copy Path", systemImage: "doc.on.doc")
                                     }
@@ -522,7 +523,7 @@ struct ReportView: View {
         guard let session = nav.scanSession else { return }
         let outURL = nav.organizationConfig
             .outputRoot(forSelectedRoot: URL(fileURLWithPath: session.rootPath))
-        NSWorkspace.shared.open(outURL)
+        PlatformActions.openURL(outURL)
     }
 
     private func performUndo() {
@@ -579,8 +580,7 @@ struct ReportView: View {
         let payload = errors.map(\.sourceAbsPath).joined(separator: "\n")
         guard !payload.isEmpty else { return }
 
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(payload, forType: .string)
+        PlatformActions.copyToClipboard(payload)
         exportFeedback = FeedbackMessage(
             title: "Paths Copied",
             message: "Copied \(errors.count) failed path(s) to the clipboard.",

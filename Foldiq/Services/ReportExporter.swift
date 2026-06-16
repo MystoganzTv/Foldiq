@@ -2,7 +2,9 @@
 // Exports a CSV log of every planned/applied file operation.
 
 import Foundation
+#if os(macOS)
 import AppKit
+#endif
 
 struct ReportExporter {
     enum ExportError: LocalizedError {
@@ -19,8 +21,12 @@ struct ReportExporter {
     /// Show a save panel and write the CSV file.
     @discardableResult
     static func exportCSV(plans: [OrganizationPlan], sessionID: UUID) throws -> URL {
+        let csv = buildCSV(plans: plans)
+        let fileName = "Foldiq-Report-\(sessionID.uuidString.prefix(8)).csv"
+
+        #if os(macOS)
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "Foldiq-Report-\(sessionID.uuidString.prefix(8)).csv"
+        panel.nameFieldStringValue = fileName
         panel.allowedContentTypes  = [.commaSeparatedText]
         panel.message = "Choose where to save the Foldiq organization report"
 
@@ -28,9 +34,13 @@ struct ReportExporter {
             throw ExportError.cancelled
         }
 
-        let csv = buildCSV(plans: plans)
         try csv.write(to: url, atomically: true, encoding: .utf8)
         return url
+        #else
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        try csv.write(to: url, atomically: true, encoding: .utf8)
+        return url
+        #endif
     }
 
     static func buildCSV(plans: [OrganizationPlan]) -> String {

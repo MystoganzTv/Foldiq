@@ -4,17 +4,23 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 struct WelcomeView: View {
 
     @EnvironmentObject private var nav: AppNavigator
     @Environment(\.modelContext) private var context
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isHoveringButton = false
     @State private var isDragTargeted = false
+    @State private var showingItemImporter = false
 
     // Undo toast (shown after returning from a successful undo)
     @State private var showUndoToast = false
     @State private var undoRestoredCount: Int?
+    private var isCompact: Bool { horizontalSizeClass == .compact }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,7 +29,7 @@ struct WelcomeView: View {
             // ── Logo & headline ─────────────────────────────────────────────
             VStack(spacing: 16) {
                 Image(systemName: "folder.badge.gearshape")
-                    .font(.system(size: 72, weight: .thin))
+                    .font(.system(size: isCompact ? 56 : 72, weight: .thin))
                     .foregroundStyle(
                         LinearGradient(
                             colors: [.blue, .purple],
@@ -34,15 +40,17 @@ struct WelcomeView: View {
                     .symbolEffect(.pulse)
 
                 Text("Organize Your Library")
-                    .font(.system(size: 42, weight: .bold, design: .rounded))
+                    .font(.system(size: isCompact ? 32 : 42, weight: .bold, design: .rounded))
 
-                Text("Clean up and organize thousands of messy\nphotos and videos safely, right on your Mac.")
+                Text("Clean up and organize thousands of messy photos and videos safely, right on your device.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .frame(maxWidth: 560)
             }
+            .padding(.horizontal, 24)
 
-            Spacer().frame(height: 48)
+            Spacer().frame(height: isCompact ? 28 : 48)
 
             // ── Selected items list ──────────────────────────────────────────
             if !nav.selectedFolderURLs.isEmpty {
@@ -59,7 +67,7 @@ struct WelcomeView: View {
                                 .truncationMode(.middle)
                             Spacer()
                             Button {
-                                nav.selectedFolderURLs.removeAll { $0 == url }
+                                nav.removeSelectedFolderURL(url)
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundStyle(.secondary)
@@ -73,53 +81,16 @@ struct WelcomeView: View {
                     }
                 }
                 .frame(maxWidth: 520)
+                .padding(.horizontal, 20)
                 .padding(.bottom, 12)
             }
 
             // ── CTA ─────────────────────────────────────────────────────────
-            HStack(spacing: 12) {
-                // Add folders / ZIPs button
-                Button {
-                    selectItems()
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: nav.selectedFolderURLs.isEmpty ? "folder.badge.plus" : "plus.circle")
-                        Text(nav.selectedFolderURLs.isEmpty ? "Select Folders or ZIPs" : "Add More")
-                            .fontWeight(.semibold)
-                    }
-                    .font(.title3)
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 14)
-                    .background(nav.selectedFolderURLs.isEmpty ? Color.blue : Color.secondary.opacity(0.15),
-                                in: RoundedRectangle(cornerRadius: 14))
-                    .foregroundStyle(nav.selectedFolderURLs.isEmpty ? .white : .primary)
-                    .scaleEffect(isHoveringButton ? 1.03 : 1.0)
-                    .animation(.spring(response: 0.25), value: isHoveringButton)
-                }
-                .buttonStyle(.plain)
-                .onHover { isHoveringButton = $0 }
-                .help("Choose folders or .zip archives containing your photos and videos")
-
-                // Scan button — only shown when items are selected
-                if !nav.selectedFolderURLs.isEmpty {
-                    Button {
-                        nav.go(to: .scan)
-                    } label: {
-                        HStack(spacing: 10) {
-                            Text(scanButtonLabel)
-                                .fontWeight(.semibold)
-                            Image(systemName: "arrow.right")
-                        }
-                        .font(.title3)
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 14)
-                        .background(.blue, in: RoundedRectangle(cornerRadius: 14))
-                        .foregroundStyle(.white)
-                    }
-                    .buttonStyle(.plain)
-                    .transition(.scale.combined(with: .opacity))
-                }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { actionButtons }
+                VStack(spacing: 12) { actionButtons }
             }
+            .padding(.horizontal, 20)
             .animation(.spring(response: 0.3), value: nav.selectedFolderURLs.isEmpty)
 
             Spacer().frame(height: 16)
@@ -133,6 +104,7 @@ struct WelcomeView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+            .opacity(isCompact ? 0 : 1)
 
             Spacer()
 
@@ -158,11 +130,20 @@ struct WelcomeView: View {
                     .foregroundStyle(.tertiary)
                     .help("App version (build number)")
             }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 20)
             .padding(.bottom, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onReceive(NotificationCenter.default.publisher(for: .openRootFolder)) { _ in
             selectItems()
+        }
+        .fileImporter(
+            isPresented: $showingItemImporter,
+            allowedContentTypes: [.folder, UTType(filenameExtension: "zip") ?? .zip],
+            allowsMultipleSelection: true
+        ) { result in
+            handleImportedItems(result)
         }
         // ── Drag & drop ──────────────────────────────────────────────────────
         .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
@@ -213,6 +194,51 @@ struct WelcomeView: View {
                     withAnimation(.easeOut) { showUndoToast = false }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        Button {
+            selectItems()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: nav.selectedFolderURLs.isEmpty ? "folder.badge.plus" : "plus.circle")
+                Text(nav.selectedFolderURLs.isEmpty ? "Select Folders or ZIPs" : "Add More")
+                    .fontWeight(.semibold)
+            }
+            .font(.title3)
+            .frame(maxWidth: isCompact ? .infinity : nil)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 14)
+            .background(nav.selectedFolderURLs.isEmpty ? Color.blue : Color.secondary.opacity(0.15),
+                        in: RoundedRectangle(cornerRadius: 14))
+            .foregroundStyle(nav.selectedFolderURLs.isEmpty ? .white : .primary)
+            .scaleEffect(isHoveringButton ? 1.03 : 1.0)
+            .animation(.spring(response: 0.25), value: isHoveringButton)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHoveringButton = $0 }
+        .help("Choose folders or .zip archives containing your photos and videos")
+
+        if !nav.selectedFolderURLs.isEmpty {
+            Button {
+                nav.go(to: .scan)
+            } label: {
+                HStack(spacing: 10) {
+                    Text(scanButtonLabel)
+                        .fontWeight(.semibold)
+                    Image(systemName: "arrow.right")
+                }
+                .font(.title3)
+                .frame(maxWidth: isCompact ? .infinity : nil)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 14)
+                .background(.blue, in: RoundedRectangle(cornerRadius: 14))
+                .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .transition(.scale.combined(with: .opacity))
         }
     }
 
@@ -272,13 +298,14 @@ struct WelcomeView: View {
                 guard !existing.contains(url.path) else { return }
 
                 DispatchQueue.main.async {
-                    nav.selectedFolderURLs.append(url)
+                    nav.addSelectedFolderURLs([url])
                 }
             }
         }
     }
 
     private func selectItems() {
+        #if os(macOS)
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
@@ -300,7 +327,26 @@ struct WelcomeView: View {
             if isDir.boolValue { return true }
             return url.isZipFile
         }
-        nav.selectedFolderURLs.append(contentsOf: newURLs)
+        nav.addSelectedFolderURLs(newURLs)
+        #else
+        showingItemImporter = true
+        #endif
+    }
+
+    private func handleImportedItems(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result else { return }
+
+        nav.preserveAccess(to: urls)
+
+        let existing = Set(nav.selectedFolderURLs.map(\.path))
+        let newURLs = urls.filter { url in
+            guard !existing.contains(url.path) else { return false }
+            var isDir: ObjCBool = false
+            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+            if isDir.boolValue { return true }
+            return url.isZipFile
+        }
+        nav.addSelectedFolderURLs(newURLs)
     }
 }
 

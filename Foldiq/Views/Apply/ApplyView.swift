@@ -28,7 +28,7 @@ struct ApplyView: View {
             VStack(spacing: 28) {
                 // Icon
                 Group {
-                    if #available(macOS 15.0, *) {
+                    if #available(macOS 15.0, iOS 18.0, *) {
                         Image(systemName: isComplete ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath.circle")
                             .symbolEffect(.rotate, isActive: !isComplete)
                     } else {
@@ -66,7 +66,7 @@ struct ApplyView: View {
                 // Progress bar
                 VStack(spacing: 8) {
                     ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
-                        .frame(width: 460)
+                        .frame(maxWidth: 460)
                         .tint(isComplete ? .green : .blue)
 
                     HStack {
@@ -80,8 +80,9 @@ struct ApplyView: View {
                         Text("\(progress.done) / \(progress.total)")
                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     }
-                    .frame(width: 460)
+                    .frame(maxWidth: 460)
                 }
+                .padding(.horizontal, 24)
 
                 // Error summary (live)
                 if !progress.errors.isEmpty {
@@ -96,9 +97,10 @@ struct ApplyView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(width: 460, height: 60)
+                        .frame(maxWidth: 460, minHeight: 60)
                         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
                     }
+                    .padding(.horizontal, 24)
                 }
             }
 

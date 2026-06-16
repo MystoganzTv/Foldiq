@@ -2,7 +2,9 @@
 // Step 3: The user picks an organization mode and file operation options.
 
 import SwiftUI
+#if os(macOS)
 import AppKit
+#endif
 
 struct SettingsStepView: View {
 
@@ -33,6 +35,7 @@ struct SettingsStepView: View {
     }
 
     @State private var showMoreOptions = false
+    @State private var showingDestinationImporter = false
 
     var body: some View {
         ScrollView {
@@ -201,9 +204,19 @@ struct SettingsStepView: View {
             .padding(.vertical, 16)
             .background(.bar)
         }
+        .fileImporter(
+            isPresented: $showingDestinationImporter,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            nav.preserveAccess(to: [url])
+            nav.organizationConfig.customOutputParentPath = url.path
+        }
     }
 
     private func chooseCustomDestinationFolder() {
+        #if os(macOS)
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -219,6 +232,9 @@ struct SettingsStepView: View {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
         nav.organizationConfig.customOutputParentPath = url.path
+        #else
+        showingDestinationImporter = true
+        #endif
     }
 }
 
@@ -273,7 +289,7 @@ struct ModeOptionRow: View {
                     in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(isSelected ? Color.accentColor.opacity(0.4) : Color(.separatorColor), lineWidth: 1)
+                .stroke(isSelected ? Color.accentColor.opacity(0.4) : PlatformColors.separator, lineWidth: 1)
         )
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
@@ -310,11 +326,11 @@ struct OperationCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(selected ? Color.accentColor.opacity(0.08) : Color(.windowBackgroundColor),
+        .background(selected ? Color.accentColor.opacity(0.08) : PlatformColors.windowBackground,
                     in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(selected ? Color.accentColor : Color(.separatorColor), lineWidth: selected ? 1.5 : 0.5)
+                .stroke(selected ? Color.accentColor : PlatformColors.separator, lineWidth: selected ? 1.5 : 0.5)
         )
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
@@ -339,4 +355,3 @@ struct ToggleRow: View {
         .toggleStyle(.switch)
     }
 }
-

@@ -6,8 +6,12 @@
 
 import SwiftUI
 import SwiftData
+#if os(macOS)
 import AppKit
 import QuickLookUI
+#else
+import QuickLook
+#endif
 import AVFoundation
 
 struct PreviewView: View {
@@ -140,7 +144,7 @@ struct PreviewView: View {
                     title: Text(item.title),
                     message: Text(item.message),
                     primaryButton: .default(Text("Reveal in Finder")) {
-                        NSWorkspace.shared.activateFileViewerSelecting([revealURL])
+                        PlatformActions.revealInFileManager(revealURL)
                     },
                     secondaryButton: .cancel(Text("OK"))
                 )
@@ -590,7 +594,7 @@ struct FileInspectorPanel: View {
     let context: ModelContext
     let onDateAssigned: (OrganizationPlan) -> Void
 
-    @State private var thumbnail: NSImage?
+    @State private var thumbnail: PlatformImage?
     @State private var mediaFile: MediaFile?
     @State private var assignedDate: Date = Calendar.current.date(
         byAdding: .year, value: -3, to: Date()) ?? Date()   // reasonable default
@@ -608,11 +612,11 @@ struct FileInspectorPanel: View {
                 // ── Thumbnail ─────────────────────────────────────────────
                 ZStack {
                     Rectangle()
-                        .fill(Color(.windowBackgroundColor).opacity(0.5))
+                        .fill(PlatformColors.windowBackground.opacity(0.5))
                         .frame(height: 200)
 
                     if let img = thumbnail {
-                        Image(nsImage: img)
+                        Image(platformImage: img)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(maxWidth: .infinity)
@@ -689,7 +693,7 @@ struct FileInspectorPanel: View {
                     }
 
                     Button {
-                        NSWorkspace.shared.activateFileViewerSelecting([plan.sourceURL])
+                        PlatformActions.revealInFileManager(plan.sourceURL)
                     } label: {
                         Label("Show Original in Finder", systemImage: "arrow.up.forward.square")
                     }
@@ -740,7 +744,7 @@ struct FileInspectorPanel: View {
                 .padding(14)
             }
         }
-        .background(Color(.windowBackgroundColor).opacity(0.4))
+        .background(PlatformColors.windowBackground.opacity(0.4))
         .task(id: plan.id) { await loadFile() }
         .sheet(isPresented: quickLookBinding) {
             if let quickLookURL {
@@ -770,7 +774,7 @@ struct FileInspectorPanel: View {
                    || MediaTypes.videoExtensions.contains(url.pathExtension.lowercased())
 
         // Load thumbnail off the main thread.
-        let img = await Task.detached(priority: .utility) { () -> NSImage? in
+        let img = await Task.detached(priority: .utility) { () -> PlatformImage? in
             if isVideo {
                 // Use AVAssetImageGenerator for a real video frame thumbnail.
                 let asset = AVURLAsset(url: url)
@@ -780,11 +784,11 @@ struct FileInspectorPanel: View {
                 // Grab a frame ~1 s in; fall back to the very first frame.
                 let requestTime = CMTime(seconds: 1.0, preferredTimescale: 600)
                 if let cgImg = try? gen.copyCGImage(at: requestTime, actualTime: nil) {
-                    return NSImage(cgImage: cgImg, size: .zero)
+                    return PlatformImageFactory.make(cgImage: cgImg)
                 }
                 // Retry at t=0 for very short clips.
                 if let cgImg = try? gen.copyCGImage(at: .zero, actualTime: nil) {
-                    return NSImage(cgImage: cgImg, size: .zero)
+                    return PlatformImageFactory.make(cgImage: cgImg)
                 }
                 return nil
             } else {
@@ -797,7 +801,7 @@ struct FileInspectorPanel: View {
                 ]
                 guard let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
                 else { return nil }
-                return NSImage(cgImage: cgThumb, size: .zero)
+                return PlatformImageFactory.make(cgImage: cgThumb)
             }
         }.value
         thumbnail = img
@@ -876,7 +880,7 @@ private struct PreviewQuickLookContainer: View {
             Button(action: onClose) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.secondary, Color(.windowBackgroundColor))
+                    .foregroundStyle(.secondary, PlatformColors.windowBackground)
                     .padding(14)
             }
             .buttonStyle(.plain)
@@ -885,9 +889,10 @@ private struct PreviewQuickLookContainer: View {
     }
 }
 
-private struct PreviewQuickLookSheet: NSViewRepresentable {
+private struct PreviewQuickLookSheet: PlatformQuickLookRepresentable {
     let url: URL
 
+    #if os(macOS)
     func makeNSView(context: Context) -> QLPreviewView {
         guard let previewView = QLPreviewView(frame: .zero, style: .normal) else {
             preconditionFailure("Failed to create QLPreviewView")
@@ -900,6 +905,38 @@ private struct PreviewQuickLookSheet: NSViewRepresentable {
     func updateNSView(_ nsView: QLPreviewView, context: Context) {
         nsView.previewItem = url as NSURL
     }
+    #else
+    func makeCoordinator() -> Coordinator {
+        Coordinator(url: url)
+    }
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ controller: QLPreviewController, context: Context) {
+        context.coordinator.url = url
+        controller.reloadData()
+    }
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        var url: URL
+
+        init(url: URL) {
+            self.url = url
+        }
+
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+            1
+        }
+
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            url as NSURL
+        }
+    }
+    #endif
 }
 
 // MARK: ─── Meta Row ───────────────────────────────────────────────────────────

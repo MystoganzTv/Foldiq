@@ -51,6 +51,7 @@ final class AppNavigator: ObservableObject {
     /// Temp directories created when extracting .zip archives during scan.
     /// Cleaned up by FileMover after apply, or discarded on restart.
     var archiveTempDirs: [URL] = []
+    private var securityScopedURLs: Set<URL> = []
 
     /// Set by ReportView before calling restart() after a successful undo.
     /// WelcomeView reads this to show a confirmation toast, then clears it.
@@ -62,6 +63,30 @@ final class AppNavigator: ObservableObject {
 
     /// Primary folder (first selected) — output is placed here.
     var rootFolderURL: URL? { selectedFolderURLs.first }
+
+    func preserveAccess(to urls: [URL]) {
+        #if !os(macOS)
+        for url in urls where !securityScopedURLs.contains(url) {
+            if url.startAccessingSecurityScopedResource() {
+                securityScopedURLs.insert(url)
+            }
+        }
+        #endif
+    }
+
+    func addSelectedFolderURLs(_ urls: [URL]) {
+        preserveAccess(to: urls)
+        selectedFolderURLs.append(contentsOf: urls)
+    }
+
+    func removeSelectedFolderURL(_ url: URL) {
+        selectedFolderURLs.removeAll { $0 == url }
+        #if !os(macOS)
+        if securityScopedURLs.remove(url) != nil {
+            url.stopAccessingSecurityScopedResource()
+        }
+        #endif
+    }
 
     func go(to screen: AppScreen) {
         withAnimation(.easeInOut(duration: 0.25)) {
@@ -85,6 +110,12 @@ final class AppNavigator: ObservableObject {
                 }
             }
         }
+        #if !os(macOS)
+        for url in securityScopedURLs {
+            url.stopAccessingSecurityScopedResource()
+        }
+        securityScopedURLs.removeAll()
+        #endif
         selectedFolderURLs = []
         scanSession = nil
         // Intentionally keep organizationConfig — user's settings survive between sessions.

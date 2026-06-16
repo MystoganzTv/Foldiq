@@ -1,5 +1,5 @@
 // FoldiqApp.swift
-// Entry point for Foldiq — a safe, local-first photo/video folder organizer for macOS.
+// Entry point for Foldiq — a safe, local-first photo/video folder organizer.
 
 import SwiftUI
 import SwiftData
@@ -56,6 +56,7 @@ struct FoldiqApp: App {
     @StateObject private var nav = AppNavigator()
 
     var body: some Scene {
+        #if os(macOS)
         WindowGroup {
             RootView()
                 .modelContainer(container)
@@ -69,5 +70,12 @@ struct FoldiqApp: App {
         Settings {
             SettingsView()
         }
+        #else
+        WindowGroup {
+            RootView()
+                .modelContainer(container)
+                .environmentObject(nav)
+        }
+        #endif
     }
 }
