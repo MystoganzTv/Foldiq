@@ -47,12 +47,15 @@ final class PhotoLibraryExporter: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var items: [PhotoLibraryItem] = []
     @Published private(set) var progress = ExportProgress()
+    @Published var selectedItemIDs = Set<String>()
 
     private let geocoder = ReverseGeocoder()
 
     var photoCount: Int { items.filter { $0.kind == .photo }.count }
     var videoCount: Int { items.filter { $0.kind == .video }.count }
     var missingDateCount: Int { items.filter { $0.date == nil }.count }
+    var selectedItems: [PhotoLibraryItem] { items.filter { selectedItemIDs.contains($0.id) } }
+    var selectedCount: Int { selectedItemIDs.count }
 
     func requestAccessAndScan() async {
         phase = .requestingAccess
@@ -78,14 +81,45 @@ final class PhotoLibraryExporter: ObservableObject {
         if items.isEmpty {
             phase = .failed("No photos or videos were found in the Photos Library selection.")
         } else {
+            selectedItemIDs = Set(items.map(\.id))
             progress = ExportProgress(done: 0, total: items.count, currentFile: "")
             phase = .ready
         }
     }
 
-    func export(to destinationFolder: URL, outputFolderName: String = "Foldiq Export") async {
-        guard !items.isEmpty else {
-            phase = .failed("Scan Photos Library before exporting.")
+    func selectAll() {
+        selectedItemIDs = Set(items.map(\.id))
+    }
+
+    func selectPhotosOnly() {
+        selectedItemIDs = Set(items.filter { $0.kind == .photo }.map(\.id))
+    }
+
+    func selectVideosOnly() {
+        selectedItemIDs = Set(items.filter { $0.kind == .video }.map(\.id))
+    }
+
+    func clearSelection() {
+        selectedItemIDs.removeAll()
+    }
+
+    func toggleSelection(for item: PhotoLibraryItem) {
+        if selectedItemIDs.contains(item.id) {
+            selectedItemIDs.remove(item.id)
+        } else {
+            selectedItemIDs.insert(item.id)
+        }
+    }
+
+    func export(
+        to destinationFolder: URL,
+        mode: OrganizationMode,
+        includeLocation: Bool,
+        outputFolderName: String = "Foldiq Export"
+    ) async {
+        let exportItems = selectedItems
+        guard !exportItems.isEmpty else {
+            phase = .failed("Choose at least one photo or video to export.")
             return
         }
 
@@ -98,12 +132,12 @@ final class PhotoLibraryExporter: ObservableObject {
 
         let outputRoot = destinationFolder.appendingPathComponent(outputFolderName, isDirectory: true)
         phase = .exporting
-        progress = ExportProgress(done: 0, total: items.count, currentFile: "")
+        progress = ExportProgress(done: 0, total: exportItems.count, currentFile: "")
 
         var exported = 0
         var reservedPaths = Set<String>()
 
-        for (index, item) in items.enumerated() {
+        for (index, item) in exportItems.enumerated() {
             if Task.isCancelled {
                 phase = .failed("Export cancelled.")
                 return
@@ -112,7 +146,12 @@ final class PhotoLibraryExporter: ObservableObject {
             progress = ExportProgress(done: index + 1, total: items.count, currentFile: item.filename)
 
             do {
-                let folder = await organizedDestinationFolder(for: item, outputRoot: outputRoot)
+                let folder = await organizedDestinationFolder(
+                    for: item,
+                    outputRoot: outputRoot,
+                    mode: mode,
+                    includeLocation: includeLocation
+                )
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
                 let destination = Self.resolveCollision(
@@ -133,7 +172,12 @@ final class PhotoLibraryExporter: ObservableObject {
         phase = .completed(outputRoot, exported)
     }
 
-    private func organizedDestinationFolder(for item: PhotoLibraryItem, outputRoot: URL) async -> URL {
+    private func organizedDestinationFolder(
+        for item: PhotoLibraryItem,
+        outputRoot: URL,
+        mode: OrganizationMode,
+        includeLocation: Bool
+    ) async -> URL {
         guard let date = item.date else {
             return outputRoot.appendingPathComponent("Unknown Date", isDirectory: true)
         }
@@ -146,22 +190,62 @@ final class PhotoLibraryExporter: ObservableObject {
         let dayFormatter = DateFormatter()
         dayFormatter.dateFormat = "yyyy-MM-dd"
 
-        var dayName = dayFormatter.string(from: date)
-        if let location = item.location {
-            let geo = await geocoder.geocode(
-                latitude: location.coordinate.latitude,
-                longitude: location.coordinate.longitude
-            )
-            let parts = [geo.city, geo.state].compactMap { $0?.folderSafe }.prefix(2)
-            if !parts.isEmpty {
-                dayName += " " + parts.joined(separator: " ")
+        switch mode {
+        case .byYear:
+            return outputRoot.appendingPathComponent(String(year), isDirectory: true)
+        case .byYearMonth:
+            return outputRoot
+                .appendingPathComponent(String(year), isDirectory: true)
+                .appendingPathComponent(String(format: "%04d-%02d %@", year, month, monthName), isDirectory: true)
+        case .byExactDate:
+            return outputRoot
+                .appendingPathComponent(String(year), isDirectory: true)
+                .appendingPathComponent(String(format: "%04d-%02d %@", year, month, monthName), isDirectory: true)
+                .appendingPathComponent(dayFormatter.string(from: date), isDirectory: true)
+        case .byLocation:
+            return await locationFolder(for: item, outputRoot: outputRoot, fallbackYear: year)
+        case .smartHybrid:
+            var dayName = dayFormatter.string(from: date)
+            if includeLocation, let location = item.location {
+                let geo = await geocoder.geocode(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude
+                )
+                let parts = [geo.city, geo.state].compactMap { $0?.folderSafe }.prefix(2)
+                if !parts.isEmpty {
+                    dayName += " " + parts.joined(separator: " ")
+                }
             }
+
+            return outputRoot
+                .appendingPathComponent(String(year), isDirectory: true)
+                .appendingPathComponent(String(format: "%04d-%02d %@", year, month, monthName), isDirectory: true)
+                .appendingPathComponent(dayName.folderSafe, isDirectory: true)
+        }
+    }
+
+    private func locationFolder(for item: PhotoLibraryItem, outputRoot: URL, fallbackYear: Int) async -> URL {
+        guard let location = item.location else {
+            return outputRoot
+                .appendingPathComponent("Unknown Location", isDirectory: true)
+                .appendingPathComponent(String(fallbackYear), isDirectory: true)
+        }
+
+        let geo = await geocoder.geocode(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude
+        )
+        if !geo.folderComponents.isEmpty {
+            var url = outputRoot
+            for component in geo.folderComponents {
+                url.appendPathComponent(component, isDirectory: true)
+            }
+            return url
         }
 
         return outputRoot
-            .appendingPathComponent(String(year), isDirectory: true)
-            .appendingPathComponent(String(format: "%04d-%02d %@", year, month, monthName), isDirectory: true)
-            .appendingPathComponent(dayName.folderSafe, isDirectory: true)
+            .appendingPathComponent("Unknown Location", isDirectory: true)
+            .appendingPathComponent(String(fallbackYear), isDirectory: true)
     }
 
     private func preserveCreationDate(_ date: Date?, at url: URL) throws {

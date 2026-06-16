@@ -9,6 +9,9 @@ struct IOSPhotosExportView: View {
     @StateObject private var exporter = PhotoLibraryExporter()
     @State private var showingDestinationPicker = false
     @State private var destinationFolder: URL?
+    @State private var organizationMode: OrganizationMode = .smartHybrid
+    @State private var includeLocation = true
+    @State private var showingItemChooser = true
 
     var body: some View {
         NavigationStack {
@@ -16,6 +19,8 @@ struct IOSPhotosExportView: View {
                 VStack(spacing: 24) {
                     header
                     statusCard
+                    configurationPanel
+                    selectionPanel
                     actionArea
                     safetyNotes
                 }
@@ -103,11 +108,99 @@ struct IOSPhotosExportView: View {
                 stat("\(exporter.missingDateCount)", "No Date", "calendar.badge.exclamationmark")
             }
 
-            Text("Destination structure: Foldiq Export → Year → Month → Day, with location added when available.")
+            Text("\(exporter.selectedCount) of \(exporter.items.count) items selected for export.")
+                .font(.headline)
+
+            Text("Destination structure follows your selected organization mode below.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
+    }
+
+    @ViewBuilder
+    private var configurationPanel: some View {
+        if case .ready = exporter.phase {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("Organization", systemImage: "slider.horizontal.3")
+                    .font(.headline)
+
+                Picker("Folder structure", selection: $organizationMode) {
+                    ForEach(OrganizationMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Text(organizationMode.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if organizationMode == .smartHybrid {
+                    Toggle("Use location when available", isOn: $includeLocation)
+                        .toggleStyle(.switch)
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
+    @ViewBuilder
+    private var selectionPanel: some View {
+        if case .ready = exporter.phase {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Label("Choose Items", systemImage: "checklist")
+                        .font(.headline)
+                    Spacer()
+                    Text("\(exporter.selectedCount)/\(exporter.items.count)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { selectionButtons }
+                    VStack(spacing: 8) { selectionButtons }
+                }
+
+                DisclosureGroup(isExpanded: $showingItemChooser) {
+                    LazyVStack(spacing: 8) {
+                        ForEach(exporter.items) { item in
+                            Button {
+                                exporter.toggleSelection(for: item)
+                            } label: {
+                                PhotoSelectionRow(
+                                    item: item,
+                                    isSelected: exporter.selectedItemIDs.contains(item.id)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.top, 8)
+                } label: {
+                    Text("Review and deselect individual photos/videos")
+                        .font(.subheadline.weight(.semibold))
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
+    @ViewBuilder
+    private var selectionButtons: some View {
+        Button("All") { exporter.selectAll() }
+            .buttonStyle(.bordered)
+        Button("Photos") { exporter.selectPhotosOnly() }
+            .buttonStyle(.bordered)
+        Button("Videos") { exporter.selectVideosOnly() }
+            .buttonStyle(.bordered)
+        Button("Clear") { exporter.clearSelection() }
+            .buttonStyle(.bordered)
     }
 
     private var exportProgress: some View {
@@ -153,13 +246,20 @@ struct IOSPhotosExportView: View {
                     }
 
                     Button {
-                        Task { await exporter.export(to: destinationFolder) }
+                        Task {
+                            await exporter.export(
+                                to: destinationFolder,
+                                mode: organizationMode,
+                                includeLocation: includeLocation
+                            )
+                        }
                     } label: {
-                        Label("Export Organized Copies", systemImage: "square.and.arrow.down")
+                        Label("Export \(exporter.selectedCount) Organized Copies", systemImage: "square.and.arrow.down")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .disabled(exporter.selectedCount == 0)
                 }
             }
         case .failed:
@@ -210,6 +310,49 @@ struct IOSPhotosExportView: View {
 
         let formatted = ByteCountFormatter.string(fromByteCount: capacity, countStyle: .file)
         return "\(formatted) available at destination"
+    }
+}
+
+private struct PhotoSelectionRow: View {
+    let item: PhotoLibraryItem
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                .foregroundStyle(isSelected ? .blue : .secondary)
+
+            Image(systemName: item.kind == .video ? "video.fill" : "photo.fill")
+                .foregroundStyle(item.kind == .video ? .purple : .blue)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.filename)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(10)
+        .background(isSelected ? Color.blue.opacity(0.08) : Color.secondary.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var subtitle: String {
+        let kind = item.kind == .video ? "Video" : "Photo"
+        guard let date = item.date else { return "\(kind) · Unknown date" }
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return "\(kind) · \(formatter.string(from: date))"
     }
 }
 #endif
