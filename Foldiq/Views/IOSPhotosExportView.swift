@@ -473,24 +473,35 @@ struct IOSPhotosExportView: View {
         case .failed:
             VStack(spacing: 12) {
                 if exporter.hasLoadedItems {
+                    // Keep the user's existing selection — retry the SAME items,
+                    // don't silently rescan the whole library.
                     Button {
                         exporter.returnToReview()
                     } label: {
                         Label("Back to Review", systemImage: "arrow.backward")
                             .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                    Button {
+                        returnToStart()
+                    } label: {
+                        Label("Start Over", systemImage: "arrow.counterclockwise")
+                            .frame(maxWidth: .infinity)
+                    }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
+                } else {
+                    Button {
+                        startScan()
+                    } label: {
+                        Label("Try Again", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 }
-
-                Button {
-                    startScan()
-                } label: {
-                    Label(exporter.hasLoadedItems ? "Scan Again" : "Try Again", systemImage: "arrow.clockwise")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
             }
         }
     }
