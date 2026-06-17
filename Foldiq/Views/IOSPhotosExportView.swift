@@ -627,6 +627,17 @@ struct IOSPhotosExportView: View {
             Text("Foldiq never uploads your files or metadata to any server. All organization happens entirely on your device.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+
+            HStack(spacing: 16) {
+                if let privacy = URL(string: "https://foldiq.app/privacy") {
+                    Link("Privacy Policy", destination: privacy)
+                }
+                if let terms = URL(string: "https://foldiq.app/terms") {
+                    Link("Terms", destination: terms)
+                }
+            }
+            .font(.caption2.weight(.medium))
+            .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)

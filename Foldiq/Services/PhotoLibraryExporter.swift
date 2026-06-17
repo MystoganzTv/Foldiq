@@ -101,12 +101,12 @@ final class PhotoLibraryExporter: ObservableObject {
     func requestAccessAndScan() async {
         phase = .requestingAccess
 
-        // Foldiq only reads originals and writes copies to Files — it never modifies
-        // the Photos Library — so it requests read-only access (a less invasive prompt).
-        let status = PHPhotoLibrary.authorizationStatus(for: .read)
+        // PhotoKit requires `.readWrite` to read asset metadata and resources through
+        // `PHAsset`, even though Foldiq never modifies the Photos library itself.
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         let finalStatus: PHAuthorizationStatus
         if status == .notDetermined {
-            finalStatus = await PHPhotoLibrary.requestAuthorization(for: .read)
+            finalStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         } else {
             finalStatus = status
         }
@@ -252,6 +252,16 @@ final class PhotoLibraryExporter: ObservableObject {
 
                 try await Self.writeOriginalResource(for: item.asset, to: destination)
                 try preserveCreationDate(item.date, at: destination)
+
+                // Live Photo: export the paired video next to the still (IMG_x.HEIC +
+                // IMG_x.mov) so the motion isn't lost. Best-effort — a missing/failed
+                // video must not discard the still that already exported successfully.
+                if item.asset.mediaSubtypes.contains(.photoLive),
+                   let pairedURL = try? await Self.writePairedVideo(for: item.asset, besideStill: destination) {
+                    try? preserveCreationDate(item.date, at: pairedURL)
+                    reservedPaths.insert(pairedURL.path)
+                }
+
                 manifest[item.id] = Self.relativePath(of: destination, from: outputRoot)
                 exported += 1
             } catch {
@@ -481,7 +491,11 @@ final class PhotoLibraryExporter: ObservableObject {
         guard let resource = preferredResource(for: asset) else {
             throw ExportError.noOriginalResource
         }
+        try await writeData(of: resource, to: destination)
+    }
 
+    /// Writes a single asset resource to disk, streaming from iCloud if needed.
+    private nonisolated static func writeData(of resource: PHAssetResource, to destination: URL) async throws {
         let options = PHAssetResourceRequestOptions()
         options.isNetworkAccessAllowed = true
 
@@ -498,6 +512,25 @@ final class PhotoLibraryExporter: ObservableObject {
                 }
             }
         }
+    }
+
+    /// For a Live Photo, writes the paired motion video beside the still using the same
+    /// base name (e.g. `IMG_1234.HEIC` → `IMG_1234.mov`). Returns the video URL, or nil
+    /// if the asset has no paired video resource. The originals keep their Apple asset
+    /// identifier, so re-importing the two files re-pairs them into a Live Photo.
+    private nonisolated static func writePairedVideo(for asset: PHAsset, besideStill stillURL: URL) async throws -> URL? {
+        let resources = PHAssetResource.assetResources(for: asset)
+        guard let paired = resources.first(where: { $0.type == .fullSizePairedVideo })
+            ?? resources.first(where: { $0.type == .pairedVideo }) else {
+            return nil
+        }
+
+        let videoURL = stillURL.deletingPathExtension().appendingPathExtension("mov")
+        // Don't clobber an unrelated file that's already there.
+        guard !FileManager.default.fileExists(atPath: videoURL.path) else { return videoURL }
+
+        try await writeData(of: paired, to: videoURL)
+        return videoURL
     }
 
     private nonisolated static func preferredResource(for asset: PHAsset) -> PHAssetResource? {
