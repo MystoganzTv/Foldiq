@@ -827,6 +827,7 @@ extension FoldiqRelease {
             version: AppInfo.version,   // tracks the real bundle version, always matches the footer
             date: "June 2026",
             highlights: [
+                ("livephoto", "Live Photos stay whole — they export as a matching pair, the still and its motion video together, so nothing is lost."),
                 ("arrow.triangle.2.circlepath", "Smarter re-exports — Foldiq remembers what it already saved and skips it, so running an export again is fast and never re-downloads from iCloud."),
                 ("icloud.and.arrow.down", "Reliable iCloud downloads — full-resolution photos stored in iCloud now download correctly during export, with clearer messages if iCloud isn't ready."),
                 ("checkmark.shield", "Your selection is kept — if an export fails, Foldiq keeps your chosen photos so you can retry without scanning your whole library again."),
