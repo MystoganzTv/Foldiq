@@ -19,6 +19,11 @@ struct IOSPhotosExportView: View {
     @State private var showingSystemPicker = false
     @State private var pickedPhotoItems: [PhotosPickerItem] = []
 
+    // What's New / update news
+    @State private var showingWhatsNew = false
+    /// Stores the last app version for which the user has seen the What's New screen.
+    @AppStorage("lastSeenWhatsNewVersion") private var lastSeenWhatsNewVersion = ""
+
     private var filteredItems: [PhotoLibraryItem] {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return exporter.items }
@@ -44,12 +49,32 @@ struct IOSPhotosExportView: View {
                     selectionPanel
                     actionArea
                     safetyNotes
+                    privacyNote
+                    versionFooter
                 }
                 .padding(24)
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
             }
             .navigationTitle("Foldiq")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingWhatsNew = true
+                    } label: {
+                        Image(systemName: "sparkles")
+                    }
+                    .accessibilityLabel("What's New")
+                }
+            }
+            .sheet(isPresented: $showingWhatsNew, onDismiss: markWhatsNewSeen) {
+                WhatsNewView()
+            }
+            .onAppear {
+                if lastSeenWhatsNewVersion != AppInfo.version {
+                    showingWhatsNew = true
+                }
+            }
             .fileImporter(
                 isPresented: $showingDestinationPicker,
                 allowedContentTypes: [.folder],
@@ -593,6 +618,43 @@ struct IOSPhotosExportView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    // Privacy disclosure — same copy already approved for the Mac app (Settings → About),
+    // shown in-app rather than as a web page. "device" replaces "Mac" for iOS.
+    private var privacyNote: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("100% local processing", systemImage: "icloud.slash")
+                .font(.caption.weight(.medium))
+            Text("Foldiq never uploads your files or metadata to any server. All organization happens entirely on your device.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var versionFooter: some View {
+        Button {
+            showingWhatsNew = true
+        } label: {
+            VStack(spacing: 2) {
+                Text("Foldiq \(AppInfo.versionString)")
+                    .font(.caption2)
+                Text("What's New")
+                    .font(.caption2.weight(.medium))
+                    .underline()
+            }
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 4)
+    }
+
+    private func markWhatsNewSeen() {
+        lastSeenWhatsNewVersion = AppInfo.version
+    }
+
     private func stat(_ value: String, _ label: String, _ icon: String) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
@@ -730,6 +792,112 @@ private extension PhotoLibraryItem {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
+    }
+}
+
+// MARK: ─── What's New ──────────────────────────────────────────────────────────
+
+/// A single release entry shown in the What's New / update news screen.
+struct FoldiqRelease: Identifiable {
+    let id = UUID()
+    /// Marketing version this entry describes, e.g. "1.0.4".
+    let version: String
+    /// Human-readable date label, e.g. "June 2026".
+    let date: String
+    /// Bullet points: (SF Symbol name, text).
+    let highlights: [(symbol: String, text: String)]
+}
+
+extension FoldiqRelease {
+    /// ⬇️ EDIT ME — paste your real update notes here. Newest version first.
+    /// The top entry is what auto-shows when users update to a new version.
+    static let all: [FoldiqRelease] = [
+        FoldiqRelease(
+            version: AppInfo.version,   // tracks the real bundle version, always matches the footer
+            date: "June 2026",
+            highlights: [
+                ("arrow.triangle.2.circlepath", "Smarter re-exports — Foldiq remembers what it already saved and skips it, so running an export again is fast and never re-downloads from iCloud."),
+                ("icloud.and.arrow.down", "Reliable iCloud downloads — full-resolution photos stored in iCloud now download correctly during export, with clearer messages if iCloud isn't ready."),
+                ("checkmark.shield", "Your selection is kept — if an export fails, Foldiq keeps your chosen photos so you can retry without scanning your whole library again."),
+                ("sparkles", "Refreshed look — cleaner selection chips, a tidier review screen, and a simpler one-tap finish.")
+            ]
+        )
+    ]
+}
+
+struct WhatsNewView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    header
+
+                    ForEach(FoldiqRelease.all) { release in
+                        releaseSection(release)
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
+            }
+            .navigationTitle("What's New")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 52, weight: .thin))
+                .foregroundStyle(
+                    LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+            Text("Updates to Foldiq")
+                .font(.largeTitle.bold())
+                .multilineTextAlignment(.center)
+            Text("News about what's new and improved in the app.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func releaseSection(_ release: FoldiqRelease) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Version \(release.version)")
+                    .font(.title3.bold())
+                Spacer()
+                Text(release.date)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(release.highlights.enumerated()), id: \.offset) { _, item in
+                    Label {
+                        Text(item.text)
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: item.symbol)
+                            .foregroundStyle(.blue)
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.blue.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 #endif

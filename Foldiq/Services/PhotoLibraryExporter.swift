@@ -101,10 +101,12 @@ final class PhotoLibraryExporter: ObservableObject {
     func requestAccessAndScan() async {
         phase = .requestingAccess
 
-        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        // Foldiq only reads originals and writes copies to Files — it never modifies
+        // the Photos Library — so it requests read-only access (a less invasive prompt).
+        let status = PHPhotoLibrary.authorizationStatus(for: .read)
         let finalStatus: PHAuthorizationStatus
         if status == .notDetermined {
-            finalStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+            finalStatus = await PHPhotoLibrary.requestAuthorization(for: .read)
         } else {
             finalStatus = status
         }
@@ -180,6 +182,13 @@ final class PhotoLibraryExporter: ObservableObject {
         phase = .exporting
         progress = ExportProgress(done: 0, total: exportItems.count, currentFile: "")
 
+        // Pre-flight: if we can read the destination's free space and it's critically
+        // low, stop before downloading anything instead of failing item by item.
+        if let free = Self.availableCapacity(at: destinationFolder), free < Self.minimumFreeSpace {
+            phase = .failed("The destination is out of free space. Free up some space and try again.")
+            return
+        }
+
         do {
             try FileManager.default.createDirectory(at: outputRoot, withIntermediateDirectories: true)
         } catch {
@@ -192,8 +201,10 @@ final class PhotoLibraryExporter: ObservableObject {
         var failures: [FailedExport] = []
         var reservedPaths = Set<String>()
 
-        // Incremental re-export: a manifest of asset IDs already exported to this
-        // folder lets repeat runs skip what's done — without re-downloading from iCloud.
+        // Incremental re-export: a manifest mapping each exported asset ID to its file
+        // path lets repeat runs skip what's done — without re-downloading from iCloud.
+        // Storing the path (not just the ID) means a file the user deleted from the
+        // destination is detected as missing and re-exported, instead of being skipped.
         var manifest = Self.loadManifest(at: outputRoot)
 
         for (index, item) in exportItems.enumerated() {
@@ -202,10 +213,16 @@ final class PhotoLibraryExporter: ObservableObject {
                 return
             }
 
-            progress = ExportProgress(done: index + 1, total: exportItems.count, currentFile: item.filename)
+            // `done` reflects items already finished; the current item is shown by
+            // name but not counted until it actually completes (iCloud downloads can
+            // take a while, so we don't want the bar to jump ahead of real progress).
+            progress = ExportProgress(done: index, total: exportItems.count, currentFile: item.filename)
 
-            // Already exported here in a previous run → skip, no download.
-            if manifest.contains(item.id) {
+            // Already exported here in a previous run AND the file is still on disk →
+            // skip, no download. If the recorded file was deleted (or the legacy
+            // manifest stored no path), fall through and re-verify/re-export below.
+            if let recordedPath = manifest[item.id], !recordedPath.isEmpty,
+               FileManager.default.fileExists(atPath: outputRoot.appendingPathComponent(recordedPath).path) {
                 skipped += 1
                 continue
             }
@@ -222,10 +239,10 @@ final class PhotoLibraryExporter: ObservableObject {
                 let intended = folder.appendingPathComponent(item.filename)
 
                 // A matching file is already on disk from an earlier export (manifest
-                // missing/old). Treat it as done so we don't duplicate or re-download.
+                // missing/legacy). Record its path and treat it as done — no re-download.
                 if !reservedPaths.contains(intended.path),
                    FileManager.default.fileExists(atPath: intended.path) {
-                    manifest.insert(item.id)
+                    manifest[item.id] = Self.relativePath(of: intended, from: outputRoot)
                     skipped += 1
                     continue
                 }
@@ -235,9 +252,18 @@ final class PhotoLibraryExporter: ObservableObject {
 
                 try await Self.writeOriginalResource(for: item.asset, to: destination)
                 try preserveCreationDate(item.date, at: destination)
-                manifest.insert(item.id)
+                manifest[item.id] = Self.relativePath(of: destination, from: outputRoot)
                 exported += 1
             } catch {
+                // Out of space: stop the whole export rather than failing every
+                // remaining item. The manifest is saved so a later run resumes.
+                if Self.isOutOfSpace(error) {
+                    progress = ExportProgress(done: index, total: exportItems.count, currentFile: "")
+                    Self.saveManifest(manifest, at: outputRoot)
+                    phase = .failed("Ran out of space at the destination after exporting \(exported). Free up space and run the export again — Foldiq picks up where it left off.")
+                    return
+                }
+
                 failures.append(FailedExport(
                     id: item.id,
                     filename: item.filename,
@@ -246,6 +272,7 @@ final class PhotoLibraryExporter: ObservableObject {
             }
         }
 
+        progress = ExportProgress(done: exportItems.count, total: exportItems.count, currentFile: "")
         Self.saveManifest(manifest, at: outputRoot)
         phase = .completed(outputRoot, exported, skipped, failures)
     }
@@ -284,10 +311,11 @@ final class PhotoLibraryExporter: ObservableObject {
         let calendar = Calendar.current
         let year = calendar.component(.year, from: date)
         let month = calendar.component(.month, from: date)
-        let monthName = DateFormatter().monthSymbols[month - 1]
-
-        let dayFormatter = DateFormatter()
-        dayFormatter.dateFormat = "yyyy-MM-dd"
+        let day = calendar.component(.day, from: date)
+        // Use fixed English month names and a manual day string so folder names are
+        // stable regardless of the device's language/region.
+        let monthName = Self.englishMonthSymbols[month - 1]
+        let dayString = String(format: "%04d-%02d-%02d", year, month, day)
 
         switch mode {
         case .byYear:
@@ -300,11 +328,11 @@ final class PhotoLibraryExporter: ObservableObject {
             return outputRoot
                 .appendingPathComponent(String(year), isDirectory: true)
                 .appendingPathComponent(String(format: "%04d-%02d %@", year, month, monthName), isDirectory: true)
-                .appendingPathComponent(dayFormatter.string(from: date), isDirectory: true)
+                .appendingPathComponent(dayString, isDirectory: true)
         case .byLocation:
             return await locationFolder(for: item, outputRoot: outputRoot, fallbackYear: year)
         case .smartHybrid:
-            var dayName = dayFormatter.string(from: date)
+            var dayName = dayString
             if includeLocation, let location = item.location {
                 let geo = await geocoder.geocode(
                     latitude: location.coordinate.latitude,
@@ -426,7 +454,10 @@ final class PhotoLibraryExporter: ObservableObject {
         let options = PHImageRequestOptions()
         options.isNetworkAccessAllowed = true            // download from iCloud if needed
         options.deliveryMode = .highQualityFormat
-        options.version = .current
+        // Export the true original capture, ignoring in-app edits/crops. This matches
+        // the video path (fullSizeVideo) and the app's "originals" promise, and keeps
+        // the exported data in its original format so the filename extension is correct.
+        options.version = .unadjusted
         options.isSynchronous = false
 
         let data: Data = try await withCheckedThrowingContinuation { continuation in
@@ -551,20 +582,38 @@ final class PhotoLibraryExporter: ObservableObject {
 
     private nonisolated static let manifestFilename = ".foldiq-export-manifest.json"
 
-    /// Asset IDs already exported into this output folder (empty if none/first run).
-    private nonisolated static func loadManifest(at outputRoot: URL) -> Set<String> {
+    /// Map of asset ID → path (relative to the output folder) of its exported file.
+    /// Empty if none/first run.
+    private nonisolated static func loadManifest(at outputRoot: URL) -> [String: String] {
         let url = outputRoot.appendingPathComponent(manifestFilename)
-        guard let data = try? Data(contentsOf: url),
-              let ids = try? JSONDecoder().decode([String].self, from: data) else {
-            return []
+        guard let data = try? Data(contentsOf: url) else { return [:] }
+
+        // Current format: { assetID: relativePath }.
+        if let map = try? JSONDecoder().decode([String: String].self, from: data) {
+            return map
         }
-        return Set(ids)
+        // Legacy format: [ assetID ] with no paths — keep the IDs, paths unknown ("").
+        // These get their path back (or are re-exported) on the next run.
+        if let ids = try? JSONDecoder().decode([String].self, from: data) {
+            return Dictionary(ids.map { ($0, "") }, uniquingKeysWith: { first, _ in first })
+        }
+        return [:]
     }
 
-    private nonisolated static func saveManifest(_ ids: Set<String>, at outputRoot: URL) {
+    private nonisolated static func saveManifest(_ manifest: [String: String], at outputRoot: URL) {
         let url = outputRoot.appendingPathComponent(manifestFilename)
-        guard let data = try? JSONEncoder().encode(Array(ids).sorted()) else { return }
+        guard let data = try? JSONEncoder().encode(manifest) else { return }
         try? data.write(to: url, options: .atomic)
+    }
+
+    /// Path of `url` relative to `root` (the output folder), used as the manifest value
+    /// so deleted files can be detected regardless of where the folder later lives.
+    private nonisolated static func relativePath(of url: URL, from root: URL) -> String {
+        let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        if url.path.hasPrefix(rootPath) {
+            return String(url.path.dropFirst(rootPath.count))
+        }
+        return url.lastPathComponent
     }
 
     private nonisolated static func resolveCollision(_ url: URL, reserved: inout Set<String>) -> URL {
@@ -585,6 +634,36 @@ final class PhotoLibraryExporter: ObservableObject {
         } while reserved.contains(candidate.path) || FileManager.default.fileExists(atPath: candidate.path)
 
         return candidate
+    }
+
+    /// English month names ("January"…"December"), computed once, so folder names are
+    /// independent of the device locale. `[String]` is Sendable, unlike DateFormatter.
+    private nonisolated static let englishMonthSymbols: [String] = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter.monthSymbols
+    }()
+
+    // MARK: - Free-space checks
+
+    /// Minimum free space (bytes) required before an export starts. Below this we stop
+    /// up front instead of downloading items that can't be written.
+    private nonisolated static let minimumFreeSpace: Int64 = 50 * 1024 * 1024  // 50 MB
+
+    /// Free space available at `url`'s volume, or nil if it can't be read (e.g. some
+    /// external/USB or cloud destinations) — in which case we skip the pre-flight guard.
+    private nonisolated static func availableCapacity(at url: URL) -> Int64? {
+        guard let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]) else {
+            return nil
+        }
+        return values.volumeAvailableCapacityForImportantUsage
+    }
+
+    /// True when an error means the destination volume is full.
+    private nonisolated static func isOutOfSpace(_ error: Error) -> Bool {
+        let ns = error as NSError
+        return (ns.domain == NSPOSIXErrorDomain && ns.code == Int(ENOSPC))
+            || (ns.domain == NSCocoaErrorDomain && ns.code == 640)
     }
 
     private nonisolated static func humanize(_ error: Error) -> String {
@@ -626,14 +705,9 @@ private extension String {
             .joined(separator: "_")
     }
 
-    var folderSafe: String {
-        let illegal = CharacterSet(charactersIn: ":/\\?*|\"<>")
-        return components(separatedBy: illegal).joined(separator: "_")
-    }
-
+    // `folderSafe` is defined once in ReverseGeocoder.swift and shared module-wide.
     var filenameSafe: String {
-        let illegal = CharacterSet(charactersIn: ":/\\?*|\"<>")
-        let cleaned = components(separatedBy: illegal).joined(separator: "_")
+        let cleaned = folderSafe
         return cleaned.isEmpty ? "Foldiq_Asset" : cleaned
     }
 }

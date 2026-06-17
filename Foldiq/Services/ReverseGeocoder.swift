@@ -100,8 +100,9 @@ actor ReverseGeocoder: LocationGeocoding {
 
 // MARK: - String helper
 
-private extension String {
-    /// Replace characters not safe in folder names with underscores.
+extension String {
+    /// Replace characters not safe in folder/file names with underscores.
+    /// Canonical definition shared across the app (used here and by the exporter).
     var folderSafe: String {
         let illegal = CharacterSet(charactersIn: ":/\\?*|\"<>")
         return components(separatedBy: illegal).joined(separator: "_")
