@@ -391,40 +391,21 @@ struct IOSPhotosExportView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.large)
             }
-        case .ready, .completed:
+        case .ready:
             VStack(spacing: 12) {
-                // Primary action first: pick the destination, then export.
-                if destinationFolder == nil {
-                    Button {
-                        showingDestinationPicker = true
-                    } label: {
-                        Label("Choose Export Folder", systemImage: "folder.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                } else {
-                    Button {
-                        showingDestinationPicker = true
-                    } label: {
-                        Label("Change Export Folder", systemImage: "folder.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                }
-
                 if let destinationFolder {
-                    Text(destinationFolder.path)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-
-                    if let capacity = availableCapacityText(for: destinationFolder) {
-                        Label(capacity, systemImage: "internaldrive")
-                            .font(.caption)
+                    VStack(spacing: 4) {
+                        Text(destinationFolder.path)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+
+                        if let capacity = availableCapacityText(for: destinationFolder) {
+                            Label(capacity, systemImage: "internaldrive")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     Button {
@@ -436,27 +417,57 @@ struct IOSPhotosExportView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(exporter.selectedCount == 0)
-                }
 
-                // Secondary navigation last.
-                if case .completed = exporter.phase {
+                    HStack(spacing: 20) {
+                        Button {
+                            showingDestinationPicker = true
+                        } label: {
+                            Text("Change folder")
+                                .font(.subheadline)
+                                .foregroundStyle(.blue)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            returnToStart()
+                        } label: {
+                            Text("Back to start")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 2)
+                } else {
                     Button {
-                        exporter.returnToReview()
+                        showingDestinationPicker = true
                     } label: {
-                        Label("Back to Review", systemImage: "arrow.backward")
+                        Label("Choose Export Folder", systemImage: "folder.badge.plus")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                }
 
+                    Button {
+                        returnToStart()
+                    } label: {
+                        Text("Back to start")
+                            .font(.subheadline)
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                }
+            }
+        case .completed:
+            VStack(spacing: 12) {
                 Button {
                     returnToStart()
                 } label: {
-                    Label("Back to Start", systemImage: "arrow.backward")
+                    Label("Done", systemImage: "checkmark")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             }
         case .exporting:
