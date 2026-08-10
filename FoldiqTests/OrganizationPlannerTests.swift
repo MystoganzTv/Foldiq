@@ -190,6 +190,31 @@ final class OrganizationPlannerTests: XCTestCase {
             "/Users/tester/Photos/Organized Media/Duplicates/Exact Duplicates/IMG_DUP.JPG"
         )
     }
+
+    func testReviewPromptRequiresASuccessfulOrganizationAndOnlyRequestsOnce() {
+        let suiteName = "AppReviewPromptPolicyTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertFalse(
+            AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                successfulItemCount: 0,
+                defaults: defaults
+            )
+        )
+        XCTAssertTrue(
+            AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                successfulItemCount: 12,
+                defaults: defaults
+            )
+        )
+        XCTAssertFalse(
+            AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                successfulItemCount: 4,
+                defaults: defaults
+            )
+        )
+    }
 }
 
 private struct StubGeocoder: LocationGeocoding {

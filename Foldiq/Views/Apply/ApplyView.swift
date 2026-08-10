@@ -3,11 +3,13 @@
 
 import SwiftUI
 import SwiftData
+import StoreKit
 
 struct ApplyView: View {
 
     @EnvironmentObject private var nav: AppNavigator
     @Environment(\.modelContext) private var context
+    @Environment(\.requestReview) private var requestReview
 
     @State private var progress: FileMover.ApplyProgress = .init(done: 0, total: 1, currentFile: "", errors: [])
     @State private var isComplete = false
@@ -183,7 +185,17 @@ struct ApplyView: View {
                     skipping: nav.organizationConfig.outputFolderName
                 )
             }
+            let shouldRequestReview = m.entries.count == plans.count &&
+                AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                    successfulItemCount: m.entries.count
+                )
             isComplete = true
+
+            if shouldRequestReview {
+                // Let the success state settle before showing Apple's standard prompt.
+                try? await Task.sleep(for: .seconds(2))
+                requestReview()
+            }
         }
     }
 }

@@ -4,10 +4,12 @@
 import SwiftUI
 import Photos
 import PhotosUI
+import StoreKit
 import UniformTypeIdentifiers
 
 #if !os(macOS)
 struct IOSPhotosExportView: View {
+    @Environment(\.requestReview) private var requestReview
     @StateObject private var exporter = PhotoLibraryExporter()
     @State private var showingDestinationPicker = false
     @State private var destinationFolder: URL?
@@ -568,6 +570,25 @@ struct IOSPhotosExportView: View {
                 mode: organizationMode,
                 includeLocation: includeLocation
             )
+
+            var shouldRequestReview = false
+            if case .completed(_, let exported, let skipped, let failures) = exporter.phase,
+               failures.isEmpty {
+                shouldRequestReview = AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                    successfulItemCount: exported + skipped
+                )
+            }
+
+            if shouldRequestReview {
+                // Let the completion card appear before showing Apple's standard prompt.
+                do {
+                    try await Task.sleep(for: .seconds(2))
+                } catch {
+                    activeTask = nil
+                    return
+                }
+                requestReview()
+            }
             activeTask = nil
         }
     }

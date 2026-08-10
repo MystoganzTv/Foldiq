@@ -1,4 +1,25 @@
 import SwiftUI
+import Foundation
+
+/// Keeps Apple's review request tied to a real success moment and prevents the
+/// app from asking the same person repeatedly.
+enum AppReviewPromptPolicy {
+    private static let hasRequestedAfterSuccessfulOrganizationKey =
+        "hasRequestedReviewAfterSuccessfulOrganization"
+
+    static func shouldRequestAfterSuccessfulOrganization(
+        successfulItemCount: Int,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        guard successfulItemCount > 0,
+              !defaults.bool(forKey: hasRequestedAfterSuccessfulOrganizationKey) else {
+            return false
+        }
+
+        defaults.set(true, forKey: hasRequestedAfterSuccessfulOrganizationKey)
+        return true
+    }
+}
 
 #if os(macOS)
 import AppKit
