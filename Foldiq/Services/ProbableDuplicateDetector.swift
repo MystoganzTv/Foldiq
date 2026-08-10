@@ -58,6 +58,7 @@ final class ProbableDuplicateDetector {
         let stem: String          // normalized: lowercase, no extension
         let fileSize: Int64
         let bestDate: Date?       // dateTaken ?? dateCreated ?? dateModified
+        let hasCaptureDate: Bool  // true only for EXIF/container capture metadata
         let pixelWidth: Int?
         let pixelHeight: Int?
         let isExactDuplicate: Bool
@@ -93,6 +94,7 @@ final class ProbableDuplicateDetector {
                 stem:            Self.normalizedStem(f.filename),
                 fileSize:        f.fileSize,
                 bestDate:        f.dateTaken ?? f.dateCreated ?? f.dateModified,
+                hasCaptureDate:  f.dateTaken != nil,
                 pixelWidth:      f.pixelWidth,
                 pixelHeight:     f.pixelHeight,
                 isExactDuplicate: f.isDuplicate,
@@ -260,7 +262,7 @@ final class ProbableDuplicateDetector {
         func rank(_ s: FileSnapshot) -> Int {
             var r = 0
             if !s.isFromArchive { r += 100 }
-            if s.bestDate != nil { r += 10 }
+            if s.hasCaptureDate { r += 10 }
             r -= s.pathDepth          // deeper path = lower rank
             return r
         }

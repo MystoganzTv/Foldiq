@@ -374,9 +374,16 @@ extension OrganizationConfig {
         }
 
         // If rootURL is a file (archive), base the output in its parent directory.
+        // A previously selected folder may no longer exist when a saved session is
+        // reopened; in that case, keep treating folder-like paths as folders instead
+        // of silently moving the output one level up. Foldiq only accepts ZIP files
+        // as file roots, so the extension is a reliable fallback discriminator.
         var isDir: ObjCBool = false
-        FileManager.default.fileExists(atPath: rootURL.path, isDirectory: &isDir)
-        let base = isDir.boolValue ? rootURL : rootURL.deletingLastPathComponent()
+        let exists = FileManager.default.fileExists(atPath: rootURL.path, isDirectory: &isDir)
+        let isArchiveFile = exists
+            ? !isDir.boolValue
+            : rootURL.pathExtension.lowercased() == "zip"
+        let base = isArchiveFile ? rootURL.deletingLastPathComponent() : rootURL
 
         guard base.lastPathComponent != outputFolderName else { return base }
         return base.appendingPathComponent(outputFolderName)

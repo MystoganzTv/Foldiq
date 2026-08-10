@@ -120,6 +120,9 @@ final class ProbableDuplicateDetectorTests: XCTestCase {
                                    fileSize: 3_000_000, date: now, width: 3024, height: 4032)
         let withoutDate = makeFile(path: "/b/IMG_7777.JPG", filename: "IMG_7777.JPG",
                                    fileSize: 3_000_000, date: nil, width: 3024, height: 4032)
+        // A filesystem timestamp lets the pair reach the confidence threshold,
+        // while only `withDate` has authoritative EXIF capture metadata.
+        withoutDate.dateModified = now
 
         _ = await ProbableDuplicateDetector().detect(files: [withDate, withoutDate]) { _ in }
 

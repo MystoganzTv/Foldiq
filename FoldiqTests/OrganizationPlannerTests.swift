@@ -56,6 +56,17 @@ final class OrganizationPlannerTests: XCTestCase {
         )
     }
 
+    func testMissingZipRootPlacesOutputBesideArchive() {
+        var config = OrganizationConfig()
+        config.outputFolderName = "Sorted Library"
+
+        let output = config.outputRoot(
+            forSelectedRoot: URL(fileURLWithPath: "/Users/tester/Imports/photos.zip")
+        )
+
+        XCTAssertEqual(output.path, "/Users/tester/Imports/Sorted Library")
+    }
+
     func testByLocationUsesGeocodedHierarchyWhenGPSIsAvailable() async {
         let session = makeSession(
             rootPath: "/Users/tester/Photos",
