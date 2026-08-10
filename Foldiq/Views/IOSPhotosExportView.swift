@@ -69,6 +69,8 @@ struct IOSPhotosExportView: View {
             }
             .sheet(isPresented: $showingWhatsNew, onDismiss: markWhatsNewSeen) {
                 WhatsNewView()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
             .onAppear {
                 if lastSeenWhatsNewVersion != AppInfo.version {
