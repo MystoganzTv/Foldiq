@@ -41,7 +41,12 @@
     "mac": {
       "target": ["dmg"],
       "icon": "assets/icon.icns",
-      "category": "public.app-category.photography"
+      "category": "public.app-category.photography",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
+      "notarize": true
     },
     "nsis": {
       "oneClick": false,

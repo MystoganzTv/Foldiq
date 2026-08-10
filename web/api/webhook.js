@@ -24,7 +24,11 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 const SITE = 'https://foldiq.app';
 const OWNER_EMAIL = 'enrique.padron853@gmail.com';
-const DOWNLOAD_URL = 'https://github.com/MystoganzTv/Foldiq/releases/download/1.0/Foldiq-1.0.dmg';
+
+// Windows ships from GitHub Releases; `latest` so the link never goes stale.
+// Mac ships from the App Store (Apple-signed + notarized) and is not sold here.
+const WINDOWS_DOWNLOAD_URL = 'https://github.com/MystoganzTv/Foldiq/releases/latest/download/Foldiq-Setup.exe';
+const MAC_APP_STORE_URL = 'https://apps.apple.com/us/app/foldiq/id6772513569';
 
 // Read the raw request body as a Buffer.
 async function readRawBody(req) {
@@ -36,7 +40,15 @@ async function readRawBody(req) {
 }
 
 // ── Email template ────────────────────────────────────────────────────────────
-function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount }) {
+function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount, platform }) {
+  const isMac = platform === 'mac';
+  const productLabel = isMac ? 'Foldiq for Mac' : 'Foldiq for Windows';
+  const platformNote = isMac
+    ? 'One-time purchase · Lifetime license · Delivered via the Mac App Store'
+    : 'One-time purchase · Lifetime license · All future updates';
+  const downloadUrl = isMac ? MAC_APP_STORE_URL : WINDOWS_DOWNLOAD_URL;
+  const downloadLabel = isMac ? ' Open on the Mac App Store' : '⬇ Download Foldiq for Windows';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -77,12 +89,12 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
           <!-- Line item -->
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
             <tr>
-              <td style="font-size:15px;font-weight:600;color:#0F172A;">Foldiq for Mac</td>
+              <td style="font-size:15px;font-weight:600;color:#0F172A;">${productLabel}</td>
               <td align="right" style="font-size:15px;font-weight:700;color:#0F172A;">${amount}</td>
             </tr>
             <tr>
               <td style="font-size:13px;color:#64748B;padding-top:4px;">
-                One-time purchase · Lifetime license · All future updates
+                ${platformNote}
               </td>
               <td></td>
             </tr>
@@ -100,11 +112,11 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
           <!-- Download button -->
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
             <tr><td align="center">
-              <a href="${DOWNLOAD_URL}"
+              <a href="${downloadUrl}"
                  style="display:inline-block;background:#3B82F6;color:#ffffff;
                         font-size:16px;font-weight:700;text-decoration:none;
                         padding:16px 36px;border-radius:12px;">
-                ⬇ Download Foldiq 1.0
+                ${downloadLabel}
               </a>
             </td></tr>
           </table>
@@ -178,6 +190,7 @@ export default async function handler(req, res) {
   const session = stripeEvent.data.object;
   const customerEmail = session.customer_details?.email || session.customer_email;
   const customerName  = session.customer_details?.name || '';
+  const platform      = session.metadata?.platform === 'mac' ? 'mac' : 'windows';
   const amountTotal   = session.amount_total || 499;
   const amount        = `$${(amountTotal / 100).toFixed(2)}`;
   const invoiceId     = session.id.replace('cs_live_', '').replace('cs_test_', '').slice(0, 16).toUpperCase();
@@ -189,7 +202,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const html = buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount });
+  const html = buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount, platform });
 
   try {
     await resend.emails.send({
@@ -199,11 +212,18 @@ export default async function handler(req, res) {
       html,
     });
 
+    // Owner notification. Keep the payment_intent in the subject so a refund or
+    // support request can be traced back to Stripe in one search.
     await resend.emails.send({
       from: 'Foldiq <receipts@foldiq.app>',
       to: OWNER_EMAIL,
-      subject: `[New Sale] Foldiq ${amount} — ${customerEmail}`,
-      html,
+      subject: `[New Sale] Foldiq ${platform} ${amount} — ${customerEmail}`,
+      html: `<p style="font-family:monospace;font-size:13px;color:#475569;">
+               platform: ${platform}<br/>
+               payment_intent: ${session.payment_intent || '—'}<br/>
+               checkout_session: ${session.id}<br/>
+               country: ${session.customer_details?.address?.country || '—'}
+             </p>${html}`,
     });
 
     console.log(`Receipt sent to ${customerEmail} and ${OWNER_EMAIL}`);

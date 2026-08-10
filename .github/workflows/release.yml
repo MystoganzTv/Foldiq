@@ -74,8 +74,49 @@ jobs:
           cp assets/icon.png assets/icon.iconset/icon_512x512@2x.png
           iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
-      - name: Build (Vite + Electron macOS)
+      # The .dmg MUST be signed with a Developer ID Application certificate and
+      # notarized by Apple. An unsigned build downloads fine but macOS Gatekeeper
+      # refuses to launch it with "Foldiq is damaged and cannot be opened."
+      - name: Verify signing secrets are present
+        run: |
+          missing=""
+          [ -z "$MAC_CERTIFICATE_P12" ]      && missing="$missing MAC_CERTIFICATE_P12"
+          [ -z "$MAC_CERTIFICATE_PASSWORD" ] && missing="$missing MAC_CERTIFICATE_PASSWORD"
+          [ -z "$APPLE_ID" ]                 && missing="$missing APPLE_ID"
+          [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] && missing="$missing APPLE_APP_SPECIFIC_PASSWORD"
+          [ -z "$APPLE_TEAM_ID" ]            && missing="$missing APPLE_TEAM_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing — refusing to ship an unsigned macOS build."
+            exit 1
+          fi
+        env:
+          MAC_CERTIFICATE_P12: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build, sign & notarize (Vite + Electron macOS)
         run: npx vite build && npx electron-builder --mac
+        env:
+          # Developer ID Application cert, base64-encoded .p12
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
+          # Consumed by electron-builder's `mac.notarize: true`
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify signature & notarization ticket
+        run: |
+          APP="dist-electron/mac-arm64/Foldiq.app"
+          [ -d "$APP" ] || APP="dist-electron/mac/Foldiq.app"
+          echo "Checking $APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          # Fails unless a stapled notarization ticket is present.
+          spctl --assess --type execute --verbose=4 "$APP"
+          xcrun stapler validate "$APP"
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
