@@ -84,7 +84,6 @@ jobs:
           [ -z "$MAC_CERTIFICATE_PASSWORD" ] && missing="$missing MAC_CERTIFICATE_PASSWORD"
           [ -z "$APPLE_ID" ]                 && missing="$missing APPLE_ID"
           [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] && missing="$missing APPLE_APP_SPECIFIC_PASSWORD"
-          [ -z "$APPLE_TEAM_ID" ]            && missing="$missing APPLE_TEAM_ID"
           if [ -n "$missing" ]; then
             echo "::error::Missing repository secrets:$missing — refusing to ship an unsigned macOS build."
             exit 1
@@ -94,7 +93,6 @@ jobs:
           MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Build, sign & notarize (Vite + Electron macOS)
         run: npx vite build && npx electron-builder --mac
@@ -103,10 +101,10 @@ jobs:
           CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12 }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'true'
-          # Consumed by electron-builder's `mac.notarize: true`
+          # Consumed by electron-builder's mac notarization config. The public
+          # Apple team ID is pinned in desktop/package.json.
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Verify signature & notarization ticket
         run: |

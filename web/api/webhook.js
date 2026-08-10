@@ -1,6 +1,7 @@
 // Vercel Serverless Function — Stripe webhook handler.
-// Listens for checkout.session.completed and emails a receipt + download link
-// via Resend to the customer, plus a copy to the owner.
+// Listens for checkout.session.completed and emails an order confirmation with
+// the download link via Resend, plus a sale notification to the owner. Stripe's
+// own "Successful payments" email is the authoritative payment receipt.
 //
 // IMPORTANT: bodyParser is disabled so Stripe can verify the raw request body.
 //
@@ -30,8 +31,27 @@ const OWNER_EMAIL = 'enrique.padron853@gmail.com';
 const WINDOWS_DOWNLOAD_URL = 'https://github.com/MystoganzTv/Foldiq/releases/latest/download/Foldiq-Setup.exe';
 const MAC_APP_STORE_URL = 'https://apps.apple.com/us/app/foldiq/id6772513569';
 
-// Read the raw request body as a Buffer.
-async function readRawBody(req) {
+// Vercel may expose the body directly or leave it on the request stream,
+// depending on the function runtime. Stripe must receive the exact bytes when
+// possible; the parsed-object fallback covers Vercel runtimes that consume the
+// stream before invoking the function.
+export async function readRawBody(req) {
+  if (Buffer.isBuffer(req.body)) {
+    return req.body;
+  }
+
+  if (req.body instanceof Uint8Array) {
+    return Buffer.from(req.body);
+  }
+
+  if (typeof req.body === 'string') {
+    return Buffer.from(req.body);
+  }
+
+  if (req.body && typeof req.body === 'object') {
+    return Buffer.from(JSON.stringify(req.body));
+  }
+
   const chunks = [];
   for await (const chunk of req) {
     chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
@@ -39,8 +59,23 @@ async function readRawBody(req) {
   return Buffer.concat(chunks);
 }
 
+export function escapeHTML(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function assertEmailSent(result, label) {
+  if (result?.error) {
+    throw new Error(`${label}: ${result.error.message || 'unknown Resend error'}`);
+  }
+}
+
 // ── Email template ────────────────────────────────────────────────────────────
-function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount, platform }) {
+export function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount, platform }) {
   const isMac = platform === 'mac';
   const productLabel = isMac ? 'Foldiq for Mac' : 'Foldiq for Windows';
   const platformNote = isMac
@@ -48,13 +83,18 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
     : 'One-time purchase · Lifetime license · All future updates';
   const downloadUrl = isMac ? MAC_APP_STORE_URL : WINDOWS_DOWNLOAD_URL;
   const downloadLabel = isMac ? ' Open on the Mac App Store' : '⬇ Download Foldiq for Windows';
+  const safeCustomerName = escapeHTML(customerName || 'there');
+  const safeCustomerEmail = escapeHTML(customerEmail);
+  const safeInvoiceId = escapeHTML(invoiceId);
+  const safeDate = escapeHTML(date);
+  const safeAmount = escapeHTML(amount);
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Your Foldiq Receipt</title>
+  <title>Your Foldiq Order</title>
 </head>
 <body style="margin:0;padding:0;background:#F8FAFC;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;padding:48px 0;">
@@ -74,13 +114,13 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
 
           <!-- Header -->
           <p style="margin:0 0 4px;font-size:13px;font-weight:600;letter-spacing:.08em;
-                    text-transform:uppercase;color:#3B82F6;">Receipt</p>
+                    text-transform:uppercase;color:#3B82F6;">Order confirmation</p>
           <h1 style="margin:0 0 8px;font-size:26px;font-weight:800;color:#0F172A;">
             Thanks for your purchase!
           </h1>
           <p style="margin:0 0 32px;font-size:15px;color:#475569;line-height:1.6;">
-            Hi ${customerName || 'there'}, your payment was successful.
-            Here's your receipt and download link.
+            Hi ${safeCustomerName}, your payment was successful.
+            Here's your order confirmation and download link.
           </p>
 
           <!-- Divider -->
@@ -90,7 +130,7 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
             <tr>
               <td style="font-size:15px;font-weight:600;color:#0F172A;">${productLabel}</td>
-              <td align="right" style="font-size:15px;font-weight:700;color:#0F172A;">${amount}</td>
+              <td align="right" style="font-size:15px;font-weight:700;color:#0F172A;">${safeAmount}</td>
             </tr>
             <tr>
               <td style="font-size:13px;color:#64748B;padding-top:4px;">
@@ -105,7 +145,7 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
                  style="background:#F1F5F9;border-radius:10px;padding:14px 16px;margin-bottom:32px;">
             <tr>
               <td style="font-size:14px;color:#64748B;">Total paid</td>
-              <td align="right" style="font-size:16px;font-weight:800;color:#0F172A;">${amount}</td>
+              <td align="right" style="font-size:16px;font-weight:800;color:#0F172A;">${safeAmount}</td>
             </tr>
           </table>
 
@@ -126,16 +166,16 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
           <!-- Meta -->
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
-              <td style="font-size:13px;color:#94A3B8;">Receipt #</td>
-              <td align="right" style="font-size:13px;color:#64748B;font-family:monospace;">${invoiceId}</td>
+              <td style="font-size:13px;color:#94A3B8;">Order #</td>
+              <td align="right" style="font-size:13px;color:#64748B;font-family:monospace;">${safeInvoiceId}</td>
             </tr>
             <tr>
               <td style="font-size:13px;color:#94A3B8;padding-top:6px;">Date</td>
-              <td align="right" style="font-size:13px;color:#64748B;padding-top:6px;">${date}</td>
+              <td align="right" style="font-size:13px;color:#64748B;padding-top:6px;">${safeDate}</td>
             </tr>
             <tr>
               <td style="font-size:13px;color:#94A3B8;padding-top:6px;">Email</td>
-              <td align="right" style="font-size:13px;color:#64748B;padding-top:6px;">${customerEmail}</td>
+              <td align="right" style="font-size:13px;color:#64748B;padding-top:6px;">${safeCustomerEmail}</td>
             </tr>
           </table>
 
@@ -148,7 +188,7 @@ function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount
             <a href="${SITE}/contact" style="color:#3B82F6;text-decoration:none;">foldiq.app/contact</a>
           </p>
           <p style="margin:8px 0 0;font-size:12px;color:#CBD5E1;">
-            © 2026 Foldiq · Made for Mac
+            © 2026 Foldiq · Made for Mac &amp; Windows
           </p>
         </td></tr>
 
@@ -191,10 +231,15 @@ export default async function handler(req, res) {
   const customerEmail = session.customer_details?.email || session.customer_email;
   const customerName  = session.customer_details?.name || '';
   const platform      = session.metadata?.platform === 'mac' ? 'mac' : 'windows';
-  const amountTotal   = session.amount_total || 499;
-  const amount        = `$${(amountTotal / 100).toFixed(2)}`;
+  const amountTotal   = session.amount_total ?? 499;
+  const currency      = (session.currency || 'usd').toUpperCase();
+  const amount        = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+  }).format(amountTotal / 100);
   const invoiceId     = session.id.replace('cs_live_', '').replace('cs_test_', '').slice(0, 16).toUpperCase();
-  const date          = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const eventDate     = stripeEvent.created ? new Date(stripeEvent.created * 1000) : new Date();
+  const date          = eventDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   if (!customerEmail) {
     console.error('No customer email found in session');
@@ -205,28 +250,34 @@ export default async function handler(req, res) {
   const html = buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount, platform });
 
   try {
-    await resend.emails.send({
+    const customerResult = await resend.emails.send({
       from: 'Foldiq <receipts@foldiq.app>',
       to: customerEmail,
-      subject: `Your Foldiq receipt — ${amount}`,
+      subject: 'Your Foldiq order — download inside',
       html,
     });
+    assertEmailSent(customerResult, 'Customer order email failed');
 
-    // Owner notification. Keep the payment_intent in the subject so a refund or
-    // support request can be traced back to Stripe in one search.
-    await resend.emails.send({
-      from: 'Foldiq <receipts@foldiq.app>',
-      to: OWNER_EMAIL,
-      subject: `[New Sale] Foldiq ${platform} ${amount} — ${customerEmail}`,
-      html: `<p style="font-family:monospace;font-size:13px;color:#475569;">
-               platform: ${platform}<br/>
-               payment_intent: ${session.payment_intent || '—'}<br/>
-               checkout_session: ${session.id}<br/>
-               country: ${session.customer_details?.address?.country || '—'}
-             </p>${html}`,
-    });
+    // Do not make Stripe retry (and duplicate the customer's email) if only the
+    // internal owner notification fails.
+    try {
+      const ownerResult = await resend.emails.send({
+        from: 'Foldiq <receipts@foldiq.app>',
+        to: OWNER_EMAIL,
+        subject: `[New Sale] Foldiq ${platform} ${amount} — ${customerEmail.replace(/[\r\n]/g, ' ')}`,
+        html: `<p style="font-family:monospace;font-size:13px;color:#475569;">
+                 platform: ${escapeHTML(platform)}<br/>
+                 payment_intent: ${escapeHTML(session.payment_intent || '—')}<br/>
+                 checkout_session: ${escapeHTML(session.id)}<br/>
+                 country: ${escapeHTML(session.customer_details?.address?.country || '—')}
+               </p>${html}`,
+      });
+      assertEmailSent(ownerResult, 'Owner sale notification failed');
+    } catch (ownerError) {
+      console.error(ownerError.message);
+    }
 
-    console.log(`Receipt sent to ${customerEmail} and ${OWNER_EMAIL}`);
+    console.log(`Order email sent for checkout session ${session.id}`);
     res.status(200).send('OK');
   } catch (err) {
     console.error('Email send failed:', err.message);

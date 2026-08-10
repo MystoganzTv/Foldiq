@@ -68,60 +68,59 @@
 <div class="page-header">
   <div style="max-width:720px;margin:0 auto;">
     <h1>Privacy Policy</h1>
-    <p class="meta">Effective date: May 23, 2026 · Last updated: May 23, 2026</p>
+    <p class="meta">Effective date: August 10, 2026 · Last updated: August 10, 2026</p>
   </div>
 </div>
 
 <div class="content">
 
   <div class="highlight">
-    <p>🔒 The short version: Foldiq does not collect, transmit, or store any personal data — ever. All processing happens entirely on your computer. The app makes zero network connections.</p>
+    <p>🔒 The short version: Foldiq processes your photo and video library on your device. We do not upload your library to Foldiq servers, run advertising, or use analytics. Limited network services are used only for purchases, email delivery, Apple-provided location lookup, and downloading originals that you already keep in iCloud Photos.</p>
   </div>
 
   <h2>1. Who we are</h2>
-  <p>Foldiq ("the app", "we", "our") is a macOS application developed by Enrique Padrón. If you have any questions about this privacy policy, you can contact us at <a href="mailto:enrique.padron853@gmail.com">enrique.padron853@gmail.com</a>.</p>
+  <p>Foldiq ("the app", "we", "our") is a macOS and Windows application developed by Enrique Padrón. This policy covers the Foldiq apps and the foldiq.app website. If you have questions, contact <a href="mailto:enrique.padron853@gmail.com">enrique.padron853@gmail.com</a>.</p>
 
   <h2>2. Information we collect</h2>
-  <p><strong>We collect no information whatsoever.</strong> Foldiq does not collect, record, transmit, or share any personal data, usage data, analytics, telemetry, crash reports, or any other form of information from your device or your photo library.</p>
-  <p>Specifically, Foldiq does not collect:</p>
+  <p><strong>The Foldiq apps do not send your photo or video library to us.</strong> We do not receive file contents, filenames, folder paths, media metadata, usage analytics, advertising identifiers, or telemetry from the apps.</p>
+  <p>We do process limited information when you use our website or purchase Foldiq:</p>
   <ul>
-    <li>Your name, email address, or any account information</li>
-    <li>Your photos, videos, or any media files</li>
-    <li>File names, folder paths, or metadata from your library</li>
-    <li>Device identifiers, IP addresses, or location data</li>
-    <li>Usage statistics, feature interaction data, or crash logs</li>
-    <li>Any information about your computer or operating system</li>
+    <li><strong>Purchase information:</strong> Stripe processes Windows payments and provides us with transaction identifiers, amount, purchase platform, customer name, email address, and billing details needed to fulfill and support the order. We do not receive full card numbers.</li>
+    <li><strong>Order email:</strong> Resend processes the customer's email address and order-email content so we can deliver a confirmation and download link.</li>
+    <li><strong>Website requests:</strong> Vercel hosts foldiq.app and may process standard request information such as IP address, browser/device information, requested URL, timestamps, and operational logs for security and delivery.</li>
+    <li><strong>Mac purchases:</strong> Apple processes Mac App Store purchases under Apple's own privacy policy. Apple provides developers only the App Store reporting and customer-support information it makes available.</li>
   </ul>
+  <p>We do not use this information for targeted advertising and do not sell personal information.</p>
 
   <h2>3. How the app processes your files</h2>
   <p>Foldiq reads and reorganizes files stored on your computer's local storage or any directly connected drive. This processing happens entirely on your device using your operating system's built-in file and media frameworks.</p>
-  <p>At no point does Foldiq transmit any file content, metadata, or path information to any server, cloud service, or third party. The app has no backend, no API, and no network connections of any kind.</p>
+  <p>Your media is not uploaded to Foldiq. If you choose organization by location on macOS, GPS coordinates embedded in a media item may be submitted to Apple's Core Location geocoding service to obtain a country, state, or city name. Foldiq does not receive or retain that request on a Foldiq server.</p>
+  <p>If an original exists only in your iCloud Photos library, macOS may download it from Apple's iCloud service so Foldiq can export it to the folder you selected. This is an Apple system service operating on media you already store with Apple.</p>
 
   <h2>4. File access</h2>
   <p>Foldiq only accesses folders that you explicitly select using the macOS file picker or by dragging them onto the app. The app will not access, scan, or read any folder you have not deliberately chosen.</p>
   <p>On macOS, file access is governed by the operating system's sandbox and security-scoped bookmarks mechanism. Foldiq stores bookmarks for selected folders to allow re-access within the same session. These bookmarks are stored locally on your device using macOS UserDefaults and are never transmitted anywhere.</p>
 
   <h2>5. Network access</h2>
-  <p>Foldiq makes <strong>no network connections</strong> of any kind. There are no outbound requests, no analytics endpoints, no update checks, no crash reporting services, and no cloud integrations. The app functions entirely offline.</p>
-  <p>You can verify this using macOS's built-in Network monitor or Little Snitch — Foldiq will show zero outbound connections.</p>
+  <p>Most organization features work locally. The macOS app may connect to Apple for reverse geocoding and iCloud Photos retrieval as described above. We do not include third-party analytics, advertising, or behavioral tracking SDKs in the apps.</p>
 
   <h2>6. Third-party services</h2>
-  <p>Foldiq does not integrate with, depend on, or communicate with any third-party services, SDKs, libraries, or APIs that collect data. There are no advertising networks, analytics providers, or tracking frameworks included in the app.</p>
+  <p>We use Apple (Mac App Store, Core Location, and iCloud Photos), Stripe (Windows checkout and payment records), Resend (transactional email), Vercel (website and API hosting), GitHub (Windows installer hosting), and Google Fonts (website typography). Each provider processes data under its own terms and privacy policy. We share only information needed for the relevant service.</p>
 
   <h2>7. Data storage</h2>
-  <p>The only data Foldiq stores locally on your computer is:</p>
+  <p>The Foldiq app stores locally on your computer:</p>
   <ul>
     <li><strong>App preferences</strong> — organization mode, folder name preference, and other settings you configure. Stored in macOS UserDefaults.</li>
     <li><strong>Undo manifests</strong> — a log of every file movement performed, stored as a local JSON or CSV file in a location you choose. This file stays entirely on your computer and is never transmitted anywhere.</li>
     <li><strong>Security-scoped bookmarks</strong> — macOS file access tokens for folders you select. Stored in UserDefaults, used only to re-access the same folder within the app.</li>
   </ul>
-  <p>You can delete all of this data at any time by deleting the app and its associated preferences using macOS's standard uninstall mechanisms.</p>
+  <p>You can delete local app data using your operating system's standard uninstall and preference-management mechanisms. Purchase and transactional records are retained by us and our processors as reasonably necessary for order fulfillment, support, fraud prevention, accounting, legal compliance, and dispute resolution.</p>
 
   <h2>8. Children's privacy</h2>
-  <p>Foldiq does not collect any information from anyone, including children under 13. Because we collect no data at all, there are no special considerations for children's privacy beyond our general policy of collecting nothing.</p>
+  <p>Foldiq is not directed to children under 13, and we do not knowingly collect personal information from children under 13. If you believe a child has provided personal information through a purchase or support request, contact us so we can review and delete it where appropriate.</p>
 
   <h2>9. Changes to this policy</h2>
-  <p>If we ever make material changes to this privacy policy, we will update the effective date at the top of this page. Because the app collects no data, any future changes would only reflect updates to how the app works locally on your device.</p>
+  <p>If we make material changes to this privacy policy, we will update the effective date at the top of this page and provide any additional notice required by applicable law.</p>
 
   <h2>10. Contact</h2>
   <p>If you have any questions or concerns about this privacy policy, please contact us at:</p>
