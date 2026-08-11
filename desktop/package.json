@@ -1,6 +1,6 @@
 {
   "name": "foldiq-desktop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Foldiq — Photo & Video Organizer for Windows",
   "main": "electron/main.js",
   "scripts": {
@@ -8,21 +8,21 @@
     "build": "vite build && electron-builder",
     "build:win": "vite build && electron-builder --win",
     "build:mac": "vite build && electron-builder --mac",
+    "test": "node --test tests/*.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
-    "exiftool-vendored": "^24.0.0",
-    "crypto": "^1.0.1"
+    "exiftool-vendored": "^37.2.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.2.0",
-    "concurrently": "^8.2.0",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "vite": "^5.0.0",
-    "wait-on": "^7.2.0"
+    "@vitejs/plugin-react": "^6.0.5",
+    "concurrently": "^10.0.4",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "vite": "^8.2.1",
+    "wait-on": "^9.1.0"
   },
   "build": {
     "appId": "app.foldiq.desktop",
@@ -34,21 +34,26 @@
     },
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "assets/icon.ico"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "assets/icon.icns",
       "category": "public.app-category.photography",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
-      "notarize": {
-        "teamId": "V6F97AK8AD"
-      }
+      "notarize": true
     },
     "nsis": {
       "oneClick": false,

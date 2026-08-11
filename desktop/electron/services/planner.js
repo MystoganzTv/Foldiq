@@ -1,4 +1,5 @@
 // planner.js — Builds a list of planned file moves based on scan results + config
+const fs = require('fs');
 const path = require('path');
 
 const MONTHS = [
@@ -27,14 +28,20 @@ function buildDestPath(file, config) {
 }
 
 function resolveCollision(destPath, usedPaths) {
-  if (!usedPaths.has(destPath)) { usedPaths.add(destPath); return destPath; }
+  if (!usedPaths.has(destPath) && !fs.existsSync(destPath)) {
+    usedPaths.add(destPath);
+    return destPath;
+  }
 
   const ext  = path.extname(destPath);
-  const base = destPath.slice(0, -ext.length);
+  const base = ext ? destPath.slice(0, -ext.length) : destPath;
   let i = 1;
   while (true) {
     const candidate = `${base}_${i}${ext}`;
-    if (!usedPaths.has(candidate)) { usedPaths.add(candidate); return candidate; }
+    if (!usedPaths.has(candidate) && !fs.existsSync(candidate)) {
+      usedPaths.add(candidate);
+      return candidate;
+    }
     i++;
   }
 }
@@ -64,4 +71,4 @@ function buildPlan(files, config) {
   return moves;
 }
 
-module.exports = { buildPlan };
+module.exports = { buildPlan, buildDestPath, resolveCollision };

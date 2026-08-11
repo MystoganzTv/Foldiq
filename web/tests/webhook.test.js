@@ -71,9 +71,11 @@ test('email template escapes Stripe-controlled customer fields', () => {
     date: 'August 10, 2026',
     amount: '$4.99',
     platform: 'windows',
+    checkoutSessionId: 'cs_test_paid123',
   });
 
   assert.doesNotMatch(html, /<img src=x onerror/);
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.match(html, /Foldiq for Windows/);
+  assert.match(html, /\/api\/download\?session_id=cs_test_paid123/);
 });

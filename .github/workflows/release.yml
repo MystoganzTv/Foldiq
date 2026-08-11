@@ -18,12 +18,12 @@ jobs:
         working-directory: desktop
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: desktop/package-lock.json
 
@@ -34,7 +34,7 @@ jobs:
         run: npx vite build && npx electron-builder --win --x64
 
       - name: Upload Windows installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-installer
           path: desktop/dist-electron/Foldiq Setup*.exe
@@ -47,12 +47,12 @@ jobs:
         working-directory: desktop
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: desktop/package-lock.json
 
@@ -93,6 +93,7 @@ jobs:
           MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: V6F97AK8AD
 
       - name: Build, sign & notarize (Vite + Electron macOS)
         run: npx vite build && npx electron-builder --mac
@@ -102,9 +103,10 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'true'
           # Consumed by electron-builder's mac notarization config. The public
-          # Apple team ID is pinned in desktop/package.json.
+          # Apple team ID is public; the credentials remain encrypted secrets.
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: V6F97AK8AD
 
       - name: Verify signature & notarization ticket
         run: |
@@ -117,7 +119,7 @@ jobs:
           xcrun stapler validate "$APP"
 
       - name: Upload macOS DMG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mac-dmg
           path: desktop/dist-electron/*.dmg
@@ -130,13 +132,13 @@ jobs:
 
     steps:
       - name: Download Windows installer
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: windows-installer
           path: artifacts/windows
 
       - name: Download macOS DMG
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mac-dmg
           path: artifacts/mac

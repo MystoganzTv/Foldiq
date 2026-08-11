@@ -16,12 +16,14 @@ function isMedia(filePath) {
 }
 
 function hashFile(filePath) {
-  try {
-    const buf = fs.readFileSync(filePath);
-    return crypto.createHash('md5').update(buf).digest('hex');
-  } catch {
-    return null;
-  }
+  return new Promise((resolve) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+
+    stream.on('data', chunk => hash.update(chunk));
+    stream.on('error', () => resolve(null));
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
 }
 
 function walkDir(dir, results = []) {
@@ -83,10 +85,17 @@ async function scan(folders, onProgress) {
 
   for (let i = 0; i < allPaths.length; i++) {
     const filePath = allPaths[i];
-    const stat = fs.statSync(filePath);
+    let stat;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      onProgress({ current: i + 1, total, file: path.basename(filePath) });
+      continue;
+    }
+
     const ext  = path.extname(filePath).toLowerCase();
     const date = await extractDate(filePath);
-    const hash = hashFile(filePath);
+    const hash = await hashFile(filePath);
 
     const isDuplicate = hash && hashMap[hash] != null;
     if (hash) hashMap[hash] = (hashMap[hash] ?? i);
@@ -107,8 +116,11 @@ async function scan(folders, onProgress) {
     onProgress({ current: i + 1, total, file: file.name });
   }
 
-  await exiftool.end();
   return files;
 }
 
-module.exports = { scan };
+async function end() {
+  try { await exiftool.end(); } catch {}
+}
+
+module.exports = { scan, hashFile, end };

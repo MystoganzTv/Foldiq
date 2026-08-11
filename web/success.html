@@ -65,15 +65,25 @@
   <script>
     const params = new URLSearchParams(window.location.search);
     const platform = params.get('platform') || 'mac';
+    const sessionId = params.get('session_id');
     const wrap = document.getElementById('download-wrap');
 
     // Mac ships through the Mac App Store (Apple-signed + notarized).
     // Only the Windows installer is served from GitHub Releases.
     const MAC_URL  = 'https://apps.apple.com/us/app/foldiq/id6772513569';
-    const WIN_URL  = 'https://github.com/MystoganzTv/Foldiq/releases/latest/download/Foldiq-Setup.exe';
+    const WIN_URL  = sessionId
+      ? `/api/download?session_id=${encodeURIComponent(sessionId)}`
+      : null;
 
     if (platform === 'windows') {
-      wrap.innerHTML = `
+      if (!WIN_URL) {
+        document.getElementById('main-msg').textContent =
+          'We could not verify this checkout link. Use the private download link in your order email or contact support.';
+        wrap.innerHTML = `
+          <a class="btn btn-win" href="mailto:support@foldiq.app">Contact Foldiq support</a>
+        `;
+      } else {
+        wrap.innerHTML = `
         <a class="btn btn-win" href="${WIN_URL}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5l-9 1.68V12h9zm0 1H12v5.28L20 20v-7zm-17 0h6v5.57l-6-1.32V13z"/></svg>
           Download Foldiq for Windows
@@ -85,6 +95,7 @@
         </a>
         <p class="note">Windows 10 / 11 · 64-bit</p>
       `;
+      }
     } else {
       document.getElementById('main-msg').textContent =
         'Thank you! The Mac version is delivered through the Mac App Store, so it stays signed, notarized and auto-updating.';
@@ -94,9 +105,9 @@
           Open Foldiq on the Mac App Store
         </a>
         <div class="divider"><span>also available</span></div>
-        <a class="btn btn-both" href="${WIN_URL}">
+        <a class="btn btn-both" href="/?platform=windows">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5l-9 1.68V12h9zm0 1H12v5.28L20 20v-7zm-17 0h6v5.57l-6-1.32V13z"/></svg>
-          Download for Windows instead
+          Buy Foldiq for Windows instead
         </a>
         <p class="note">macOS 14 Sonoma or later · Apple Silicon &amp; Intel</p>
       `;

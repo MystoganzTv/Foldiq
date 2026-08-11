@@ -5,6 +5,7 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const scanner  = require('./services/scanner');
 const planner  = require('./services/planner');
 const mover    = require('./services/mover');
+const { rowsToCSV } = require('./services/csv');
 
 let mainWindow;
 
@@ -21,6 +22,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
 
@@ -35,6 +37,21 @@ function createWindow() {
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+app.on('before-quit', () => { scanner.end(); });
+
+function assertString(value, label) {
+  if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
+    throw new Error(`Invalid ${label}`);
+  }
+  return value;
+}
+
+function assertArray(value, label, maxLength = 100000) {
+  if (!Array.isArray(value) || value.length > maxLength) {
+    throw new Error(`Invalid ${label}`);
+  }
+  return value;
+}
 
 // ── IPC Handlers ──────────────────────────────────────────────────────────────
 
@@ -58,33 +75,43 @@ ipcMain.handle('dialog:selectOutput', async () => {
 
 // Scan folders — streams progress via webContents.send
 ipcMain.handle('scan:start', async (event, { folders }) => {
+  assertArray(folders, 'folders', 100).forEach(folder => assertString(folder, 'folder'));
   const onProgress = (p) => mainWindow.webContents.send('scan:progress', p);
   return await scanner.scan(folders, onProgress);
 });
 
 // Build organization plan
 ipcMain.handle('plan:build', async (event, { files, config }) => {
+  assertArray(files, 'files');
+  if (!config || typeof config !== 'object') throw new Error('Invalid plan configuration');
+  assertString(config.outputFolder, 'output folder');
   return planner.buildPlan(files, config);
 });
 
 // Apply plan — streams progress
 ipcMain.handle('apply:start', async (event, { plan, config }) => {
+  assertArray(plan, 'plan');
+  if (!config || typeof config !== 'object') throw new Error('Invalid apply configuration');
+  assertString(config.outputFolder, 'output folder');
   const onProgress = (p) => mainWindow.webContents.send('apply:progress', p);
   return await mover.apply(plan, config, onProgress);
 });
 
 // Undo last operation
 ipcMain.handle('apply:undo', async (event, { manifestPath }) => {
+  assertString(manifestPath, 'manifest path');
   return await mover.undo(manifestPath);
 });
 
 // Open folder in Explorer/Finder
 ipcMain.handle('shell:openFolder', async (event, { folderPath }) => {
+  assertString(folderPath, 'folder path');
   await shell.openPath(folderPath);
 });
 
 // Export CSV report
 ipcMain.handle('report:exportCSV', async (event, { rows }) => {
+  assertArray(rows, 'report rows');
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Save Report',
     defaultPath: `Foldiq-Report-${Date.now()}.csv`,
@@ -92,7 +119,7 @@ ipcMain.handle('report:exportCSV', async (event, { rows }) => {
   });
   if (result.canceled) return null;
   const fs = require('fs');
-  const csv = rows.map(r => Object.values(r).join(',')).join('\n');
+  const csv = rowsToCSV(rows);
   fs.writeFileSync(result.filePath, csv, 'utf-8');
   return result.filePath;
 });

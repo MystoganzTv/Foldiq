@@ -9,6 +9,7 @@
 //   STRIPE_SECRET_KEY       — sk_live_...
 //   STRIPE_WEBHOOK_SECRET   — whsec_... (from Stripe Dashboard → Webhooks)
 //   RESEND_API_KEY          — re_...    (from resend.com)
+//   GITHUB_RELEASE_TOKEN    — fine-grained token, Contents: read for Foldiq
 
 import Stripe from 'stripe';
 import { Resend } from 'resend';
@@ -26,9 +27,8 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const SITE = 'https://foldiq.app';
 const OWNER_EMAIL = 'enrique.padron853@gmail.com';
 
-// Windows ships from GitHub Releases; `latest` so the link never goes stale.
-// Mac ships from the App Store (Apple-signed + notarized) and is not sold here.
-const WINDOWS_DOWNLOAD_URL = 'https://github.com/MystoganzTv/Foldiq/releases/latest/download/Foldiq-Setup.exe';
+// Windows is served by a payment-verified endpoint backed by a private GitHub
+// release. Mac ships from the App Store and is not sold here.
 const MAC_APP_STORE_URL = 'https://apps.apple.com/us/app/foldiq/id6772513569';
 
 // Vercel may expose the body directly or leave it on the request stream,
@@ -75,13 +75,15 @@ function assertEmailSent(result, label) {
 }
 
 // ── Email template ────────────────────────────────────────────────────────────
-export function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount, platform }) {
+export function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount, platform, checkoutSessionId }) {
   const isMac = platform === 'mac';
   const productLabel = isMac ? 'Foldiq for Mac' : 'Foldiq for Windows';
   const platformNote = isMac
     ? 'One-time purchase · Lifetime license · Delivered via the Mac App Store'
     : 'One-time purchase · Lifetime license · All future updates';
-  const downloadUrl = isMac ? MAC_APP_STORE_URL : WINDOWS_DOWNLOAD_URL;
+  const downloadUrl = isMac
+    ? MAC_APP_STORE_URL
+    : `${SITE}/api/download?session_id=${encodeURIComponent(checkoutSessionId)}`;
   const downloadLabel = isMac ? ' Open on the Mac App Store' : '⬇ Download Foldiq for Windows';
   const safeCustomerName = escapeHTML(customerName || 'there');
   const safeCustomerEmail = escapeHTML(customerEmail);
@@ -247,7 +249,15 @@ export default async function handler(req, res) {
     return;
   }
 
-  const html = buildInvoiceHTML({ customerName, customerEmail, invoiceId, date, amount, platform });
+  const html = buildInvoiceHTML({
+    customerName,
+    customerEmail,
+    invoiceId,
+    date,
+    amount,
+    platform,
+    checkoutSessionId: session.id,
+  });
 
   try {
     const customerResult = await resend.emails.send({
