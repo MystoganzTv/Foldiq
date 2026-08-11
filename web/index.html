@@ -311,6 +311,7 @@
     .cta-section {
       text-align: center;
       background: linear-gradient(180deg, #F0F7FF 0%, #fff 100%);
+      scroll-margin-top: 64px;
     }
     .cta-section h2 {
       font-size: clamp(28px, 4vw, 48px); font-weight: 900; letter-spacing: -.5px;
@@ -369,12 +370,6 @@
       display: flex; flex-direction: column; gap: 24px; align-items: center;
       text-align: center;
     }
-    .footer-logo { display: flex; align-items: center; gap: 10px; }
-    .footer-logo-icon {
-      width: 28px; height: 28px; background: var(--blue); border-radius: 7px;
-      display: flex; align-items: center; justify-content: center; font-size: 15px;
-    }
-    .footer-logo-text { font-size: 16px; font-weight: 800; color: #fff; }
     .footer-links { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; }
     .footer-links a { font-size: 14px; color: #64748B; text-decoration: none; transition: color .15s; }
     .footer-links a:hover { color: #fff; }
@@ -550,27 +545,27 @@
   <div class="screenshots-track" style="padding-left:5%;padding-right:5%;">
     <div class="screenshot-frame">
 
-      <img src="screenshots/welcome.png" alt="Foldiq — Select your folder to organize" loading="lazy" />
+      <img src="screenshots/welcome.png" alt="Foldiq — Select your folder to organize" width="1440" height="900" loading="lazy" />
       <div class="screenshot-caption">① Select a folder — or drag it straight onto the window</div>
     </div>
     <div class="screenshot-frame">
 
-      <img src="screenshots/scan.png" alt="Foldiq — Scan Complete with file stats" loading="lazy" />
+      <img src="screenshots/scan.png" alt="Foldiq — Scan Complete with file stats" width="1440" height="900" loading="lazy" />
       <div class="screenshot-caption">② Scan results — photos, videos, duplicates, and missing dates at a glance</div>
     </div>
     <div class="screenshot-frame">
 
-      <img src="screenshots/settings.png" alt="Foldiq — Organization Settings" loading="lazy" />
+      <img src="screenshots/settings.png" alt="Foldiq — Organization Settings" width="1440" height="900" loading="lazy" />
       <div class="screenshot-caption">③ Pick your folder structure — Smart Hybrid, By Year, Month, or Exact Date</div>
     </div>
     <div class="screenshot-frame">
 
-      <img src="screenshots/applying.png" alt="Foldiq — Done!" loading="lazy" />
+      <img src="screenshots/applying.png" alt="Foldiq — Done!" width="1440" height="900" loading="lazy" />
       <div class="screenshot-caption">④ Foldiq moves your files — live progress, file by file</div>
     </div>
     <div class="screenshot-frame">
 
-      <img src="screenshots/report.png" alt="Foldiq — Organization Complete" loading="lazy" />
+      <img src="screenshots/report.png" alt="Foldiq — Organization Complete" width="1440" height="900" loading="lazy" />
       <div class="screenshot-caption">⑤ Report — stats, camera breakdown, and one-click undo</div>
     </div>
   </div>
@@ -767,10 +762,6 @@
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-logo">
-    <img src="icon.png" alt="Foldiq" style="width:28px;height:28px;border-radius:7px;" />
-    <span class="footer-logo-text">Foldiq</span>
-  </div>
   <div class="footer-links">
     <a href="#how-it-works">How it works</a>
     <a href="#features">Features</a>
@@ -875,8 +866,7 @@
       const target = document.getElementById(id);
       if (!target) return;
       e.preventDefault();
-      const y = target.getBoundingClientRect().top + window.pageYOffset - 72; // offset for sticky nav
-      window.scrollTo({ top: y, behavior: 'smooth' });
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   });
 
