@@ -484,8 +484,10 @@ test('GPS lookups are rounded, cached, and do not repeat nearby requests', async
   const dir = tempDir(t);
   const cachePath = path.join(dir, 'location-cache.json');
   let requests = 0;
-  const fetchImpl = async () => {
+  let requestedURL = '';
+  const fetchImpl = async url => {
     requests++;
+    requestedURL = url;
     return {
       ok: true,
       json: async () => ({ address: { country: 'United States', state: 'Virginia', city: 'Herndon' } }),
@@ -499,6 +501,9 @@ test('GPS lookups are rounded, cached, and do not repeat nearby requests', async
   const first = await geocoder.enrichFiles(files, { enabled: true, cachePath, fetchImpl, requestIntervalMs: 0 });
   const second = await geocoder.enrichFiles(files, { enabled: true, cachePath, fetchImpl, requestIntervalMs: 0 });
   assert.equal(requests, 1);
+  assert.match(requestedURL, /lat=38\.95/);
+  assert.match(requestedURL, /lon=-77\.4/);
+  assert.doesNotMatch(requestedURL, /38\.94972|-77\.40295/);
   assert.equal(first.files[0].location.city, 'Herndon');
   assert.equal(second.files[1].location.state, 'Virginia');
 });

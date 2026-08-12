@@ -5,13 +5,13 @@ Updated: 2026-08-12 16:22 America/New_York
 ## Read this first
 
 The repository is `/Users/enrique/Developer/Foldiq`. The active branch is `main`.
-`main` and `origin/main` contain the complete Windows 1.0.16 work. It supersedes the
+`main` and `origin/main` contain the complete Windows 1.0.17 work. It supersedes the
 older 1.0.15 test build: it fixes the metadata runtime/hang, closes the major
 macOS parity gaps, adds real opt-in location organization, retry/cleanup/report
 controls, and persists Windows preferences. Do not discard these changes.
 
-Windows 1.0.16 is pushed, tagged, and released at
-`https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.16-windows`. The release
+Windows 1.0.17 is pushed, tagged, and released at
+`https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.17-windows`. The release
 asset is named `Foldiq-Setup.exe`, so the website's dynamic download endpoint
 will resolve it as the latest Windows installer. A fresh remote download matched
 the local/Desktop SHA-256 exactly.
@@ -20,11 +20,11 @@ No credentials or Apple/GitHub secrets are recorded in this checkpoint.
 
 ## Published state
 
-- Windows 1.0.16 is the latest GitHub-published Windows release/tag.
-- Release: `https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.16-windows`
+- Windows 1.0.17 is the latest GitHub-published Windows release/tag.
+- Release: `https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.17-windows`
 - The private website download endpoint dynamically resolves the latest GitHub
   release asset named `Foldiq-Setup.exe`; no website code change or redeploy was
-  required for 1.0.16. All 10 web purchase/download tests passed in the prior
+  required for 1.0.17. All 10 web purchase/download tests passed in the prior
   website validation.
 - Windows code is intentionally unsigned for now; the user accepted that
   SmartScreen may warn. Do not start a Windows certificate purchase/signing
@@ -36,7 +36,7 @@ No credentials or Apple/GitHub secrets are recorded in this checkpoint.
   Netlify without a new explicit reason.
 - The repository was made private earlier in the project.
 
-## Windows 1.0.16 — built, verified, pushed, and published
+## Windows 1.0.17 — built, verified, pushed, and published
 
 This build includes everything from the superseded 1.0.15 test build plus:
 
@@ -48,6 +48,10 @@ This build includes everything from the superseded 1.0.15 test build plus:
   serial stream, rounded into roughly 1 km cache buckets, cached locally, and
   displayed with OpenStreetMap/ODbL attribution. The public endpoint is limited
   below one request/second and uses an identifying User-Agent.
+- 1.0.17 corrects a final privacy discrepancy found after publishing 1.0.16:
+  coordinates are now actually rounded to two decimal places before leaving the
+  PC, matching the disclosure. 1.0.16 remains in release history but is
+  superseded; do not direct users to it.
 - Persistent Windows preferences in app data: organization mode, output,
   copy/move, duplicate policy, videos, archives, date estimates, and GPS choice.
 - Retry Failed Files from Report. Retry results get their own safe manifest and
@@ -75,15 +79,15 @@ Validation completed:
 
 Installer:
 
-`/Users/enrique/Desktop/Foldiq Setup 1.0.16.exe`
+`/Users/enrique/Desktop/Foldiq Setup 1.0.17.exe`
 
 - Size: approximately 118 MB
-- SHA-256: `d7b350d9e6e8c177cef8bcc8e8d7a72fb62eec1fef8ca21741d5e23cbdc5b784`
+- SHA-256: `0a749f3bbc949d1b38df6227b3ee43fb81e1d7ae9b729adf610998d0ebc376c8`
 - Identical source artifact:
-  `/Users/enrique/Developer/Foldiq/desktop/dist-electron/Foldiq Setup 1.0.16.exe`
+  `/Users/enrique/Developer/Foldiq/desktop/dist-electron/Foldiq Setup 1.0.17.exe`
 - Published asset: `Foldiq-Setup.exe`. A fresh download from the GitHub release
   matched SHA-256
-  `d7b350d9e6e8c177cef8bcc8e8d7a72fb62eec1fef8ca21741d5e23cbdc5b784`.
+  `0a749f3bbc949d1b38df6227b3ee43fb81e1d7ae9b729adf610998d0ebc376c8`.
 
 ## Windows 1.0.10 release
 
@@ -91,7 +95,7 @@ Installer:
 `1.0.10`. Commit `4f8afd5` is on `main` and `origin/main`; tag
 `v1.0.10-windows` and the GitHub release are published.
 
-## Windows 1.0.15 local test build — superseded by 1.0.16
+## Windows 1.0.15 local test build — superseded by 1.0.17
 
 After real Windows feedback that 1.0.11 still appeared stuck at `Reading
 capture dates`, the metadata stage was redesigned again:
@@ -335,8 +339,8 @@ Latest local installer:
    warning. If a scan
    warning/failure occurs, use `Send diagnostics to developer`, review the
    privacy notice and generated support email, then send it.
-5. Test `/Users/enrique/Desktop/Foldiq Setup 1.0.16.exe` on the real Windows
-   machine. Confirm the footer says 1.0.16, then test the original ZIP/desktop
+5. Test `/Users/enrique/Desktop/Foldiq Setup 1.0.17.exe` on the real Windows
+   machine. Confirm the footer says 1.0.17, then test the original ZIP/desktop
    folder, Smart Hybrid with GPS off and on, Retry Failed Files, and explicit
-   empty-folder cleanup. Do not replace 1.0.16 with different bytes; any new
+   empty-folder cleanup. Do not replace 1.0.17 with different bytes; any new
    correction must use a new version.

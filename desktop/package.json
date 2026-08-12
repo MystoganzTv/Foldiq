@@ -1,6 +1,6 @@
 {
   "name": "foldiq-desktop",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "Foldiq — Photo & Video Organizer for Windows",
   "main": "electron/main.js",
   "scripts": {

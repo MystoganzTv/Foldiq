@@ -108,7 +108,10 @@ async function enrichFiles(files, {
   for (const file of files) {
     const key = coordinateKey(file.latitude, file.longitude);
     if (!key) continue;
-    if (!groups.has(key)) groups.set(key, { latitude: Number(file.latitude), longitude: Number(file.longitude) });
+    if (!groups.has(key)) {
+      const [latitude, longitude] = key.split(',').map(Number);
+      groups.set(key, { latitude, longitude });
+    }
   }
 
   const cache = readCache(cachePath);
