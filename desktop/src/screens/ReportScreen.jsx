@@ -4,6 +4,7 @@ import s from './Screen.module.css';
 export default function ReportScreen({ go, result, config, setFolders, setFiles, setPlan, setResult }) {
   const [undoing, setUndoing] = useState(false);
   const [undone,  setUndone]  = useState(false);
+  const [restarting, setRestarting] = useState(false);
 
   async function handleUndo() {
     setUndoing(true);
@@ -12,9 +13,14 @@ export default function ReportScreen({ go, result, config, setFolders, setFiles,
     setUndoing(false);
   }
 
-  function startOver() {
-    setFolders([]); setFiles([]); setPlan([]); setResult(null);
-    go('welcome');
+  async function startOver() {
+    setRestarting(true);
+    try {
+      if (result.manifestPath) await window.foldiq.discardUndo(result.manifestPath);
+    } finally {
+      setFolders([]); setFiles([]); setPlan([]); setResult(null);
+      go('welcome');
+    }
   }
 
   if (!result) return null;
@@ -27,7 +33,9 @@ export default function ReportScreen({ go, result, config, setFolders, setFiles,
         </svg>
         <h1 className={s.title}>Undo Complete</h1>
         <p className={s.sub}>All files restored to their original locations.</p>
-        <button className={s.btnPrimary} style={{ marginTop: 24 }} onClick={startOver}>Start Over</button>
+        <button className={s.btnPrimary} style={{ marginTop: 24 }} onClick={startOver} disabled={restarting}>
+          {restarting ? 'Cleaning Up…' : 'Start Over'}
+        </button>
       </div>
     </div>
   );
@@ -98,7 +106,9 @@ export default function ReportScreen({ go, result, config, setFolders, setFiles,
         </button>
         <div className={s.bottomBarRight}>
           <button className={s.btnSecondary} onClick={() => window.foldiq.openFolder(config.outputFolder)}>Open Folder</button>
-          <button className={s.btnPrimary} onClick={startOver}>Start Over</button>
+          <button className={s.btnPrimary} onClick={startOver} disabled={restarting || undoing}>
+            {restarting ? 'Cleaning Up…' : 'Start Over'}
+          </button>
         </div>
       </div>
     </div>

@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('foldiq', {
   startApply:     (plan, cfg)  => ipcRenderer.invoke('apply:start', { plan, config: cfg }),
   onApplyProgress:(cb)         => ipcRenderer.on('apply:progress', (_, p) => cb(p)),
   undoApply:      (manifest)   => ipcRenderer.invoke('apply:undo', { manifestPath: manifest }),
+  discardUndo:    (manifest)   => ipcRenderer.invoke('apply:discardUndo', { manifestPath: manifest }),
 
   // Shell
   openFolder:     (p)          => ipcRenderer.invoke('shell:openFolder', { folderPath: p }),

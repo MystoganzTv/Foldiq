@@ -173,8 +173,8 @@ final class MetadataExtractor: Sendable {
     /// Returns nil for dates that are clearly bogus: camera clock not configured,
     /// factory defaults, well-known epoch values, or impossible timestamps.
     private func sanitize(_ date: Date) -> Date? {
-        // Valid range: 1990-01-02 to 1 day from now (1 day slack for timezone edge cases)
-        let earliest = Date(timeIntervalSince1970: 631_238_400) // 1990-01-02
+        // Valid range: 1900-01-01 to 1 day from now (1 day slack for timezone edge cases)
+        let earliest = Date(timeIntervalSince1970: -2_208_988_800)
         let latest   = Date().addingTimeInterval(86_400)
         guard date >= earliest && date <= latest else { return nil }
 
@@ -203,8 +203,10 @@ final class MetadataExtractor: Sendable {
     /// filename — this is the common WhatsApp/Telegram scenario where forwarding an old
     /// photo resets the EXIF timestamp to "now".
     private func resolvedDate(exifDate: Date?, filenameDate: Date?) -> Date? {
-        guard let fnDate = filenameDate else { return exifDate }
-        guard let exif = exifDate else { return fnDate }
+        let safeEXIF = exifDate.flatMap(sanitize)
+        let safeFilename = filenameDate.flatMap(sanitize)
+        guard let fnDate = safeFilename else { return safeEXIF }
+        guard let exif = safeEXIF else { return fnDate }
         let secondsOlder = exif.timeIntervalSince(fnDate)
         return secondsOlder > 90 * 24 * 3600 ? fnDate : exif
     }
@@ -232,7 +234,7 @@ final class MetadataExtractor: Sendable {
 
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
-        let lowerBound = Date(timeIntervalSince1970: 631152000) // 1990-01-01
+        let lowerBound = Date(timeIntervalSince1970: -2_208_988_800) // 1900-01-01
 
         for (pattern, groupIndex, format) in candidates {
             guard let regex = try? NSRegularExpression(pattern: pattern),

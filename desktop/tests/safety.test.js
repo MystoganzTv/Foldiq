@@ -10,6 +10,15 @@ const planner = require('../electron/services/planner');
 const scanner = require('../electron/services/scanner');
 const { escapeCSVCell, rowsToCSV } = require('../electron/services/csv');
 
+function applyConfig(dir, overrides = {}) {
+  return {
+    outputFolder: path.join(dir, 'output'),
+    manifestDirectory: path.join(dir, 'internal', 'undo'),
+    copyMode: true,
+    ...overrides,
+  };
+}
+
 function tempDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'foldiq-test-'));
   t.after(async () => {
@@ -66,11 +75,13 @@ test('apply refuses to overwrite a destination created after preview', async (t)
 
   const result = await mover.apply([
     { name: 'source.jpg', path: source, destPath: destination, action: 'copy' },
-  ], { outputFolder: path.join(dir, 'output'), copyMode: true }, () => {});
+  ], applyConfig(dir), () => {});
 
   assert.equal(result.moved, 0);
   assert.equal(result.errors.length, 1);
   assert.equal(fs.readFileSync(destination, 'utf8'), 'do not overwrite');
+  assert.equal(path.dirname(result.manifestPath), path.join(dir, 'internal', 'undo'));
+  assert.equal(fs.readdirSync(path.join(dir, 'output')).some(name => name.endsWith('.json')), false);
 });
 
 test('Undo removes an unchanged copy and deletes its completed manifest', async (t) => {
@@ -81,7 +92,7 @@ test('Undo removes an unchanged copy and deletes its completed manifest', async 
 
   const applied = await mover.apply([
     { name: 'source.jpg', path: source, destPath: destination, action: 'copy' },
-  ], { outputFolder: path.join(dir, 'output'), copyMode: true }, () => {});
+  ], applyConfig(dir), () => {});
   const undone = await mover.undo(applied.manifestPath);
 
   assert.equal(undone.restored, 1);
@@ -98,7 +109,7 @@ test('Undo refuses to delete a file changed after organization', async (t) => {
 
   const applied = await mover.apply([
     { name: 'source.jpg', path: source, destPath: destination, action: 'copy' },
-  ], { outputFolder: path.join(dir, 'output'), copyMode: true }, () => {});
+  ], applyConfig(dir), () => {});
   fs.writeFileSync(destination, 'changed later');
   const undone = await mover.undo(applied.manifestPath);
 
@@ -122,6 +133,7 @@ test('moving files never removes the user-selected source root', async (t) => {
     outputFolder: path.join(dir, 'output'),
     copyMode: false,
     sourceFolders: [sourceRoot],
+    manifestDirectory: path.join(dir, 'internal', 'undo'),
   }, () => {});
 
   assert.equal(applied.errors.length, 0);
@@ -138,6 +150,66 @@ test('scanner hashes media with streaming SHA-256', async (t) => {
   assert.equal(
     await scanner.hashFile(file),
     crypto.createHash('sha256').update(contents).digest('hex')
+  );
+});
+
+test('Start Over discards only an internal Foldiq Undo manifest', async (t) => {
+  const dir = tempDir(t);
+  const internal = path.join(dir, 'internal', 'undo');
+  const source = path.join(dir, 'source.jpg');
+  const destination = path.join(dir, 'output', 'source.jpg');
+  fs.writeFileSync(source, 'original');
+
+  const applied = await mover.apply([
+    { name: 'source.jpg', path: source, destPath: destination, action: 'copy' },
+  ], applyConfig(dir), () => {});
+
+  mover.discardManifest(applied.manifestPath, internal);
+  assert.equal(fs.existsSync(applied.manifestPath), false);
+  assert.throws(
+    () => mover.discardManifest(path.join(dir, 'unrelated.json'), internal),
+    /Invalid internal Undo manifest path/
+  );
+});
+
+test('legacy visible Undo JSON cleanup leaves unrelated files untouched', (t) => {
+  const dir = tempDir(t);
+  const output = path.join(dir, 'output');
+  fs.mkdirSync(output);
+  const legacy = path.join(output, '.foldiq-undo-2026-08-12T03-18-07-698Z.json');
+  const unrelated = path.join(output, 'report.json');
+  fs.writeFileSync(legacy, '{}');
+  fs.writeFileSync(unrelated, '{}');
+
+  mover.cleanupLegacyOutputManifests(output);
+
+  assert.equal(fs.existsSync(legacy), false);
+  assert.equal(fs.existsSync(unrelated), true);
+});
+
+test('date parsing rejects absurd years and impossible calendar dates', () => {
+  const now = new Date('2026-08-11T12:00:00');
+  assert.equal(scanner.dateFromFilename('IMG_91610811_120000.jpg', now), null);
+  assert.equal(scanner.dateFromFilename('IMG_20260230_120000.jpg', now), null);
+  assert.equal(scanner.metadataDate('4917:08:11 12:00:00', now), null);
+  assert.equal(scanner.dateFromFilename('IMG_20230228_120000.jpg', now).getFullYear(), 2023);
+});
+
+test('planner routes missing or implausible dates to Unknown Date', (t) => {
+  const dir = tempDir(t);
+  const config = {
+    outputFolder: path.join(dir, 'output'),
+    groupByMonth: true,
+    groupByDay: false,
+  };
+
+  assert.equal(
+    planner.buildDestPath({ name: 'unknown.jpg', date: null }, config),
+    path.join(dir, 'output', 'Unknown Date', 'unknown.jpg')
+  );
+  assert.equal(
+    planner.buildDestPath({ name: 'future.jpg', date: '4917-08-11T00:00:00.000Z' }, config),
+    path.join(dir, 'output', 'Unknown Date', 'future.jpg')
   );
 });
 

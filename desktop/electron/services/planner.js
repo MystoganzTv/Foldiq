@@ -11,6 +11,15 @@ function pad(n) { return String(n).padStart(2, '0'); }
 
 function buildDestPath(file, config) {
   const date = new Date(file.date);
+  const latest = Date.now() + 24 * 60 * 60 * 1000;
+  if (
+    !file.date ||
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() < 1900 ||
+    date.getTime() > latest
+  ) {
+    return path.join(config.outputFolder, 'Unknown Date', file.name);
+  }
   const y  = date.getFullYear();
   const m  = date.getMonth();
   const d  = date.getDate();

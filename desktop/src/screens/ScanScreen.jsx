@@ -34,7 +34,7 @@ export default function ScanScreen({ go, folders, setFiles }) {
         zips:      Array.isArray(result) ? 0 : result.archivesExtracted,
         dupes:     files.filter(f => f.isDuplicate).length,
         probDupes: 0,
-        noDate:    0,
+        noDate:    files.filter(f => !f.date).length,
         noMeta:    0,
         total:     files.length,
       });

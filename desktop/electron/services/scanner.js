@@ -12,6 +12,8 @@ const SUPPORTED = new Set([
   '.cr2', '.cr3', '.nef', '.arw', '.dng', '.raf', '.orf', '.rw2',
   '.mov', '.mp4', '.m4v', '.avi', '.mkv',
 ]);
+const EARLIEST_YEAR = 1900;
+const MAX_FUTURE_OFFSET_MS = 24 * 60 * 60 * 1000;
 
 function isMedia(filePath) {
   return SUPPORTED.has(path.extname(filePath).toLowerCase());
@@ -67,7 +69,61 @@ function cleanupTempDirs() {
   tempDirectories.clear();
 }
 
-async function extractDate(filePath) {
+function dateFromParts(year, month, day, hour = 0, minute = 0, second = 0) {
+  const date = new Date(year, month - 1, day, hour, minute, second);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    date.getHours() !== hour ||
+    date.getMinutes() !== minute ||
+    date.getSeconds() !== second
+  ) return null;
+  return date;
+}
+
+function isPlausibleDate(date, now = new Date()) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return false;
+  const year = date.getFullYear();
+  return year >= EARLIEST_YEAR && date.getTime() <= now.getTime() + MAX_FUTURE_OFFSET_MS;
+}
+
+function metadataDate(raw, now = new Date()) {
+  if (!raw) return null;
+
+  let date = null;
+  if (raw instanceof Date) {
+    date = raw;
+  } else if (typeof raw.toDate === 'function') {
+    try { date = raw.toDate(); } catch {}
+  } else if (typeof raw === 'string') {
+    const exif = raw.match(/^(\d{4}):(\d{2}):(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?/);
+    if (exif) {
+      date = dateFromParts(
+        Number(exif[1]), Number(exif[2]), Number(exif[3]),
+        Number(exif[4] ?? 0), Number(exif[5] ?? 0), Number(exif[6] ?? 0)
+      );
+    } else {
+      date = new Date(raw);
+    }
+  }
+
+  return isPlausibleDate(date, now) ? date : null;
+}
+
+function dateFromFilename(filename, now = new Date()) {
+  const name = path.basename(filename, path.extname(filename));
+  const match = name.match(/(?:^|\D)((?:19|20)\d{2})[-_]?([01]\d)[-_]?([0-3]\d)(?:[-_T ]?([0-2]\d)([0-5]\d)([0-5]\d))?(?:\D|$)/);
+  if (!match) return null;
+
+  const date = dateFromParts(
+    Number(match[1]), Number(match[2]), Number(match[3]),
+    Number(match[4] ?? 0), Number(match[5] ?? 0), Number(match[6] ?? 0)
+  );
+  return isPlausibleDate(date, now) ? date : null;
+}
+
+async function extractDate(filePath, now = new Date()) {
   try {
     const tags = await exiftool.read(filePath);
     const raw =
@@ -77,25 +133,23 @@ async function extractDate(filePath) {
       tags.ModifyDate;
 
     if (raw) {
-      const d = raw instanceof Date ? raw : new Date(String(raw).replace(':', '-').replace(':', '-'));
-      if (!isNaN(d.getTime()) && d.getFullYear() > 1990) return d;
+      const date = metadataDate(raw, now);
+      if (date) return date;
     }
   } catch {}
 
   // Fallback: parse date from filename
-  const name = path.basename(filePath);
-  const m = name.match(/(\d{4})[_\-]?(\d{2})[_\-]?(\d{2})/);
-  if (m) {
-    const d = new Date(+m[1], +m[2] - 1, +m[3]);
-    if (!isNaN(d.getTime()) && d.getFullYear() > 1990) return d;
-  }
+  const filenameDate = dateFromFilename(filePath, now);
+  if (filenameDate) return filenameDate;
 
   // Last resort: file mtime
   try {
     const stat = fs.statSync(filePath);
-    return stat.mtime;
+    if (isPlausibleDate(stat.mtime, now)) return stat.mtime;
+    if (isPlausibleDate(stat.birthtime, now)) return stat.birthtime;
+    return null;
   } catch {
-    return new Date();
+    return null;
   }
 }
 
@@ -159,7 +213,7 @@ async function scan(folders, onProgress) {
       name:        path.basename(filePath),
       ext,
       size:        stat.size,
-      date:        date.toISOString(),
+      date:        date?.toISOString() ?? null,
       hash,
       isDuplicate: isDuplicate,
       duplicateOf: isDuplicate ? duplicateOf : null,
@@ -179,4 +233,13 @@ async function end() {
   try { await exiftool.end(); } catch {}
 }
 
-module.exports = { scan, hashFile, cleanupTempDirs, end };
+module.exports = {
+  scan,
+  hashFile,
+  cleanupTempDirs,
+  isPlausibleDate,
+  metadataDate,
+  dateFromFilename,
+  extractDate,
+  end,
+};

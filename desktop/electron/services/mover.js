@@ -7,9 +7,48 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function manifestPath(outputFolder) {
+function manifestPath(manifestDirectory) {
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  return path.join(outputFolder, `.foldiq-undo-${ts}.json`);
+  return path.join(manifestDirectory, `foldiq-undo-${ts}-${crypto.randomUUID()}.json`);
+}
+
+function isPathInside(directory, candidate) {
+  const relative = path.relative(path.resolve(directory), path.resolve(candidate));
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+function assertInternalManifest(mPath, manifestDirectory) {
+  if (
+    !isPathInside(manifestDirectory, mPath) ||
+    !/^foldiq-undo-[A-Za-z0-9.-]+\.json$/.test(path.basename(mPath))
+  ) {
+    throw new Error('Invalid internal Undo manifest path');
+  }
+}
+
+function discardManifest(mPath, manifestDirectory) {
+  assertInternalManifest(mPath, manifestDirectory);
+  fs.rmSync(mPath, { force: true });
+}
+
+function cleanupManifests(manifestDirectory) {
+  let entries = [];
+  try { entries = fs.readdirSync(manifestDirectory, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    if (entry.isFile() && /^foldiq-undo-[A-Za-z0-9.-]+\.json$/.test(entry.name)) {
+      fs.rmSync(path.join(manifestDirectory, entry.name), { force: true });
+    }
+  }
+}
+
+function cleanupLegacyOutputManifests(outputFolder) {
+  let entries = [];
+  try { entries = fs.readdirSync(outputFolder, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    if (entry.isFile() && /^\.foldiq-undo-[A-Za-z0-9.-]+\.json$/.test(entry.name)) {
+      fs.rmSync(path.join(outputFolder, entry.name), { force: true });
+    }
+  }
 }
 
 function hashFile(filePath) {
@@ -61,11 +100,12 @@ function writeManifestAtomic(mPath, manifest) {
 }
 
 async function apply(plan, config, onProgress) {
+  if (!config.manifestDirectory) throw new Error('Internal Undo storage is not configured');
   const moves   = plan.filter(f => f.action !== 'skip');
   const skipped = plan.filter(f => f.action === 'skip');
   const manifest = { moves: [], skipped, createdAt: new Date().toISOString() };
   const errors = [];
-  const mPath  = manifestPath(config.outputFolder);
+  const mPath  = manifestPath(config.manifestDirectory);
 
   for (let i = 0; i < moves.length; i++) {
     const item = moves[i];
@@ -112,7 +152,8 @@ async function apply(plan, config, onProgress) {
   };
 }
 
-async function undo(mPath) {
+async function undo(mPath, manifestDirectory = null) {
+  if (manifestDirectory) assertInternalManifest(mPath, manifestDirectory);
   if (!fs.existsSync(mPath)) throw new Error('Manifest not found: ' + mPath);
 
   const manifest = JSON.parse(fs.readFileSync(mPath, 'utf-8'));
@@ -176,4 +217,8 @@ module.exports = {
   hashFile,
   moveWithoutOverwrite,
   assertDestinationAvailable,
+  discardManifest,
+  cleanupManifests,
+  cleanupLegacyOutputManifests,
+  assertInternalManifest,
 };
