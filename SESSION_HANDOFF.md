@@ -5,26 +5,27 @@ Updated: 2026-08-12 16:22 America/New_York
 ## Read this first
 
 The repository is `/Users/enrique/Developer/Foldiq`. The active branch is `main`.
-`origin/main` remains at `4f8afd5` (`v1.0.10-windows`). Windows 1.0.10 is the
-latest published release. The complete Windows 1.0.16 worktree supersedes the
+`main` and `origin/main` contain the complete Windows 1.0.16 work. It supersedes the
 older 1.0.15 test build: it fixes the metadata runtime/hang, closes the major
 macOS parity gaps, adds real opt-in location organization, retry/cleanup/report
 controls, and persists Windows preferences. Do not discard these changes.
 
-Publishing 1.0.16 is currently blocked because `gh auth status` reports that
-the active `MystoganzTv` token is invalid. Re-authenticate with `gh auth login
--h github.com`, then push/tag/release. Do not overwrite the existing 1.0.10
-asset.
+Windows 1.0.16 is pushed, tagged, and released at
+`https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.16-windows`. The release
+asset is named `Foldiq-Setup.exe`, so the website's dynamic download endpoint
+will resolve it as the latest Windows installer. A fresh remote download matched
+the local/Desktop SHA-256 exactly.
 
 No credentials or Apple/GitHub secrets are recorded in this checkpoint.
 
 ## Published state
 
-- Windows 1.0.10 is the latest GitHub-published Windows release/tag.
-- Release: `https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.10-windows`
+- Windows 1.0.16 is the latest GitHub-published Windows release/tag.
+- Release: `https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.16-windows`
 - The private website download endpoint dynamically resolves the latest GitHub
   release asset named `Foldiq-Setup.exe`; no website code change or redeploy was
-  required for 1.0.10. All 10 web purchase/download tests pass.
+  required for 1.0.16. All 10 web purchase/download tests passed in the prior
+  website validation.
 - Windows code is intentionally unsigned for now; the user accepted that
   SmartScreen may warn. Do not start a Windows certificate purchase/signing
   workflow unless explicitly requested.
@@ -35,7 +36,7 @@ No credentials or Apple/GitHub secrets are recorded in this checkpoint.
   Netlify without a new explicit reason.
 - The repository was made private earlier in the project.
 
-## Windows 1.0.16 — built and verified locally, not yet published
+## Windows 1.0.16 — built, verified, pushed, and published
 
 This build includes everything from the superseded 1.0.15 test build plus:
 
@@ -80,8 +81,9 @@ Installer:
 - SHA-256: `d7b350d9e6e8c177cef8bcc8e8d7a72fb62eec1fef8ca21741d5e23cbdc5b784`
 - Identical source artifact:
   `/Users/enrique/Developer/Foldiq/desktop/dist-electron/Foldiq Setup 1.0.16.exe`
-- Not pushed, tagged, released, or served by the website until GitHub auth is
-  repaired.
+- Published asset: `Foldiq-Setup.exe`. A fresh download from the GitHub release
+  matched SHA-256
+  `d7b350d9e6e8c177cef8bcc8e8d7a72fb62eec1fef8ca21741d5e23cbdc5b784`.
 
 ## Windows 1.0.10 release
 
@@ -333,7 +335,8 @@ Latest local installer:
    warning. If a scan
    warning/failure occurs, use `Send diagnostics to developer`, review the
    privacy notice and generated support email, then send it.
-5. Re-authenticate GitHub CLI, then push the prepared Windows parity commit,
-   create tag/release `v1.0.16-windows`, upload the installer as
-   `Foldiq-Setup.exe`, and verify the downloaded asset SHA-256. The website
-   should resolve the newest release automatically.
+5. Test `/Users/enrique/Desktop/Foldiq Setup 1.0.16.exe` on the real Windows
+   machine. Confirm the footer says 1.0.16, then test the original ZIP/desktop
+   folder, Smart Hybrid with GPS off and on, Retry Failed Files, and explicit
+   empty-folder cleanup. Do not replace 1.0.16 with different bytes; any new
+   correction must use a new version.
