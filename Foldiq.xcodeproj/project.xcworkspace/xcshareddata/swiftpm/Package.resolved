@@ -8,15 +8,6 @@
       "state" : {
         "revision" : "215c504fe9452ee58e7cacd88f20c9793f2fc103"
       }
-    },
-    {
-      "identity" : "swift-archive",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/marcprux/swift-archive",
-      "state" : {
-        "revision" : "48fddd77a1d8301ce04e0d7c093fcf0867fa1ff8",
-        "version" : "3.8.9"
-      }
     }
   ],
   "version" : 3
