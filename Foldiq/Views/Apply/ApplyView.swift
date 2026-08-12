@@ -23,6 +23,26 @@ struct ApplyView: View {
 
     private let mover = FileMover()
 
+    private var hasErrors: Bool { !progress.errors.isEmpty }
+
+    private var completionTitle: String {
+        guard isComplete else {
+            return nav.organizationConfig.fileOperation == .move ? "Moving Files…" : "Copying Files…"
+        }
+        guard hasErrors else { return "Done!" }
+        return (manifest?.entries.isEmpty ?? true) ? "Nothing Was Organized" : "Finished with Errors"
+    }
+
+    private var statusIcon: String {
+        if !isComplete { return "arrow.triangle.2.circlepath.circle" }
+        return hasErrors ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+    }
+
+    private var statusColor: Color {
+        if !isComplete { return .blue }
+        return hasErrors ? .orange : .green
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
@@ -31,18 +51,18 @@ struct ApplyView: View {
                 // Icon
                 Group {
                     if #available(macOS 15.0, iOS 18.0, *) {
-                        Image(systemName: isComplete ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath.circle")
+                        Image(systemName: statusIcon)
                             .symbolEffect(.rotate, isActive: !isComplete)
                     } else {
-                        Image(systemName: isComplete ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath.circle")
+                        Image(systemName: statusIcon)
                             .symbolEffect(.pulse, isActive: !isComplete)
                     }
                 }
                 .font(.system(size: 64, weight: .thin))
-                .foregroundStyle(isComplete ? .green : .blue)
+                .foregroundStyle(statusColor)
 
                 // Title
-                Text(isComplete ? "Done!" : (nav.organizationConfig.fileOperation == .move ? "Moving Files…" : "Copying Files…"))
+                Text(completionTitle)
                     .font(.largeTitle).fontWeight(.bold)
 
                 if !isComplete {
@@ -69,7 +89,7 @@ struct ApplyView: View {
                 VStack(spacing: 8) {
                     ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
                         .frame(maxWidth: 460)
-                        .tint(isComplete ? .green : .blue)
+                        .tint(statusColor)
 
                     HStack {
                         Text(progress.currentFile.isEmpty ? "Starting…" : progress.currentFile)
@@ -111,10 +131,10 @@ struct ApplyView: View {
             // Continue (enabled only when done)
             if isComplete {
                 Button {
-                    nav.go(to: .report)
+                    nav.go(to: manifest == nil && hasErrors ? .settings : .report)
                 } label: {
                     HStack {
-                        Text("View Report")
+                        Text(manifest == nil && hasErrors ? "Back to Settings" : "View Report")
                         Image(systemName: "arrow.right")
                     }
                     .font(.headline)
@@ -146,6 +166,19 @@ struct ApplyView: View {
     private func startApply() {
         guard let session = nav.scanSession else { return }
 
+        // A system-picker destination is required. Selecting an archive grants
+        // read access to that file, not permission to create a sibling folder.
+        guard nav.organizationConfig.hasCustomOutputParent else {
+            progress = .init(
+                done: 0,
+                total: max(session.files.count, 1),
+                currentFile: "",
+                errors: ["Choose a destination folder before organizing files."]
+            )
+            isComplete = true
+            return
+        }
+
         // Fetch all pending plans for this session
         let sessionID = session.id
         let descriptor = FetchDescriptor<OrganizationPlan>(
@@ -153,6 +186,22 @@ struct ApplyView: View {
         )
         guard let plans = try? context.fetch(descriptor), !plans.isEmpty else {
             isComplete = true; return
+        }
+
+        // Verify write access once before processing the plan. This prevents one
+        // sandbox permission failure from being repeated for every source file.
+        let outputRoot = nav.organizationConfig.outputRoot(forSelectedRoot: session.rootURL)
+        do {
+            try FileManager.default.createDirectory(at: outputRoot, withIntermediateDirectories: true)
+        } catch {
+            progress = .init(
+                done: 0,
+                total: plans.count,
+                currentFile: "",
+                errors: ["Foldiq cannot write to the selected destination. Choose it again and grant access."]
+            )
+            isComplete = true
+            return
         }
 
         // Create undo manifest
@@ -173,7 +222,8 @@ struct ApplyView: View {
             // Delete temp extraction dirs now that the files have been moved/copied.
             await mover.cleanupTempDirs(tempDirs)
             nav.archiveTempDirs = []
-            if nav.organizationConfig.fileOperation == .move {
+            let completedWithoutErrors = progress.errors.isEmpty && m.entries.count == plans.count
+            if completedWithoutErrors && nav.organizationConfig.fileOperation == .move {
                 reviewShelvedFiles = await mover.shelveResidualFilesForReview(
                     under: nav.selectedFolderURLs,
                     expectedDestinationPaths: Set(plans.map(\.destinationAbsPath)),
@@ -185,7 +235,7 @@ struct ApplyView: View {
                     skipping: nav.organizationConfig.outputFolderName
                 )
             }
-            let shouldRequestReview = m.entries.count == plans.count &&
+            let shouldRequestReview = completedWithoutErrors &&
                 AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
                     successfulItemCount: m.entries.count
                 )

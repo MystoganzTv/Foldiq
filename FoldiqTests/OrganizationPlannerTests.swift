@@ -67,6 +67,18 @@ final class OrganizationPlannerTests: XCTestCase {
         XCTAssertEqual(output.path, "/Users/tester/Imports/Sorted Library")
     }
 
+    func testSelectingNamedOutputFolderDoesNotNestDuplicateFolder() {
+        var config = OrganizationConfig()
+        config.outputFolderName = "Organized Media"
+        config.customOutputParentPath = "/Users/tester/Desktop/Organized Media"
+
+        let output = config.outputRoot(
+            forSelectedRoot: URL(fileURLWithPath: "/Users/tester/Imports/photos.zip")
+        )
+
+        XCTAssertEqual(output.path, "/Users/tester/Desktop/Organized Media")
+    }
+
     func testByLocationUsesGeocodedHierarchyWhenGPSIsAvailable() async {
         let session = makeSession(
             rootPath: "/Users/tester/Photos",
