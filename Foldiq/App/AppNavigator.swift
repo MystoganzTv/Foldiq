@@ -65,13 +65,11 @@ final class AppNavigator: ObservableObject {
     var rootFolderURL: URL? { selectedFolderURLs.first }
 
     func preserveAccess(to urls: [URL]) {
-        #if !os(macOS)
         for url in urls where !securityScopedURLs.contains(url) {
             if url.startAccessingSecurityScopedResource() {
                 securityScopedURLs.insert(url)
             }
         }
-        #endif
     }
 
     func addSelectedFolderURLs(_ urls: [URL]) {
@@ -81,11 +79,9 @@ final class AppNavigator: ObservableObject {
 
     func removeSelectedFolderURL(_ url: URL) {
         selectedFolderURLs.removeAll { $0 == url }
-        #if !os(macOS)
         if securityScopedURLs.remove(url) != nil {
             url.stopAccessingSecurityScopedResource()
         }
-        #endif
     }
 
     func go(to screen: AppScreen) {
@@ -110,12 +106,10 @@ final class AppNavigator: ObservableObject {
                 }
             }
         }
-        #if !os(macOS)
         for url in securityScopedURLs {
             url.stopAccessingSecurityScopedResource()
         }
         securityScopedURLs.removeAll()
-        #endif
         selectedFolderURLs = []
         scanSession = nil
         // Intentionally keep organizationConfig — user's settings survive between sessions.

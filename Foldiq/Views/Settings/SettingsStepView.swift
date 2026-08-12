@@ -15,6 +15,9 @@ struct SettingsStepView: View {
     }
 
     private var destinationPreviewPath: String {
+        guard nav.organizationConfig.hasCustomOutputParent else {
+            return "Choose a destination folder before continuing"
+        }
         guard let rootURL = nav.rootFolderURL else {
             return nav.organizationConfig.outputFolderName
         }
@@ -98,6 +101,7 @@ struct SettingsStepView: View {
 
                     Text(destinationPreviewPath)
                         .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(nav.organizationConfig.hasCustomOutputParent ? .primary : .secondary)
                         .textSelection(.enabled)
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -110,11 +114,20 @@ struct SettingsStepView: View {
                         .buttonStyle(.bordered)
 
                         if nav.organizationConfig.hasCustomOutputParent {
-                            Button("Use Selected Folder") {
+                            Button("Clear Location") {
                                 nav.organizationConfig.customOutputParentPath = nil
                             }
                             .buttonStyle(.bordered)
                         }
+                    }
+
+                    if !nav.organizationConfig.hasCustomOutputParent {
+                        Label(
+                            "Required. Foldiq never writes inside ZIP, RAR, or 7z files; compressed files are read-only sources.",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                     }
                 }
 
@@ -190,11 +203,15 @@ struct SettingsStepView: View {
                     .buttonStyle(.bordered)
                 Spacer()
                 Button {
-                    nav.go(to: .preview)
+                    if nav.organizationConfig.hasCustomOutputParent {
+                        nav.go(to: .preview)
+                    } else {
+                        chooseCustomDestinationFolder()
+                    }
                 } label: {
                     HStack {
-                        Text("Preview Organization")
-                        Image(systemName: "arrow.right")
+                        Text(nav.organizationConfig.hasCustomOutputParent ? "Preview Organization" : "Choose Destination")
+                        Image(systemName: nav.organizationConfig.hasCustomOutputParent ? "arrow.right" : "folder.badge.plus")
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -231,6 +248,7 @@ struct SettingsStepView: View {
         }
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        nav.preserveAccess(to: [url])
         nav.organizationConfig.customOutputParentPath = url.path
         #else
         showingDestinationImporter = true

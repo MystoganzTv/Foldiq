@@ -369,8 +369,11 @@ extension OrganizationConfig {
     /// *next to* the file in its parent directory — never inside the file path.
     func outputRoot(forSelectedRoot rootURL: URL) -> URL {
         if let customOutputParentPath, !customOutputParentPath.isEmpty {
-            return URL(fileURLWithPath: customOutputParentPath)
-                .appendingPathComponent(outputFolderName)
+            let selectedDestination = URL(fileURLWithPath: customOutputParentPath)
+            guard selectedDestination.lastPathComponent != outputFolderName else {
+                return selectedDestination
+            }
+            return selectedDestination.appendingPathComponent(outputFolderName)
         }
 
         // If rootURL is a file (archive), base the output in its parent directory.

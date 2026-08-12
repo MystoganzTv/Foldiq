@@ -114,6 +114,15 @@ final class FileMover {
                 errors.append(srcURL.lastPathComponent + ": " + human)
             }
         }
+
+        // The live update above happens before each operation so the active file
+        // is visible. Publish a final snapshot as well, including any last error.
+        onProgress(ApplyProgress(
+            done: done,
+            total: total,
+            currentFile: plans.last?.sourceURL.lastPathComponent ?? "",
+            errors: errors
+        ))
     }
 
     // MARK: - Error humanization

@@ -397,7 +397,7 @@
 			mainGroup = MainGroup;
 			productRefGroup = ProductsGroup /* Products */;
 			packageReferences = (
-				FF000001 /* XCRemoteSwiftPackageReference "swift-archive" */,
+				FF000001 /* XCLocalSwiftPackageReference "swift-archive" */,
 				FF000003 /* XCRemoteSwiftPackageReference "SevenZip.swift" */,
 			);
 			projectDirPath = "";
@@ -608,7 +608,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Foldiq/Foldiq.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 70;
+				CURRENT_PROJECT_VERSION = 72;
 				DEVELOPMENT_TEAM = V6F97AK8AD;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -633,7 +633,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Foldiq/Foldiq.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 70;
+				CURRENT_PROJECT_VERSION = 72;
 				DEVELOPMENT_TEAM = V6F97AK8AD;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -788,15 +788,14 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		FF000001 /* XCRemoteSwiftPackageReference "swift-archive" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/marcprux/swift-archive";
-			requirement = {
-				kind = exactVersion;
-				version = 3.8.9;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		FF000001 /* XCLocalSwiftPackageReference "swift-archive" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "Vendor/swift-archive";
 		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
 		FF000003 /* XCRemoteSwiftPackageReference "SevenZip.swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/mtgto/SevenZip.swift";
@@ -810,7 +809,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		FF000002 /* Archive */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = FF000001 /* XCRemoteSwiftPackageReference "swift-archive" */;
+			package = FF000001 /* XCLocalSwiftPackageReference "swift-archive" */;
 			productName = Archive;
 		};
 		FF000004 /* SevenZip */ = {
