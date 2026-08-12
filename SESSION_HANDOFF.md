@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-12 17:11 America/New_York
+Updated: 2026-08-12 17:31 America/New_York
 
 ## Read this first
 
@@ -37,6 +37,12 @@ No credentials or Apple/GitHub secrets are recorded in this checkpoint.
   Pages workflow was removed because it was generating false deployment
   failures. The updated web suite passes all 12 tests, and a protected Vercel
   preview verified the static pages plus all three serverless functions.
+- GitHub Actions cleanup completed after the account reached its included usage:
+  41 temporary workflow artifacts totaling 2,422,863,177 bytes (2.42 GB) were
+  deleted; active Actions artifact storage verified at zero afterward. Published
+  GitHub Releases and `Foldiq-Setup.exe` were not touched. Both remaining build
+  workflows are manual-only, cancel duplicate runs, have bounded timeouts, and
+  retain any future artifacts for one day.
 - Windows code is intentionally unsigned for now; the user accepted that
   SmartScreen may warn. Do not start a Windows certificate purchase/signing
   workflow unless explicitly requested.

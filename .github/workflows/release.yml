@@ -1,19 +1,20 @@
 name: Build & Release
 
 on:
-  push:
-    tags:
-      - 'v*'
-      - '!v*-windows'
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   # ── macOS Universal (signed + notarized DMG) ──────────────────────────────
   build-macos:
     runs-on: macos-15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v7
@@ -90,6 +91,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: macos-dmg
+          retention-days: 1
           path: |
             ${{ runner.temp }}/Foldiq-*.dmg
             ${{ runner.temp }}/Foldiq-*-notarized.zip
@@ -97,6 +99,7 @@ jobs:
   # ── Windows x64 ────────────────────────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: desktop
@@ -124,12 +127,14 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: windows-installer
+          retention-days: 1
           path: desktop/dist-electron/Foldiq Setup*.exe
 
   # ── GitHub Release ─────────────────────────────────────────────────────────
   release:
     needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:

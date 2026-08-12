@@ -11,9 +11,14 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   build-and-release-windows:
     runs-on: windows-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: desktop
@@ -58,6 +63,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: windows-installer-${{ inputs.version }}
+          retention-days: 1
           path: desktop/dist-electron/Foldiq-Setup.exe
 
       - name: Publish Windows release
