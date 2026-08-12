@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-12 18:02 America/New_York
+Updated: 2026-08-12 18:45 America/New_York
 
 ## Read this first
 
@@ -32,6 +32,25 @@ the real download handler returned HTTP 302 to
 asset `Foldiq-Setup.exe`. No token value is stored in this repository.
 
 No credentials or Apple/GitHub secrets are recorded in this checkpoint.
+
+On 2026-08-12 all six external direct purchasers were contacted individually
+about the supported releases. Stripe showed five legacy macOS purchases and one
+Windows purchase (the owner's own test purchase was excluded). Five one-time
+Apple promo codes for macOS 1.0.8 were generated in App Store Connect and sent
+one per Mac buyer, with redemption instructions, Apple terms, and the Apple
+expiration of 2026-09-09 at 11:59 PM PT. The Windows buyer received their
+original purchase-bound private download link for Windows 1.0.17. Gmail Sent
+verification found exactly five Mac notices and one Windows notice. No customer
+addresses, checkout sessions, or promo-code values are recorded here.
+
+Operational email caveat: the connected Resend account rejected
+`receipts@foldiq.app` because `foldiq.app` is not verified there (the only listed
+verified domain was `rbtgenius.com`). No Resend attempts were delivered; the six
+customer notices were sent successfully from the connected owner Gmail account,
+`enrique.padron853@gmail.com`, signed as Foldiq Support. Before relying on future
+automatic purchase receipts from `web/api/webhook.js`, confirm whether Vercel's
+production `RESEND_API_KEY` belongs to a different account where `foldiq.app` is
+verified, or verify the domain and rotate/update that key.
 
 ## Published state
 
