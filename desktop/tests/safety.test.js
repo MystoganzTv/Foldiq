@@ -172,21 +172,6 @@ test('Start Over discards only an internal Foldiq Undo manifest', async (t) => {
   );
 });
 
-test('legacy visible Undo JSON cleanup leaves unrelated files untouched', (t) => {
-  const dir = tempDir(t);
-  const output = path.join(dir, 'output');
-  fs.mkdirSync(output);
-  const legacy = path.join(output, '.foldiq-undo-2026-08-12T03-18-07-698Z.json');
-  const unrelated = path.join(output, 'report.json');
-  fs.writeFileSync(legacy, '{}');
-  fs.writeFileSync(unrelated, '{}');
-
-  mover.cleanupLegacyOutputManifests(output);
-
-  assert.equal(fs.existsSync(legacy), false);
-  assert.equal(fs.existsSync(unrelated), true);
-});
-
 test('date parsing rejects absurd years and impossible calendar dates', () => {
   const now = new Date('2026-08-11T12:00:00');
   assert.equal(scanner.dateFromFilename('IMG_91610811_120000.jpg', now), null);

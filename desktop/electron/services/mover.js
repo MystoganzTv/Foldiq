@@ -41,16 +41,6 @@ function cleanupManifests(manifestDirectory) {
   }
 }
 
-function cleanupLegacyOutputManifests(outputFolder) {
-  let entries = [];
-  try { entries = fs.readdirSync(outputFolder, { withFileTypes: true }); } catch { return; }
-  for (const entry of entries) {
-    if (entry.isFile() && /^\.foldiq-undo-[A-Za-z0-9.-]+\.json$/.test(entry.name)) {
-      fs.rmSync(path.join(outputFolder, entry.name), { force: true });
-    }
-  }
-}
-
 function hashFile(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
@@ -219,6 +209,5 @@ module.exports = {
   assertDestinationAvailable,
   discardManifest,
   cleanupManifests,
-  cleanupLegacyOutputManifests,
   assertInternalManifest,
 };

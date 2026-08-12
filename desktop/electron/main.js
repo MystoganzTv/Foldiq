@@ -127,9 +127,6 @@ ipcMain.handle('apply:start', async (event, { plan, config }) => {
     ...config,
     manifestDirectory: undoDirectory(),
   }, onProgress);
-  // Remove manifests produced by v1.0.5 and earlier from the visible library.
-  // They cannot be resumed after an app restart and are now stored internally.
-  mover.cleanupLegacyOutputManifests(config.outputFolder);
   activeManifestPath = result.manifestPath;
   if (result.errors.length === 0) scanner.cleanupTempDirs();
   return result;
