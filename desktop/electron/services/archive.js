@@ -155,18 +155,27 @@ function bundledSevenZipPath() {
 }
 
 function parseTechnicalListing(output) {
-  return output
-    .split(/\r?\n\r?\n/)
-    .map(block => {
-      const values = {};
-      for (const line of block.split(/\r?\n/)) {
-        const separator = line.indexOf(' = ');
-        if (separator <= 0) continue;
-        values[line.slice(0, separator)] = line.slice(separator + 3);
-      }
-      return values;
-    })
-    .filter(values => typeof values.Path === 'string');
+  const entries = [];
+  let values = {};
+
+  const finishEntry = () => {
+    if (typeof values.Path === 'string') entries.push(values);
+    values = {};
+  };
+
+  for (const line of output.split(/\r?\n/)) {
+    if (line.trim() === '') {
+      finishEntry();
+      continue;
+    }
+    const separator = line.indexOf(' = ');
+    if (separator <= 0) continue;
+    const key = line.slice(0, separator);
+    if (key === 'Path' && typeof values.Path === 'string') finishEntry();
+    values[key] = line.slice(separator + 3);
+  }
+  finishEntry();
+  return entries;
 }
 
 function looksEncrypted(message) {
@@ -177,7 +186,7 @@ async function listWithSevenZip(archivePath, executable) {
   try {
     const { stdout } = await execFileAsync(
       executable,
-      ['l', '-slt', '-ba', '-sccUTF-8', '--', archivePath],
+      ['l', '-slt', '-ba', '-sccUTF-8', archivePath],
       { encoding: 'utf8', maxBuffer: MAX_LISTING_BYTES, windowsHide: true }
     );
     return parseTechnicalListing(stdout);
@@ -270,7 +279,7 @@ async function extractWithSevenZip(archivePath, isMedia, executable = bundledSev
     try {
       await execFileAsync(
         executable,
-        ['x', '-y', '-aoa', '-spd', '-scsUTF-8', `-o${tempDirectory}`, '--', archivePath, `@${listFile}`],
+        ['x', '-y', '-aoa', '-spd', '-scsUTF-8', `-o${tempDirectory}`, archivePath, `@${listFile}`],
         { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, windowsHide: true }
       );
     } catch (error) {

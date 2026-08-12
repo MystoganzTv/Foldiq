@@ -7,7 +7,12 @@ const zlib = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const { path7za } = require('7zip-bin');
 
-const { extractArchive, extractZip, safeRelativePath } = require('../electron/services/archive');
+const {
+  extractArchive,
+  extractZip,
+  parseTechnicalListing,
+  safeRelativePath,
+} = require('../electron/services/archive');
 const scanner = require('../electron/services/scanner');
 const { filterSupportedSources } = require('../electron/services/sources');
 
@@ -137,6 +142,19 @@ test('source filtering accepts folders, ZIP, RAR, and 7z but rejects unrelated f
 
 test('safe ZIP paths accept nested media paths', () => {
   assert.equal(safeRelativePath('album/2026/photo.jpg'), path.join('album', '2026', 'photo.jpg'));
+});
+
+test('7-Zip listing parser accepts entries without blank separators', () => {
+  const entries = parseTechnicalListing([
+    'Path = album\\one.jpg',
+    'Size = 10',
+    'Attributes = A',
+    'Path = notes.txt',
+    'Size = 4',
+    'Attributes = A',
+  ].join('\r\n'));
+
+  assert.deepEqual(entries.map(entry => entry.Path), ['album\\one.jpg', 'notes.txt']);
 });
 
 test('7z scanner extracts nested media and keeps the archive untouched', async (t) => {
