@@ -1,71 +1,43 @@
 .bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 18px 40px 0;
+  padding: 17px 38px 15px;
   border-bottom: 1px solid #E2E8F0;
-  background: #fff;
-  gap: 0;
-  padding-bottom: 16px;
+  background: rgba(255, 255, 255, .96);
   -webkit-app-region: drag;
 }
 
-.stepWrap {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  max-width: 220px;
-  -webkit-app-region: no-drag;
-}
-
-.step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
+.track { display: flex; align-items: flex-start; justify-content: center; max-width: 980px; margin: 0 auto; }
+.step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 0 0 112px; -webkit-app-region: no-drag; }
 .circle {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #F1F5F9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background .2s;
+  width: 36px; height: 36px; border-radius: 50%; background: #F1F5F9;
+  display: grid; place-items: center; transition: background .3s ease, transform .3s ease, box-shadow .3s ease;
 }
-
-.circleActive {
-  background: #3B82F6;
-}
-
-.circleDone {
-  background: #3B82F6;
-}
-
-.iconActive  { color: #fff; display: flex; }
-.iconInactive { color: #94A3B8; display: flex; }
-
-.label {
-  font-size: 11px;
-  font-weight: 500;
-  color: #94A3B8;
-  white-space: nowrap;
-  text-align: center;
-}
-
+.circleActive { background: #3B82F6; transform: scale(1.06); box-shadow: 0 6px 18px rgba(59, 130, 246, .28); }
+.circleDone { background: #3B82F6; }
+.circleWorking { animation: stepPulse 1.8s ease-in-out infinite; }
+.circleWorking svg { animation: stepSpin 1.4s linear infinite; }
+.iconActive, .iconInactive { display: flex; }
+.iconActive { color: #fff; }
+.iconInactive { color: #94A3B8; }
+.checkIcon { animation: checkPop .32s cubic-bezier(.2, .9, .25, 1.35) both; }
+.label { font-size: 11px; font-weight: 500; color: #94A3B8; white-space: nowrap; text-align: center; transition: color .25s ease; }
 .labelActive { color: #0F172A; font-weight: 700; }
-.labelDone   { color: #3B82F6; font-weight: 600; }
+.labelDone { color: #3B82F6; font-weight: 600; }
+.line { flex: 1 1 86px; max-width: 112px; min-width: 36px; height: 2px; margin-top: 17px; background: #E2E8F0; overflow: hidden; position: relative; }
+.line::after { content: ''; position: absolute; inset: 0; background: #3B82F6; transform: scaleX(0); transform-origin: left; }
+.lineActive::after { animation: lineFill .46s ease-out forwards; }
 
-.line {
-  flex: 1;
-  height: 2px;
-  background: #E2E8F0;
-  margin-bottom: 22px;
+@keyframes lineFill { to { transform: scaleX(1); } }
+@keyframes stepSpin { to { transform: rotate(360deg); } }
+@keyframes stepPulse { 50% { box-shadow: 0 7px 24px rgba(59, 130, 246, .43); } }
+@keyframes checkPop { from { opacity: 0; transform: scale(.3); } to { opacity: 1; transform: scale(1); } }
+
+@media (max-width: 900px) {
+  .bar { padding-inline: 20px; }
+  .step { flex-basis: 92px; }
+  .label { font-size: 10px; }
 }
 
-.lineActive {
-  background: #3B82F6;
+@media (prefers-reduced-motion: reduce) {
+  .circleWorking, .circleWorking svg, .checkIcon, .lineActive::after { animation: none; }
+  .lineActive::after { transform: scaleX(1); }
 }

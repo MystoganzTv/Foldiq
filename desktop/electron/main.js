@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } = require('electron');
 const path = require('path');
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -10,6 +10,8 @@ const { filterSupportedSources } = require('./services/sources');
 
 let mainWindow;
 let activeManifestPath = null;
+let allowedPreviewPaths = new Set();
+const thumbnailCache = new Map();
 
 function undoDirectory() {
   return path.join(app.getPath('userData'), 'undo');
@@ -106,7 +108,32 @@ ipcMain.handle('dialog:selectOutput', async () => {
 ipcMain.handle('scan:start', async (event, { folders }) => {
   assertArray(folders, 'folders', 100).forEach(folder => assertString(folder, 'folder'));
   const onProgress = (p) => mainWindow.webContents.send('scan:progress', p);
-  return await scanner.scan(folders, onProgress);
+  const result = await scanner.scan(folders, onProgress);
+  allowedPreviewPaths = new Set(result.files.flatMap(file => (
+    [file.path, file.archiveSourcePath].filter(Boolean).map(filePath => path.resolve(filePath))
+  )));
+  thumbnailCache.clear();
+  return result;
+});
+
+// Generate previews in the trusted main process. Renderer requests are limited
+// to files returned by the current scan so this cannot become an arbitrary local
+// file-reading bridge if renderer content is ever compromised.
+ipcMain.handle('preview:thumbnail', async (event, { filePath }) => {
+  const resolvedPath = path.resolve(assertString(filePath, 'preview file path'));
+  if (!allowedPreviewPaths.has(resolvedPath)) throw new Error('Preview file is not part of the current scan');
+  if (thumbnailCache.has(resolvedPath)) return thumbnailCache.get(resolvedPath);
+
+  try {
+    const image = await nativeImage.createThumbnailFromPath(resolvedPath, { width: 640, height: 420 });
+    const dataURL = image.isEmpty() ? null : image.toDataURL();
+    if (thumbnailCache.size >= 40) thumbnailCache.delete(thumbnailCache.keys().next().value);
+    thumbnailCache.set(resolvedPath, dataURL);
+    return dataURL;
+  } catch {
+    thumbnailCache.set(resolvedPath, null);
+    return null;
+  }
 });
 
 // Build organization plan
@@ -128,7 +155,7 @@ ipcMain.handle('apply:start', async (event, { plan, config }) => {
     manifestDirectory: undoDirectory(),
   }, onProgress);
   activeManifestPath = result.manifestPath;
-  if (result.errors.length === 0) scanner.cleanupTempDirs();
+  if (result.errors.length === 0) await scanner.cleanupTempDirs();
   return result;
 });
 
@@ -151,6 +178,12 @@ ipcMain.handle('apply:discardUndo', async (event, { manifestPath }) => {
 ipcMain.handle('shell:openFolder', async (event, { folderPath }) => {
   assertString(folderPath, 'folder path');
   await shell.openPath(folderPath);
+});
+
+ipcMain.handle('shell:revealFile', async (event, { filePath }) => {
+  const resolvedPath = path.resolve(assertString(filePath, 'file path'));
+  if (!allowedPreviewPaths.has(resolvedPath)) throw new Error('File is not part of the current scan');
+  shell.showItemInFolder(resolvedPath);
 });
 
 // Export CSV report

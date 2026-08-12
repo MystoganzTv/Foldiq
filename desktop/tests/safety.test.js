@@ -203,6 +203,37 @@ test('date parsing rejects absurd years and impossible calendar dates', () => {
   assert.equal(scanner.dateFromFilename('IMG_20230228_120000.jpg', now).getFullYear(), 2023);
 });
 
+test('date selection never treats modification timestamps as capture dates', () => {
+  const now = new Date('2026-08-11T12:00:00');
+  const selected = scanner.dateFromTrustedMetadata({
+    ModifyDate: '2026:08:06 09:30:00',
+    FileModifyDate: '2026:08:11 12:00:00',
+  }, now);
+  assert.equal(selected, null);
+});
+
+test('a media file with only a recent filesystem timestamp remains undated', async (t) => {
+  const dir = tempDir(t);
+  const mediaPath = path.join(dir, 'old-photo-without-metadata.jpg');
+  fs.writeFileSync(mediaPath, 'not-real-image-data');
+  const misleadingDate = new Date('2026-08-06T09:30:00');
+  fs.utimesSync(mediaPath, misleadingDate, misleadingDate);
+
+  assert.equal(await scanner.extractDate(mediaPath, new Date('2026-08-11T12:00:00')), null);
+});
+
+test('an older filename date corrects recently replaced embedded metadata', () => {
+  const metadata = {
+    date: new Date('2026-08-06T09:30:00'),
+    source: 'embedded metadata',
+    tag: 'CreateDate',
+  };
+  const filenameDate = new Date('2021-05-14T12:00:00');
+  const selected = scanner.resolveDateCandidates(metadata, filenameDate);
+  assert.equal(selected.source, 'filename');
+  assert.equal(selected.date.getFullYear(), 2021);
+});
+
 test('planner routes missing or implausible dates to Unknown Date', (t) => {
   const dir = tempDir(t);
   const config = {

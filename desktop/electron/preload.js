@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('foldiq', {
   // Scan
   startScan:      (folders)    => ipcRenderer.invoke('scan:start', { folders }),
   onScanProgress: (cb)         => ipcRenderer.on('scan:progress', (_, p) => cb(p)),
+  getThumbnail:   (filePath)   => ipcRenderer.invoke('preview:thumbnail', { filePath }),
 
   // Plan
   buildPlan:      (files, cfg) => ipcRenderer.invoke('plan:build', { files, config: cfg }),
@@ -24,6 +25,7 @@ contextBridge.exposeInMainWorld('foldiq', {
 
   // Shell
   openFolder:     (p)          => ipcRenderer.invoke('shell:openFolder', { folderPath: p }),
+  revealFile:     (p)          => ipcRenderer.invoke('shell:revealFile', { filePath: p }),
 
   // Report
   exportCSV:      (rows)       => ipcRenderer.invoke('report:exportCSV', { rows }),

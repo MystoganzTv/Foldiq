@@ -3,9 +3,10 @@ import s from './Screen.module.css';
 
 const FILTERS = [
   ['all', 'All'],
-  ['included', 'Included'],
-  ['excluded', 'Excluded'],
-  ['skipped', 'Skipped by Foldiq'],
+  ['included', 'Will organize'],
+  ['excluded', 'Left untouched'],
+  ['skipped', 'Duplicates'],
+  ['unknown', 'Unknown Date'],
 ];
 
 function formatBytes(bytes = 0) {
@@ -15,8 +16,43 @@ function formatBytes(bytes = 0) {
   return `${bytes} B`;
 }
 
+function formatDate(value) {
+  if (!value) return 'Unknown';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Unknown'
+    : new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+}
+
+function dateInputValue(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = number => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function dateSourceLabel(source) {
+  const labels = {
+    'camera metadata': 'Camera metadata',
+    'video metadata': 'Video metadata',
+    'embedded metadata': 'Embedded creation metadata',
+    filename: 'Date encoded in filename',
+    manual: 'Corrected by you',
+  };
+  return labels[source] || 'No reliable capture date';
+}
+
 function pathParts(value = '') {
   return value.split(/[\\/]+/).filter(Boolean);
+}
+
+function fileKey(file) {
+  return `${file.id ?? ''}:${file.path ?? ''}`;
+}
+
+function isUnknownDate(file) {
+  return /(?:^|[\\/])Unknown Date(?:[\\/]|$)/i.test(file.destPath || '');
 }
 
 function friendlyDestination(file, outputFolder) {
@@ -31,15 +67,51 @@ function friendlyDestination(file, outputFolder) {
   return relative.join('  ›  ');
 }
 
+function sourceFolder(file) {
+  const parts = pathParts(file.archiveSourcePath || file.path);
+  return parts.slice(0, -1).join('  ›  ');
+}
+
 function skipReason(file) {
   if (file.reason === 'duplicate') return 'Exact duplicate';
   return 'Skipped automatically';
+}
+
+function buildFolderTree(files, outputFolder) {
+  const rootName = pathParts(outputFolder).at(-1) || 'Organized Library';
+  const root = { name: rootName, count: 0, children: new Map() };
+
+  for (const file of files) {
+    if (!file.destPath) continue;
+    const destination = pathParts(file.destPath);
+    const output = pathParts(outputFolder);
+    const rootMatches = output.length > 0 && output.every(
+      (part, index) => destination[index]?.toLowerCase() === part.toLowerCase(),
+    );
+    const folders = (rootMatches ? destination.slice(output.length, -1) : destination.slice(-5, -1));
+    root.count += 1;
+    let cursor = root;
+    for (const folder of folders) {
+      if (!cursor.children.has(folder)) {
+        cursor.children.set(folder, { name: folder, count: 0, children: new Map() });
+      }
+      cursor = cursor.children.get(folder);
+      cursor.count += 1;
+    }
+  }
+  return root;
 }
 
 export default function PreviewScreen({ go, files, config, plan, setPlan }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('source');
+  const [selectedKey, setSelectedKey] = useState(null);
+  const [showTree, setShowTree] = useState(false);
+  const [showPreflight, setShowPreflight] = useState(false);
+  const [dateUpdatingKey, setDateUpdatingKey] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -47,6 +119,7 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
       .then(nextPlan => {
         if (!active) return;
         setPlan(nextPlan);
+        setSelectedKey(nextPlan.length > 0 ? fileKey(nextPlan[0]) : null);
         setLoading(false);
       })
       .catch(err => {
@@ -58,42 +131,91 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
   }, [files, config, setPlan]);
 
   const candidates = useMemo(() => plan.filter(file => file.action !== 'skip'), [plan]);
-  const included = useMemo(
-    () => candidates.filter(file => file.included !== false),
-    [candidates],
-  );
-  const excluded = useMemo(
-    () => candidates.filter(file => file.included === false),
-    [candidates],
-  );
+  const included = useMemo(() => candidates.filter(file => file.included !== false), [candidates]);
+  const excluded = useMemo(() => candidates.filter(file => file.included === false), [candidates]);
   const skipped = useMemo(() => plan.filter(file => file.action === 'skip'), [plan]);
+  const unknown = useMemo(() => plan.filter(isUnknownDate), [plan]);
+  const moves = useMemo(() => included.filter(file => file.action === 'move'), [included]);
+  const copies = useMemo(() => included.filter(file => file.action === 'copy'), [included]);
+  const selected = useMemo(
+    () => plan.find(file => fileKey(file) === selectedKey) || null,
+    [plan, selectedKey],
+  );
 
   const visible = useMemo(() => {
-    if (filter === 'included') return included;
-    if (filter === 'excluded') return excluded;
-    if (filter === 'skipped') return skipped;
-    return plan;
-  }, [filter, included, excluded, skipped, plan]);
+    let result = plan;
+    if (filter === 'included') result = included;
+    if (filter === 'excluded') result = excluded;
+    if (filter === 'skipped') result = skipped;
+    if (filter === 'unknown') result = unknown;
+
+    const query = search.trim().toLowerCase();
+    if (query) {
+      result = result.filter(file => (
+        file.name?.toLowerCase().includes(query) ||
+        file.path?.toLowerCase().includes(query) ||
+        file.destPath?.toLowerCase().includes(query)
+      ));
+    }
+
+    return [...result].sort((left, right) => {
+      if (sort === 'destination') return (left.destPath || '').localeCompare(right.destPath || '');
+      if (sort === 'status') {
+        const status = file => file.action === 'skip' ? 2 : file.included === false ? 1 : 0;
+        return status(left) - status(right) || left.name.localeCompare(right.name);
+      }
+      return (left.path || left.name).localeCompare(right.path || right.name);
+    });
+  }, [filter, included, excluded, skipped, unknown, plan, search, sort]);
 
   const filterCounts = {
     all: plan.length,
     included: included.length,
     excluded: excluded.length,
     skipped: skipped.length,
+    unknown: unknown.length,
   };
+  const actionableVisible = visible.filter(file => file.action !== 'skip');
+  const allVisibleIncluded = actionableVisible.length > 0 && actionableVisible.every(file => file.included !== false);
+  const resultsLabel = filter === 'all' && !search.trim() ? 'files' : 'matching files';
 
   function setIncluded(file, value) {
     if (file.action === 'skip') return;
+    const key = fileKey(file);
     setPlan(current => current.map(item => (
-      item === file ? { ...item, included: value } : item
+      fileKey(item) === key ? { ...item, included: value } : item
     )));
   }
 
   function setAllVisible(value) {
-    const visibleItems = new Set(visible.filter(file => file.action !== 'skip'));
+    const visibleKeys = new Set(visible.filter(file => file.action !== 'skip').map(fileKey));
     setPlan(current => current.map(item => (
-      visibleItems.has(item) ? { ...item, included: value } : item
+      visibleKeys.has(fileKey(item)) ? { ...item, included: value } : item
     )));
+  }
+
+  async function correctDate(file, value) {
+    const key = fileKey(file);
+    const parts = value ? value.split('-').map(Number) : [];
+    const corrected = value && parts.length === 3
+      ? new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0)
+      : null;
+    const inclusion = new Map(plan.map(item => [fileKey(item), item.included]));
+    const editedFiles = plan.map(item => (
+      fileKey(item) === key
+        ? { ...item, date: corrected?.toISOString() ?? null, dateSource: corrected ? 'manual' : null, dateTag: null }
+        : item
+    ));
+
+    setDateUpdatingKey(key);
+    try {
+      const rebuilt = await window.foldiq.buildPlan(editedFiles, config);
+      setPlan(rebuilt.map(item => ({ ...item, included: inclusion.get(fileKey(item)) ?? item.included })));
+    } catch (dateError) {
+      setError(dateError?.message || 'Foldiq could not update that date.');
+    } finally {
+      setDateUpdatingKey(null);
+    }
   }
 
   return (
@@ -101,18 +223,22 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
       <div className={s.previewHeader}>
         <div>
           <h1 className={s.title}>Review before organizing</h1>
-          <p className={s.sub}>
-            Choose what Foldiq should process. Nothing has been moved or copied yet.
-          </p>
+          <p className={s.sub}>Select a file to inspect it. Nothing has been moved or copied yet.</p>
         </div>
+        {!loading && !error && (
+          <div className={s.previewHeaderDestination} title={config.outputFolder}>
+            <span>Organized library</span>
+            <strong>{pathParts(config.outputFolder).at(-1) || config.outputFolder}</strong>
+          </div>
+        )}
       </div>
 
       {loading && (
         <div className={s.centerBlock}>
-          <div className={s.progressBar} style={{ width: 360 }}>
-            <div className={s.progressFill} style={{ width: '65%' }} />
-          </div>
-          <p className={s.sub}>Building a safe organization plan…</p>
+          <div className={s.planningOrb}><span /></div>
+          <h2 className={s.loadingTitle}>Building a safe plan…</h2>
+          <div className={`${s.progressBar} ${s.indeterminateBar}`} style={{ width: 380 }}><div /></div>
+          <p className={s.sub}>Comparing source paths, dates, duplicates, and destinations.</p>
         </div>
       )}
 
@@ -127,25 +253,24 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
       {!loading && !error && (
         <>
           <div className={s.previewContent}>
-            <div className={s.previewStats}>
-              <div className={`${s.previewStat} ${s.previewStatPrimary}`}>
-                <span className={s.previewStatIcon}>✓</span>
-                <div><strong>{included.length.toLocaleString()}</strong><span>Included</span></div>
+            <div className={s.previewToolbarTop}>
+              <div className={s.previewStatsInline}>
+                <PlanStat icon="✓" value={included.length} label="to organize" tone="green" />
+                <PlanStat icon="−" value={excluded.length} label="untouched" tone="neutral" />
+                {moves.length > 0 && <PlanStat icon="→" value={moves.length} label="moved" tone="blue" />}
+                {copies.length > 0 && <PlanStat icon="⧉" value={copies.length} label="copied" tone="blue" />}
+                {skipped.length > 0 && <PlanStat icon="⊘" value={skipped.length} label="duplicates" tone="orange" />}
+                {unknown.length > 0 && <PlanStat icon="?" value={unknown.length} label="no date" tone="yellow" />}
               </div>
-              <div className={s.previewStat}>
-                <span className={s.previewStatIcon}>−</span>
-                <div><strong>{excluded.length.toLocaleString()}</strong><span>Excluded by you</span></div>
-              </div>
-              <div className={s.previewStat}>
-                <span className={s.previewStatIcon}>⊘</span>
-                <div><strong>{skipped.length.toLocaleString()}</strong><span>Skipped by Foldiq</span></div>
-              </div>
-              <div className={s.previewStat}>
-                <span className={s.previewStatIcon}>⇢</span>
-                <div>
-                  <strong>{config.copyMode ? 'Copy' : 'Move'}</strong>
-                  <span>{config.copyMode ? 'Originals stay put' : 'Undo will be available'}</span>
-                </div>
+              <div className={s.previewTools}>
+                <button className={s.iconToolBtn} onClick={() => setShowTree(true)} title="Preview folder structure" aria-label="Preview folder structure">▦</button>
+                <input
+                  className={s.previewSearch}
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder="Search paths…"
+                  aria-label="Search paths"
+                />
               </div>
             </div>
 
@@ -157,59 +282,95 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
                     className={`${s.filterBtn} ${filter === id ? s.active : ''}`}
                     onClick={() => setFilter(id)}
                   >
-                    {label} ({filterCounts[id].toLocaleString()})
+                    {label} <span>{filterCounts[id].toLocaleString()}</span>
                   </button>
                 ))}
               </div>
               <div className={s.previewBulkActions}>
-                <button onClick={() => setAllVisible(true)}>Include shown</button>
-                <button onClick={() => setAllVisible(false)}>Exclude shown</button>
+                <select value={sort} onChange={event => setSort(event.target.value)} aria-label="Sort preview">
+                  <option value="source">Sort: Current path</option>
+                  <option value="destination">Sort: Destination</option>
+                  <option value="status">Sort: Status</option>
+                </select>
+                {actionableVisible.length > 0 && (
+                  <button
+                    onClick={() => setAllVisible(!allVisibleIncluded)}
+                    title={allVisibleIncluded
+                      ? 'These files will be left exactly where they are.'
+                      : 'These files will be processed using the planned destinations.'}
+                  >
+                    {allVisibleIncluded ? 'Keep' : 'Organize'} {actionableVisible.length.toLocaleString()} {resultsLabel} {allVisibleIncluded ? 'untouched' : ''}
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className={s.fileList}>
-              {visible.length === 0 && (
-                <div className={s.previewEmpty}>No files in this group.</div>
-              )}
-              {visible.slice(0, 500).map((file, index) => {
-                const isAutomaticSkip = file.action === 'skip';
-                const isIncluded = !isAutomaticSkip && file.included !== false;
-                return (
-                  <div
-                    key={file.id || file.path || index}
-                    className={`${s.fileRow} ${!isIncluded ? s.fileRowExcluded : ''}`}
-                  >
-                    <label className={s.previewCheckbox} title={isAutomaticSkip ? skipReason(file) : 'Include this file'}>
-                      <input
-                        type="checkbox"
-                        checked={isIncluded}
-                        disabled={isAutomaticSkip}
-                        onChange={event => setIncluded(file, event.target.checked)}
-                        aria-label={`Include ${file.name}`}
-                      />
-                      <span />
-                    </label>
-                    <span className={s.fileExt}>{(file.ext || '').replace('.', '').toUpperCase() || 'FILE'}</span>
-                    <div className={s.fileInfo}>
-                      <span className={s.fileName} title={file.name}>{file.name}</span>
-                      <span className={s.fileDestinationLabel}>
-                        {isAutomaticSkip ? skipReason(file) : 'Will go to'}
-                      </span>
-                      <span className={s.fileDest} title={file.destPath || ''}>
-                        {friendlyDestination(file, config.outputFolder)}
-                      </span>
-                    </div>
-                    <div className={s.fileMeta}>
-                      <span>{formatBytes(file.size)}</span>
-                      <span className={isIncluded ? s.includedLabel : s.excludedLabel}>
-                        {isAutomaticSkip ? 'Automatic' : isIncluded ? 'Included' : 'Excluded'}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-              {visible.length > 500 && (
-                <div className={s.moreRow}>…and {(visible.length - 500).toLocaleString()} more in this group</div>
+            <div className={s.previewWorkspace}>
+              <div className={s.previewTablePane}>
+                <div className={s.previewTableHeader}>
+                  <span />
+                  <span>Current file</span>
+                  <span>Destination</span>
+                  <span>Operation</span>
+                </div>
+                <div className={s.fileList}>
+                  {visible.length === 0 && <div className={s.previewEmpty}>No files match these filters.</div>}
+                  {visible.slice(0, 500).map((file, index) => {
+                    const automaticSkip = file.action === 'skip';
+                    const fileIncluded = !automaticSkip && file.included !== false;
+                    const active = fileKey(file) === selectedKey;
+                    return (
+                      <div
+                        key={fileKey(file)}
+                        className={`${s.fileRow} ${!fileIncluded ? s.fileRowExcluded : ''} ${active ? s.fileRowSelected : ''}`}
+                        onClick={() => setSelectedKey(fileKey(file))}
+                        style={{ animationDelay: `${Math.min(index * 12, 180)}ms` }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') setSelectedKey(fileKey(file));
+                        }}
+                      >
+                        <label className={s.previewCheckbox} title={automaticSkip ? skipReason(file) : 'Organize this file'} onClick={event => event.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={fileIncluded}
+                            disabled={automaticSkip}
+                            onChange={event => setIncluded(file, event.target.checked)}
+                            aria-label={`Organize ${file.name}`}
+                          />
+                          <span />
+                        </label>
+                        <div className={s.fileSourceCell}>
+                          <span className={s.fileTypeIcon}>{(file.ext || '').replace('.', '').slice(0, 4).toUpperCase() || 'FILE'}</span>
+                          <div>
+                            <strong title={file.name}>{file.name}</strong>
+                            <small title={file.path}>{sourceFolder(file)}</small>
+                          </div>
+                        </div>
+                        <div className={s.fileDestinationCell}>
+                          <strong>{automaticSkip ? skipReason(file) : pathParts(file.destPath).at(-1)}</strong>
+                          <small title={file.destPath || ''}>{friendlyDestination(file, config.outputFolder)}</small>
+                        </div>
+                        <span className={`${s.operationBadge} ${file.action === 'move' ? s.operationMove : s.operationCopy}`}>
+                          {automaticSkip ? 'Skip' : file.action === 'move' ? 'Move original' : 'Copy only'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {visible.length > 500 && <div className={s.moreRow}>…and {(visible.length - 500).toLocaleString()} more</div>}
+                </div>
+              </div>
+
+              {selected && (
+                <PreviewInspector
+                  file={selected}
+                  outputFolder={config.outputFolder}
+                  onClose={() => setSelectedKey(null)}
+                  onToggle={() => setIncluded(selected, selected.included === false)}
+                  onCorrectDate={value => correctDate(selected, value)}
+                  dateUpdating={dateUpdatingKey === fileKey(selected)}
+                />
               )}
             </div>
           </div>
@@ -217,19 +378,149 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
           <div className={s.bottomBar}>
             <button className={s.btnSecondary} onClick={() => go('settings')}>← Back</button>
             <div className={s.previewFooterSummary}>
-              <strong>{included.length.toLocaleString()} files will be {config.copyMode ? 'copied' : 'moved'}</strong>
-              <span>{(excluded.length + skipped.length).toLocaleString()} will not be processed</span>
+              <strong>{included.length.toLocaleString()} files will be organized</strong>
+              <span>{copies.length.toLocaleString()} copied · {moves.length.toLocaleString()} moved · {(excluded.length + skipped.length).toLocaleString()} left untouched</span>
             </div>
-            <button
-              className={s.btnPrimary}
-              disabled={included.length === 0}
-              onClick={() => go('apply')}
-            >
+            <button className={s.btnPrimary} disabled={included.length === 0} onClick={() => setShowPreflight(true)}>
               Confirm {included.length.toLocaleString()} Files →
             </button>
           </div>
+
+          {showTree && (
+            <Modal title="Planned folder structure" onClose={() => setShowTree(false)}>
+              <p className={s.modalIntro}>This is the structure Foldiq will create. The original files are still untouched.</p>
+              <div className={s.folderTree}>
+                <TreeNode node={buildFolderTree(included, config.outputFolder)} depth={0} />
+              </div>
+              <div className={s.modalActions}><button className={s.btnPrimary} onClick={() => setShowTree(false)}>Done</button></div>
+            </Modal>
+          )}
+
+          {showPreflight && (
+            <Modal title={config.copyMode ? 'Review before copying' : 'Review before moving'} onClose={() => setShowPreflight(false)}>
+              <p className={s.modalPath}>{config.outputFolder}</p>
+              <div className={s.preflightStats}>
+                <PlanStat icon="✓" value={included.length} label="files" tone="green" />
+                {copies.length > 0 && <PlanStat icon="⧉" value={copies.length} label="copied" tone="blue" />}
+                {moves.length > 0 && <PlanStat icon="→" value={moves.length} label="moved" tone="blue" />}
+                <PlanStat icon="−" value={excluded.length + skipped.length} label="untouched" tone="neutral" />
+                {unknown.length > 0 && <PlanStat icon="?" value={unknown.length} label="no date" tone="yellow" />}
+              </div>
+              <p className={s.preflightText}>
+                {moves.length === 0
+                  ? 'Foldiq will create organized copies. Originals and compressed archives stay in their current locations.'
+                  : copies.length === 0
+                    ? 'Foldiq will move the selected originals and create an internal undo manifest so the operation can be reversed.'
+                    : `Foldiq will move ${moves.length.toLocaleString()} originals and copy ${copies.length.toLocaleString()} files extracted from archives. The compressed archives stay untouched.`}
+              </p>
+              <div className={s.modalActions}>
+                <button className={s.btnSecondary} onClick={() => setShowPreflight(false)}>Cancel</button>
+                <button className={s.btnPrimary} onClick={() => go('apply')}>
+                  {config.copyMode ? 'Copy Files Now' : 'Move Files Now'} →
+                </button>
+              </div>
+            </Modal>
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+function PlanStat({ icon, value, label, tone }) {
+  return (
+    <div className={`${s.planStat} ${s[`planStat_${tone}`] || ''}`}>
+      <span className={s.planStatIcon}>{icon}</span>
+      <div><strong>{Number.isFinite(value) ? value.toLocaleString() : value}</strong><small>{label}</small></div>
+    </div>
+  );
+}
+
+function PreviewInspector({ file, outputFolder, onClose, onToggle, onCorrectDate, dateUpdating }) {
+  const [thumbnail, setThumbnail] = useState(undefined);
+
+  useEffect(() => {
+    let active = true;
+    setThumbnail(undefined);
+    window.foldiq.getThumbnail(file.path)
+      .then(value => { if (active) setThumbnail(value); })
+      .catch(() => { if (active) setThumbnail(null); });
+    return () => { active = false; };
+  }, [file.path]);
+
+  const automaticSkip = file.action === 'skip';
+  return (
+    <aside className={s.previewInspector}>
+      <div className={s.inspectorHeader}><span>File Info</span><button onClick={onClose} aria-label="Close inspector">×</button></div>
+      <div className={s.thumbnailFrame}>
+        {thumbnail === undefined && <div className={s.thumbnailLoading}><span /></div>}
+        {thumbnail && <img src={thumbnail} alt="" draggable="false" />}
+        {thumbnail === null && <div className={s.thumbnailFallback}>▧<small>Preview unavailable</small></div>}
+      </div>
+      <div className={s.inspectorBody}>
+        <h3 title={file.name}>{file.name}</h3>
+        {!automaticSkip && (
+          <button className={s.inspectorToggle} onClick={onToggle}>
+            {file.included === false ? '✓ Organize this file' : '− Leave this file untouched'}
+          </button>
+        )}
+        <div className={s.inspectorDivider} />
+        <MetaRow label="Size" value={formatBytes(file.size)} />
+        <MetaRow label="Type" value={(file.ext || '').replace('.', '').toUpperCase() || 'File'} />
+        <MetaRow label="Date" value={formatDate(file.date)} warning={!file.date} />
+        <MetaRow label="Date source" value={dateSourceLabel(file.dateSource)} warning={!file.dateSource} />
+        <MetaRow label="Source" value={file.archiveSourcePath ? 'Compressed archive' : 'Folder'} />
+        <div className={s.dateCorrection}>
+          <div className={s.dateCorrectionHeader}>
+            <span>{file.date ? 'Correct capture date' : 'Assign capture date'}</span>
+            {file.date && <button disabled={dateUpdating} onClick={() => onCorrectDate('')}>Clear date</button>}
+          </div>
+          <input
+            type="date"
+            max={dateInputValue(new Date())}
+            value={dateInputValue(file.date)}
+            disabled={dateUpdating}
+            onChange={event => onCorrectDate(event.target.value)}
+            aria-label={`Capture date for ${file.name}`}
+          />
+          <small>{dateUpdating ? 'Updating destinations…' : 'Foldiq never uses the file-modified time as a capture date.'}</small>
+        </div>
+        <div className={s.inspectorDivider} />
+        <div className={s.inspectorDestination}>
+          <span>Planned destination</span>
+          <strong className={isUnknownDate(file) ? s.warningText : ''}>{friendlyDestination(file, outputFolder)}</strong>
+        </div>
+        <div className={s.inspectorOriginal} title={file.archiveSourcePath || file.path}>
+          <span>Original</span>
+          <p>{file.archiveSourcePath || file.path}</p>
+        </div>
+        <button className={s.revealButton} onClick={() => window.foldiq.revealFile(file.archiveSourcePath || file.path)}>Show Original in Explorer ↗</button>
+      </div>
+    </aside>
+  );
+}
+
+function MetaRow({ label, value, warning = false }) {
+  return <div className={s.metaRow}><span>{label}</span><strong className={warning ? s.warningText : ''}>{value}</strong></div>;
+}
+
+function TreeNode({ node, depth }) {
+  const children = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div className={s.treeNode} style={{ '--tree-depth': depth }}>
+      <div className={s.treeNodeRow}><span>▸</span><strong>{node.name}</strong><small>{node.count.toLocaleString()} files</small></div>
+      {children.map(child => <TreeNode key={`${depth}-${child.name}`} node={child} depth={depth + 1} />)}
+    </div>
+  );
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div className={s.modalBackdrop} role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={s.modalCard} role="dialog" aria-modal="true" aria-label={title}>
+        <div className={s.modalHeader}><h2>{title}</h2><button onClick={onClose} aria-label="Close">×</button></div>
+        <div className={s.modalBody}>{children}</div>
+      </section>
     </div>
   );
 }

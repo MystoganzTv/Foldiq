@@ -62,11 +62,12 @@ function collectSource(sourcePath, mediaPaths, archivePaths) {
   }
 }
 
-function cleanupTempDirs() {
-  for (const directory of tempDirectories) {
-    try { fs.rmSync(directory, { recursive: true, force: true }); } catch {}
-  }
+async function cleanupTempDirs() {
+  const directories = Array.from(tempDirectories);
   tempDirectories.clear();
+  await Promise.all(directories.map(async directory => {
+    try { await fs.promises.rm(directory, { recursive: true, force: true }); } catch {}
+  }));
 }
 
 function dateFromParts(year, month, day, hour = 0, minute = 0, second = 0) {
@@ -123,40 +124,56 @@ function dateFromFilename(filename, now = new Date()) {
   return isPlausibleDate(date, now) ? date : null;
 }
 
-async function extractDate(filePath, now = new Date()) {
+function dateFromTrustedMetadata(tags = {}, now = new Date()) {
+  const candidates = [
+    ['DateTimeOriginal', 'camera metadata'],
+    ['DateTimeDigitized', 'camera metadata'],
+    ['MediaCreateDate', 'video metadata'],
+    ['TrackCreateDate', 'video metadata'],
+    ['CreationDate', 'video metadata'],
+    ['CreateDate', 'embedded metadata'],
+  ];
+
+  for (const [tag, source] of candidates) {
+    const date = metadataDate(tags[tag], now);
+    if (date) return { date, source, tag };
+  }
+  return null;
+}
+
+function resolveDateCandidates(metadataInfo, filenameDate) {
+  if (!filenameDate) return metadataInfo;
+  if (!metadataInfo) return { date: filenameDate, source: 'filename', tag: null };
+
+  // Messaging and export apps sometimes replace embedded creation metadata with
+  // the forwarding/export date. A much older date encoded in the filename is a
+  // safer capture-date signal in that case (same policy as the macOS app).
+  const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+  if (metadataInfo.date.getTime() - filenameDate.getTime() > ninetyDays) {
+    return { date: filenameDate, source: 'filename', tag: null };
+  }
+  return metadataInfo;
+}
+
+async function extractDateInfo(filePath, now = new Date()) {
+  let metadataInfo = null;
   try {
     const tags = await exiftool.read(filePath);
-    const raw =
-      tags.DateTimeOriginal ||
-      tags.CreateDate       ||
-      tags.MediaCreateDate  ||
-      tags.ModifyDate;
-
-    if (raw) {
-      const date = metadataDate(raw, now);
-      if (date) return date;
-    }
+    metadataInfo = dateFromTrustedMetadata(tags, now);
   } catch {}
 
-  // Fallback: parse date from filename
   const filenameDate = dateFromFilename(filePath, now);
-  if (filenameDate) return filenameDate;
+  return resolveDateCandidates(metadataInfo, filenameDate);
+}
 
-  // Last resort: file mtime
-  try {
-    const stat = fs.statSync(filePath);
-    if (isPlausibleDate(stat.mtime, now)) return stat.mtime;
-    if (isPlausibleDate(stat.birthtime, now)) return stat.birthtime;
-    return null;
-  } catch {
-    return null;
-  }
+async function extractDate(filePath, now = new Date()) {
+  return (await extractDateInfo(filePath, now))?.date ?? null;
 }
 
 async function scan(folders, onProgress) {
-  cleanupTempDirs();
-
   const progress = typeof onProgress === 'function' ? onProgress : () => {};
+  progress({ phase: 'cleanup', current: 0, total: 0, file: 'Preparing temporary workspace…' });
+  await cleanupTempDirs();
   const mediaPaths = new Set();
   const archivePaths = new Set();
   for (const folder of folders) collectSource(folder, mediaPaths, archivePaths);
@@ -211,24 +228,42 @@ async function scan(folders, onProgress) {
     });
   }
 
-  const total = allFiles.length;
+  const preparedFiles = [];
+  const sizeCounts = new Map();
+  for (let i = 0; i < allFiles.length; i++) {
+    const candidate = allFiles[i];
+    progress({
+      phase: 'indexing',
+      current: i,
+      total: allFiles.length,
+      file: `Indexing ${path.basename(candidate.filePath)}…`,
+    });
+    try {
+      const stat = await fs.promises.stat(candidate.filePath);
+      if (!stat.isFile()) continue;
+      preparedFiles.push({ candidate, stat });
+      sizeCounts.set(stat.size, (sizeCounts.get(stat.size) ?? 0) + 1);
+    } catch {}
+  }
+
+  const total = preparedFiles.length;
   const files = [];
   const hashMap = new Map();
 
-  for (let i = 0; i < allFiles.length; i++) {
-    const candidate = allFiles[i];
+  for (let i = 0; i < preparedFiles.length; i++) {
+    const { candidate, stat } = preparedFiles[i];
     const filePath = candidate.filePath;
-    let stat;
-    try {
-      stat = fs.statSync(filePath);
-    } catch {
-      progress({ phase: 'media', current: i + 1, total, file: path.basename(filePath) });
-      continue;
-    }
-
     const ext  = path.extname(filePath).toLowerCase();
-    const date = await extractDate(filePath);
-    const hash = await hashFile(filePath);
+    progress({
+      phase: 'media',
+      current: i,
+      total,
+      file: `Analyzing ${path.basename(filePath)}…`,
+    });
+    const [dateInfo, hash] = await Promise.all([
+      extractDateInfo(filePath),
+      sizeCounts.get(stat.size) > 1 ? hashFile(filePath) : Promise.resolve(null),
+    ]);
 
     const duplicateOf = hash ? hashMap.get(hash) : null;
     const isDuplicate = duplicateOf != null;
@@ -241,7 +276,9 @@ async function scan(folders, onProgress) {
       name:        path.basename(filePath),
       ext,
       size:        stat.size,
-      date:        date?.toISOString() ?? null,
+      date:        dateInfo?.date.toISOString() ?? null,
+      dateSource:  dateInfo?.source ?? null,
+      dateTag:     dateInfo?.tag ?? null,
       hash,
       isDuplicate: isDuplicate,
       duplicateOf: isDuplicate ? duplicateOf : null,
@@ -257,7 +294,7 @@ async function scan(folders, onProgress) {
 }
 
 async function end() {
-  cleanupTempDirs();
+  await cleanupTempDirs();
   try { await exiftool.end(); } catch {}
 }
 
@@ -268,6 +305,9 @@ module.exports = {
   isPlausibleDate,
   metadataDate,
   dateFromFilename,
+  dateFromTrustedMetadata,
+  resolveDateCandidates,
+  extractDateInfo,
   extractDate,
   end,
 };

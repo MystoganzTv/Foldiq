@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import s from './Screen.module.css';
 
 const STAT_CARDS = [
@@ -18,9 +18,13 @@ export default function ScanScreen({ go, folders, setFiles }) {
   const [stats,    setStats]    = useState(null);
   const [warnings, setWarnings] = useState([]);
   const [error,    setError]    = useState('');
+  const [elapsed,  setElapsed]  = useState(0);
+  const startedAt = useRef(Date.now());
 
   useEffect(() => {
     let active = true;
+    startedAt.current = Date.now();
+    const timer = setInterval(() => setElapsed(Date.now() - startedAt.current), 1000);
     window.foldiq.onScanProgress(p => setProgress(p));
     window.foldiq.startScan(folders).then(result => {
       if (!active) return;
@@ -40,19 +44,23 @@ export default function ScanScreen({ go, folders, setFiles }) {
       });
       setWarnings(Array.isArray(result) ? [] : result.warnings);
       setDone(true);
+      clearInterval(timer);
     }).catch(scanError => {
       if (!active) return;
       setError(scanError?.message || 'The scan could not be completed.');
       setDone(true);
+      clearInterval(timer);
     });
     return () => {
       active = false;
+      clearInterval(timer);
       window.foldiq.removeAllListeners('scan:progress');
     };
   }, [folders, setFiles]);
 
   const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
   const openingArchives = progress.phase === 'archive' || progress.phase === 'archive-list';
+  const hasDeterminateProgress = progress.total > 0;
 
   return (
     <div className={s.screen}>
@@ -72,14 +80,22 @@ export default function ScanScreen({ go, folders, setFiles }) {
 
         {!done && (
           <div className={s.progressBlock} style={{ maxWidth: 500, margin: '0 auto', width: '100%' }}>
-            <div className={s.progressBar}>
-              <div className={s.progressFill} style={{ width: `${pct}%` }} />
+            <div className={`${s.progressBar} ${!hasDeterminateProgress ? s.indeterminateBar : ''}`}>
+              {hasDeterminateProgress
+                ? <div className={s.progressFill} style={{ width: `${pct}%` }} />
+                : <div />}
             </div>
             <p className={s.progressLabel} style={{ textAlign: 'center' }}>
-              {progress.total > 0
+              {hasDeterminateProgress
                 ? `${progress.current.toLocaleString()} / ${progress.total.toLocaleString()} — ${progress.file}`
                 : progress.file || 'Preparing scan…'}
             </p>
+            <p className={s.scanElapsed}>Elapsed {formatDuration(elapsed)}</p>
+            {openingArchives && (
+              <p className={s.scanHint}>
+                Large archives can take several minutes. Foldiq is working locally and the original archive stays untouched.
+              </p>
+            )}
           </div>
         )}
 
@@ -124,6 +140,12 @@ export default function ScanScreen({ go, folders, setFiles }) {
       )}
     </div>
   );
+}
+
+function formatDuration(milliseconds) {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function StatIcon({ name, color }) {

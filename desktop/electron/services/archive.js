@@ -2,7 +2,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { promisify } = require('util');
 const { Transform } = require('stream');
 const { pipeline } = require('stream/promises');
@@ -14,6 +14,7 @@ const MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024 * 1024;
 const DISK_RESERVE_BYTES = 1024 * 1024 * 1024;
 const MAX_LISTING_BYTES = 128 * 1024 * 1024;
 const ARCHIVE_COMMAND_TIMEOUT_MS = 60 * 60 * 1000;
+const ARCHIVE_STALL_TIMEOUT_MS = 5 * 60 * 1000;
 
 function reportProgress(onProgress, update) {
   if (typeof onProgress === 'function') onProgress(update);
@@ -201,6 +202,87 @@ function looksEncrypted(message) {
   return /password|encrypted|wrong password|can not open encrypted/i.test(message);
 }
 
+function parseSevenZipProgress(output) {
+  const updates = [];
+  const pattern = /(?:^|[\r\n])\s*(\d{1,3})%\s*(?:\d+\s*-\s*)?([^\r\n]*)/g;
+  let match;
+  while ((match = pattern.exec(output)) !== null) {
+    const percent = Math.min(100, Number(match[1]));
+    const file = match[2].trim();
+    updates.push({ percent, file });
+  }
+  return updates;
+}
+
+function extractWithProgress(executable, args, onProgress) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    let progressBuffer = '\n';
+    let lastPercent = -1;
+    let lastActivity = Date.now();
+
+    const remember = (current, chunk) => {
+      const combined = current + chunk;
+      return combined.length > 4 * 1024 * 1024 ? combined.slice(-4 * 1024 * 1024) : combined;
+    };
+    const handleOutput = (target, chunk) => {
+      const value = chunk.toString('utf8');
+      lastActivity = Date.now();
+      if (target === 'stdout') stdout = remember(stdout, value);
+      else stderr = remember(stderr, value);
+
+      progressBuffer = (progressBuffer + value).slice(-8192);
+      for (const update of parseSevenZipProgress(progressBuffer)) {
+        if (update.percent <= lastPercent) continue;
+        lastPercent = update.percent;
+        reportProgress(onProgress, {
+          stage: 'extracting',
+          current: update.percent,
+          total: 100,
+          file: update.file ? path.basename(update.file) : undefined,
+        });
+      }
+    };
+
+    child.stdout.on('data', chunk => handleOutput('stdout', chunk));
+    child.stderr.on('data', chunk => handleOutput('stderr', chunk));
+
+    const hardTimeout = setTimeout(() => {
+      child.kill();
+      reject(new Error('Archive extraction took too long and was stopped'));
+    }, ARCHIVE_COMMAND_TIMEOUT_MS);
+    const stallMonitor = setInterval(() => {
+      if (Date.now() - lastActivity < ARCHIVE_STALL_TIMEOUT_MS) return;
+      child.kill();
+      reject(new Error('Archive extraction stopped responding and was safely cancelled'));
+    }, 10 * 1000);
+
+    child.on('error', error => {
+      clearTimeout(hardTimeout);
+      clearInterval(stallMonitor);
+      reject(error);
+    });
+    child.on('close', code => {
+      clearTimeout(hardTimeout);
+      clearInterval(stallMonitor);
+      if (code === 0) {
+        reportProgress(onProgress, { stage: 'extracting', current: 100, total: 100 });
+        resolve({ stdout, stderr });
+        return;
+      }
+      const error = new Error(`7-Zip exited with code ${code}`);
+      error.stdout = stdout;
+      error.stderr = stderr;
+      reject(error);
+    });
+  });
+}
+
 async function listWithSevenZip(archivePath, executable) {
   try {
     const { stdout } = await execFileAsync(
@@ -313,15 +395,13 @@ async function extractWithSevenZip(
     const listFile = path.join(tempDirectory, '.foldiq-media-list.txt');
     fs.writeFileSync(listFile, mediaEntries.join('\n'), { encoding: 'utf8', flag: 'wx' });
     try {
-      await execFileAsync(
+      await extractWithProgress(
         executable,
-        ['x', '-y', '-aoa', '-spd', '-scsUTF-8', `-o${tempDirectory}`, archivePath, `@${listFile}`],
-        {
-          encoding: 'utf8',
-          maxBuffer: 4 * 1024 * 1024,
-          windowsHide: true,
-          timeout: ARCHIVE_COMMAND_TIMEOUT_MS,
-        }
+        [
+          'x', '-y', '-aoa', '-spd', '-scsUTF-8', '-bsp1', '-bb0',
+          `-o${tempDirectory}`, archivePath, `@${listFile}`,
+        ],
+        onProgress
       );
     } catch (error) {
       const detail = [error.stdout, error.stderr, error.message].filter(Boolean).join('\n');
@@ -379,8 +459,10 @@ module.exports = {
   extractWithSevenZip,
   safeRelativePath,
   parseTechnicalListing,
+  parseSevenZipProgress,
   bundledSevenZipPath,
   MAX_ARCHIVE_ENTRIES,
   MAX_UNCOMPRESSED_BYTES,
   ARCHIVE_COMMAND_TIMEOUT_MS,
+  ARCHIVE_STALL_TIMEOUT_MS,
 };

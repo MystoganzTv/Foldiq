@@ -11,6 +11,7 @@ const {
   extractArchive,
   extractZip,
   parseTechnicalListing,
+  parseSevenZipProgress,
   safeRelativePath,
 } = require('../electron/services/archive');
 const scanner = require('../electron/services/scanner');
@@ -136,6 +137,28 @@ test('ZIP scanner accepts streaming data-descriptor archives', async (t) => {
   assert.ok(progress.some(update => update.phase === 'media' && update.total === 2));
 });
 
+test('scanner hashes only same-size candidates and still finds exact duplicates', async (t) => {
+  const directory = tempDir(t);
+  const first = path.join(directory, 'first.jpg');
+  const duplicate = path.join(directory, 'duplicate.jpg');
+  const unique = path.join(directory, 'unique.jpg');
+  fs.writeFileSync(first, 'same bytes');
+  fs.writeFileSync(duplicate, 'same bytes');
+  fs.writeFileSync(unique, 'a uniquely sized file');
+
+  const result = await scanner.scan([directory], () => {});
+  const byName = Object.fromEntries(result.files.map(file => [file.name, file]));
+
+  assert.ok(byName['first.jpg'].hash);
+  assert.equal(byName['duplicate.jpg'].hash, byName['first.jpg'].hash);
+  assert.equal(
+    [byName['first.jpg'], byName['duplicate.jpg']].filter(file => file.isDuplicate).length,
+    1
+  );
+  assert.equal(byName['unique.jpg'].hash, null);
+  assert.equal(byName['unique.jpg'].isDuplicate, false);
+});
+
 test('ZIP extraction rejects path traversal', async (t) => {
   const directory = tempDir(t);
   const zipPath = path.join(directory, 'unsafe.zip');
@@ -184,6 +207,15 @@ test('7-Zip listing parser accepts entries without blank separators', () => {
   assert.deepEqual(entries.map(entry => entry.Path), ['album\\one.jpg', 'notes.txt']);
 });
 
+test('7-Zip progress parser handles Windows carriage-return updates', () => {
+  const updates = parseSevenZipProgress('\r  1% 1 - album\\one.jpg\r 48% 2 - album\\two.jpg\r100%');
+  assert.deepEqual(updates, [
+    { percent: 1, file: 'album\\one.jpg' },
+    { percent: 48, file: 'album\\two.jpg' },
+    { percent: 100, file: '' },
+  ]);
+});
+
 test('7z scanner extracts nested media and keeps the archive untouched', async (t) => {
   const directory = tempDir(t);
   const sourceDirectory = path.join(directory, 'source');
@@ -195,13 +227,19 @@ test('7z scanner extracts nested media and keeps the archive untouched', async (
   execFileSync(path7za, ['a', '-t7z', archivePath, '.'], { cwd: sourceDirectory, stdio: 'ignore' });
 
   const before = fs.readFileSync(archivePath);
-  const result = await extractArchive(archivePath, filePath => path.extname(filePath) === '.jpg');
+  const progress = [];
+  const result = await extractArchive(
+    archivePath,
+    filePath => path.extname(filePath) === '.jpg',
+    update => progress.push(update)
+  );
   t.after(() => fs.rmSync(result.tempDirectory, { recursive: true, force: true }));
 
   assert.equal(result.mediaPaths.length, 1);
   assert.equal(path.basename(result.mediaPaths[0]), 'one.jpg');
   assert.equal(fs.readFileSync(result.mediaPaths[0], 'utf8'), 'photo data');
   assert.deepEqual(fs.readFileSync(archivePath), before);
+  assert.ok(progress.some(update => update.stage === 'extracting' && update.current === 100));
 
   const scanResult = await scanner.scan([archivePath], () => {});
   assert.equal(scanResult.archivesExtracted, 1);
