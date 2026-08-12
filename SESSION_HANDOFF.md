@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-12 17:31 America/New_York
+Updated: 2026-08-12 18:02 America/New_York
 
 ## Read this first
 
@@ -21,6 +21,16 @@ and confirmed on 2026-08-12 that it worked well. The real-machine release gate
 is therefore complete. Do not replace the existing 1.0.17 bytes; any future app
 code correction must use a new version.
 
+The Windows purchase pipeline is ready for customers. On 2026-08-12 the invalid
+Vercel `GITHUB_RELEASE_TOKEN` (GitHub returned 401) was replaced with a dedicated
+fine-grained token scoped only to `MystoganzTv/Foldiq`, with `Contents: Read-only`
+and `Metadata: Read-only`. It has no expiration so paid downloads do not suddenly
+stop; rotate it immediately if exposure is suspected. Vercel production was
+redeployed and became Ready. A paid/complete Windows checkout simulation through
+the real download handler returned HTTP 302 to
+`release-assets.githubusercontent.com`, resolving release `v1.0.17-windows` and
+asset `Foldiq-Setup.exe`. No token value is stored in this repository.
+
 No credentials or Apple/GitHub secrets are recorded in this checkpoint.
 
 ## Published state
@@ -28,9 +38,10 @@ No credentials or Apple/GitHub secrets are recorded in this checkpoint.
 - Windows 1.0.17 is the latest GitHub-published Windows release/tag.
 - Release: `https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.17-windows`
 - The private website download endpoint dynamically resolves the latest GitHub
-  release asset named `Foldiq-Setup.exe`; no website code change or redeploy was
-  required for 1.0.17. All 10 web purchase/download tests passed in the prior
-  website validation.
+  release asset named `Foldiq-Setup.exe`. Production was redeployed after the
+  GitHub credential rotation described above. The live website still creates a
+  `checkout.stripe.com` live Windows checkout, and all 12 web purchase/download
+  tests pass.
 - `foldiq.app` is hosted by Vercel from the `web/` root. Public copy and the
   privacy/terms pages now disclose optional Apple and Windows GPS lookups,
   including Windows coordinate rounding and OpenStreetMap. The obsolete GitHub
@@ -46,9 +57,10 @@ No credentials or Apple/GitHub secrets are recorded in this checkpoint.
 - Windows code is intentionally unsigned for now; the user accepted that
   SmartScreen may warn. Do not start a Windows certificate purchase/signing
   workflow unless explicitly requested.
-- macOS 1.0.8 build 116 was the known good App Store Connect build in the prior
-  work. Verify its current review/release state in App Store Connect before
-  claiming it is live.
+- macOS 1.0.8 is publicly listed in the US Mac App Store at
+  `https://apps.apple.com/us/app/foldiq/id6772513569` for $4.99 and requires
+  macOS 14.0 or later. App Store Connect build 116 was the known good submitted
+  build in the prior work.
 - Obsolete Netlify references were removed in commit `c7cb0e8`; do not restore
   Netlify without a new explicit reason.
 - The repository was made private earlier in the project.
