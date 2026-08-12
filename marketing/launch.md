@@ -85,7 +85,7 @@ The thing I cared most about: **nothing happens until you've reviewed it.** You 
 - Full undo with manifest log
 - Cleans up empty folders after organizing
 
-macOS 14+, Apple Silicon & Intel. $4.99 one-time at **foldiq.netlify.app**
+macOS 14+, Apple Silicon & Intel. $4.99 one-time at **foldiq.app**
 
 Happy to answer questions!
 
@@ -127,7 +127,7 @@ After:
 
 Supports JPG, HEIC, RAW (CR2, NEF, ARW, DNG), MOV, MP4. Completely local — your photos never leave your Mac.
 
-$4.99 one-time at foldiq.netlify.app
+$4.99 one-time at foldiq.app
 
 ---
 
@@ -146,7 +146,7 @@ The key thing: it shows you a complete preview of every planned file move before
 Works with JPG, HEIC, PNG, RAW formats, MOV, MP4. Runs locally — no iCloud required, no account, no subscription.
 
 macOS 14 Sonoma or later · Apple Silicon & Intel
-$4.99 one-time → foldiq.netlify.app
+$4.99 one-time → foldiq.app
 
 ---
 
@@ -163,7 +163,7 @@ It reads the real EXIF capture date from every photo (not the file modification 
 Before: 23 folders with random names, 11,000 files with no order
 After: clean 2016–2024 year folders, each broken down by month and shooting date
 
-$4.99 one-time at foldiq.netlify.app — no subscription, works completely offline.
+$4.99 one-time at foldiq.app — no subscription, works completely offline.
 
 ---
 
