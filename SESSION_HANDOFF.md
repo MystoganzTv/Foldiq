@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-12 16:22 America/New_York
+Updated: 2026-08-12 17:11 America/New_York
 
 ## Read this first
 
@@ -16,6 +16,11 @@ asset is named `Foldiq-Setup.exe`, so the website's dynamic download endpoint
 will resolve it as the latest Windows installer. A fresh remote download matched
 the local/Desktop SHA-256 exactly.
 
+The user installed and tested this published 1.0.17 build on a real Windows PC
+and confirmed on 2026-08-12 that it worked well. The real-machine release gate
+is therefore complete. Do not replace the existing 1.0.17 bytes; any future app
+code correction must use a new version.
+
 No credentials or Apple/GitHub secrets are recorded in this checkpoint.
 
 ## Published state
@@ -26,6 +31,12 @@ No credentials or Apple/GitHub secrets are recorded in this checkpoint.
   release asset named `Foldiq-Setup.exe`; no website code change or redeploy was
   required for 1.0.17. All 10 web purchase/download tests passed in the prior
   website validation.
+- `foldiq.app` is hosted by Vercel from the `web/` root. Public copy and the
+  privacy/terms pages now disclose optional Apple and Windows GPS lookups,
+  including Windows coordinate rounding and OpenStreetMap. The obsolete GitHub
+  Pages workflow was removed because it was generating false deployment
+  failures. The updated web suite passes all 12 tests, and a protected Vercel
+  preview verified the static pages plus all three serverless functions.
 - Windows code is intentionally unsigned for now; the user accepted that
   SmartScreen may warn. Do not start a Windows certificate purchase/signing
   workflow unless explicitly requested.
@@ -167,9 +178,10 @@ Major macOS/Windows parity work included in the same build:
   genuinely missing capture dates from file timestamps. Preview labels these as
   estimates and warns that copies/exports may have newer timestamps; Foldiq does
   not silently assume every missing file belongs to 2026.
-- Reverse-geocoded location organization was deliberately not copied from macOS
-  because it would introduce a new network/privacy behavior; Windows remains
-  local-only.
+- Historical note: this 1.0.15 limitation was superseded by 1.0.17. Windows now
+  supports opt-in reverse-geocoded location organization with rounded
+  coordinates and OpenStreetMap attribution, as documented near the top of this
+  handoff.
 - The user supplied `/Users/enrique/Downloads/IMG_9115.HEIC`. It is a valid
   6.5 MB iPhone 16 Pro HEIC and ExifTool reads it in about 140 ms, so it does
   not reproduce the metadata hang. It did expose that ExifTool's formatted DMS
@@ -317,30 +329,20 @@ Latest local installer:
   chosen output. They must never attempt to save inside the archive.
 - Internal undo JSON stays in app data, not the user's photo folder, and is
   cleared according to the existing Start Over/session policy.
-- Do not overwrite an already published version with different content. The
-  current uncommitted changes belong to 1.0.12.
+- Do not overwrite an already published version with different content. Windows
+  1.0.17 is the current tested release; any later app correction must use a new
+  version.
 
 ## Recommended next session sequence
 
 1. Read this file and inspect `git status` before changing anything.
-2. Test the published/current installer on a real Windows machine, especially:
-   - old photos without EXIF inside ZIP/RAR/7z -> `Unknown Date`;
-   - filename date from 2021 vs recent 2026 modification/export date -> 2021;
-   - Preview contrast after minimizing/restoring the app;
-   - contextual bulk action wording and behavior;
-   - manual date correction recalculates the destination.
-3. Do not overwrite or replace the published 1.0.10 asset with different
-   content. Any further code change after this test build must become a new
-   version.
-4. Close/uninstall the prior Foldiq test build and install only
-   `/Users/enrique/Desktop/Foldiq Setup 1.0.15.exe` on Windows. Confirm the
-   Welcome footer says 1.0.15, then scan the same input. Compare the new date
-   evidence breakdown and only enable file-date estimates after reviewing the
-   warning. If a scan
-   warning/failure occurs, use `Send diagnostics to developer`, review the
-   privacy notice and generated support email, then send it.
-5. Test `/Users/enrique/Desktop/Foldiq Setup 1.0.17.exe` on the real Windows
-   machine. Confirm the footer says 1.0.17, then test the original ZIP/desktop
-   folder, Smart Hybrid with GPS off and on, Retry Failed Files, and explicit
-   empty-folder cleanup. Do not replace 1.0.17 with different bytes; any new
-   correction must use a new version.
+2. Treat Windows 1.0.17 as the current released and real-PC-tested build. Keep
+   `/Users/enrique/Desktop/Foldiq Setup 1.0.17.exe` as the known-good installer.
+3. Do not overwrite or replace the published 1.0.17 asset with different bytes.
+   Any future Windows app correction must receive a new version and fresh test.
+4. The next independent product track is iPhone/iPad: inspect the current iOS
+   build/submission state in App Store Connect before uploading or submitting.
+5. Keep public privacy copy aligned with optional GPS lookup: media stays on the
+   device; Apple platforms may use Apple's geocoder, while Windows sends only a
+   coordinate rounded to two decimals to OpenStreetMap when the user enables
+   location naming.

@@ -8,8 +8,9 @@
   <meta property="og:title" content="Foldiq — Photo & Video Organizer for Mac & Windows" />
   <meta property="og:description" content="Finally organize your photo library the way you've always meant to. Smart folders, duplicate detection, and a full undo — available for Mac and Windows." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://mystoganztv.github.io/Foldiq/" />
-  <meta property="og:image" content="https://mystoganztv.github.io/Foldiq/icon.png" />
+  <meta property="og:url" content="https://foldiq.app/" />
+  <meta property="og:image" content="https://foldiq.app/icon.png" />
+  <link rel="canonical" href="https://foldiq.app/" />
   <link rel="icon" type="image/png" href="icon.png" />
   <link rel="apple-touch-icon" href="icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -437,7 +438,7 @@
 <section class="hero">
   <div class="hero-badge">
     <div class="hero-badge-dot"></div>
-    Mac &amp; Windows · Local-only · No subscription
+    Mac &amp; Windows · On-device media processing · No subscription
   </div>
   <h1>Your photo library,<br /><span>finally organized.</span></h1>
   <p>Foldiq scans any folder of photos and videos, reads the real EXIF date, and builds a clean folder structure automatically — with full undo if you change your mind.</p>
@@ -607,7 +608,7 @@
       <div class="feature-card">
         <div class="feature-icon" style="background:#EFF6FF;">🌍</div>
         <h3>GPS location folders</h3>
-        <p>In Smart Hybrid mode, Foldiq adds the city and state to folder names when GPS data is available — so you can browse by place, not just date.</p>
+        <p>When you enable location naming, Foldiq can add the city and state to folder names using Apple Maps services on Mac or approximate OpenStreetMap lookup on Windows.</p>
       </div>
     </div>
   </div>
@@ -663,10 +664,10 @@
   <div class="privacy-bar">
     <div class="privacy-icon">🔒</div>
     <div class="privacy-text">
-      <h2>100% local. Your photos never leave your computer.</h2>
-      <p>Your library is processed on your computer and never uploaded to Foldiq. No accounts, advertising, analytics, or telemetry. On Mac, Apple services may retrieve iCloud originals or turn embedded GPS coordinates into folder names.</p>
+      <h2>Your media stays on your computer.</h2>
+      <p>Photos, videos, filenames, and metadata are processed on your computer and never uploaded to Foldiq. No accounts, advertising, analytics, or telemetry. If you enable location naming, only a GPS coordinate is sent to a geocoding provider; Windows rounds it to about 1 km before using OpenStreetMap, while Apple platforms use Apple's system service. Mac and iOS may also retrieve originals you already keep in iCloud Photos.</p>
       <div class="privacy-pills">
-        <span class="pill">No Foldiq cloud</span>
+        <span class="pill">On-device media processing</span>
         <span class="pill">No account required</span>
         <span class="pill">No media collected</span>
         <span class="pill">No subscription</span>
@@ -720,7 +721,7 @@
     </details>
     <details class="faq-item">
       <summary>Do my photos get uploaded anywhere?</summary>
-      <p>Not to Foldiq. Media processing happens on your computer, with no Foldiq cloud, account, analytics, or telemetry. If an original exists only in iCloud Photos, macOS may download it from Apple; location-based organization may also use Apple's geocoding service.</p>
+      <p>No. Foldiq never uploads your photos, videos, filenames, or metadata to Foldiq. If an original exists only in iCloud Photos, an Apple device may retrieve it from Apple. When you explicitly enable location naming, Foldiq sends only a GPS coordinate—not the photo or filename—to Apple's geocoding service on Apple platforms or, on Windows, an approximate coordinate to OpenStreetMap.</p>
     </details>
     <details class="faq-item">
       <summary>Which formats does it support?</summary>

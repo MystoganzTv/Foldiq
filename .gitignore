@@ -45,3 +45,5 @@ FoldiqMobile/node_modules/
 mobile/node_modules/
 mobile/.expo/
 .expo/
+.vercel
+.env*

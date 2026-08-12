@@ -68,14 +68,14 @@
 <div class="page-header">
   <div style="max-width:720px;margin:0 auto;">
     <h1>Privacy Policy</h1>
-    <p class="meta">Effective date: August 10, 2026 · Last updated: August 10, 2026</p>
+    <p class="meta">Effective date: August 10, 2026 · Last updated: August 12, 2026</p>
   </div>
 </div>
 
 <div class="content">
 
   <div class="highlight">
-    <p>🔒 The short version: Foldiq processes your photo and video library on your device. We do not upload your library to Foldiq servers, run advertising, or use analytics. Limited network services are used only for purchases, email delivery, Apple-provided location lookup, and downloading originals that you already keep in iCloud Photos.</p>
+    <p>🔒 The short version: Foldiq processes your photo and video library on your device. We do not upload your library to Foldiq servers, run advertising, or use analytics. Limited network services are used only for purchases, email delivery, optional location lookup, and downloading originals that you already keep in iCloud Photos.</p>
   </div>
 
   <h2>1. Who we are</h2>
@@ -94,7 +94,7 @@
 
   <h2>3. How the app processes your files</h2>
   <p>Foldiq reads and reorganizes files stored on your computer's local storage or any directly connected drive. This processing happens entirely on your device using your operating system's built-in file and media frameworks.</p>
-  <p>Your media is not uploaded to Foldiq. If you choose organization by location on macOS, GPS coordinates embedded in a media item may be submitted to Apple's Core Location geocoding service to obtain a country, state, or city name. Foldiq does not receive or retain that request on a Foldiq server.</p>
+  <p>Your media is not uploaded to Foldiq. If you enable organization by location on an Apple platform, GPS coordinates embedded in a media item may be submitted to Apple's Core Location geocoding service to obtain a country, state, or city name. On Windows, Foldiq first rounds each coordinate to two decimal places (roughly 1 km precision), then submits only that approximate coordinate to OpenStreetMap's Nominatim service. Photos, videos, filenames, folder paths, and other media metadata are not included in these location requests. Results are cached locally to reduce repeat lookups. Foldiq does not receive or retain a location request on a Foldiq server.</p>
   <p>If an original exists only in your iCloud Photos library, macOS may download it from Apple's iCloud service so Foldiq can export it to the folder you selected. This is an Apple system service operating on media you already store with Apple.</p>
 
   <h2>4. File access</h2>
@@ -102,15 +102,16 @@
   <p>On macOS, file access is governed by the operating system's sandbox and security-scoped bookmarks mechanism. Foldiq stores bookmarks for selected folders to allow re-access within the same session. These bookmarks are stored locally on your device using macOS UserDefaults and are never transmitted anywhere.</p>
 
   <h2>5. Network access</h2>
-  <p>Most organization features work locally. The macOS app may connect to Apple for reverse geocoding and iCloud Photos retrieval as described above. We do not include third-party analytics, advertising, or behavioral tracking SDKs in the apps.</p>
+  <p>Most organization features work locally. Apple-platform apps may connect to Apple for optional reverse geocoding and iCloud Photos retrieval. The Windows app may connect to OpenStreetMap only when you enable GPS-based folder naming. We do not include third-party analytics, advertising, or behavioral tracking SDKs in the apps.</p>
 
   <h2>6. Third-party services</h2>
-  <p>We use Apple (Mac App Store, Core Location, and iCloud Photos), Stripe (Windows checkout and payment records), Resend (transactional email), Vercel (website and API hosting), GitHub (Windows installer hosting), and Google Fonts (website typography). Each provider processes data under its own terms and privacy policy. We share only information needed for the relevant service.</p>
+  <p>We use Apple (Mac App Store, Core Location, and iCloud Photos), OpenStreetMap Nominatim (optional Windows location lookup), Stripe (Windows checkout and payment records), Resend (transactional email), Vercel (website and API hosting), GitHub (Windows installer hosting), and Google Fonts (website typography). Each provider processes data under its own terms and privacy policy. We share only information needed for the relevant service.</p>
 
   <h2>7. Data storage</h2>
   <p>The Foldiq app stores locally on your computer:</p>
   <ul>
-    <li><strong>App preferences</strong> — organization mode, folder name preference, and other settings you configure. Stored in macOS UserDefaults.</li>
+    <li><strong>App preferences</strong> — organization mode, folder name preference, and other settings you configure. Stored in the operating system's local application-preferences storage.</li>
+    <li><strong>Location cache</strong> — place names returned by an optional GPS lookup, stored locally to avoid sending the same coordinate repeatedly.</li>
     <li><strong>Undo manifests</strong> — a log of every file movement performed, stored as a local JSON or CSV file in a location you choose. This file stays entirely on your computer and is never transmitted anywhere.</li>
     <li><strong>Security-scoped bookmarks</strong> — macOS file access tokens for folders you select. Stored in UserDefaults, used only to re-access the same folder within the app.</li>
   </ul>

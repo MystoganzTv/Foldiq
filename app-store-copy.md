@@ -57,7 +57,7 @@ Archives: unencrypted ZIP, RAR, and 7z files are automatically extracted and the
 
 **Privacy first**
 
-All processing happens locally on your Mac. Foldiq never connects to the internet, never uploads your photos anywhere, and never asks for a cloud account. Your library stays yours.
+Photos, videos, filenames, and metadata are processed on your Mac and never uploaded to Foldiq. No Foldiq cloud account, analytics, advertising, or telemetry is required. If you enable location-based folder names, macOS may send a GPS coordinate to Apple's geocoding service; it may also retrieve originals you already keep in iCloud Photos.
 
 ---
 
@@ -77,7 +77,7 @@ First release of Foldiq — the safest way to organize a messy photo library on 
 - Full preview before any file moves
 - Complete undo with one click
 - ZIP, RAR, and 7z archive support
-- 100% local — no cloud, no account required
+- On-device media processing — no Foldiq cloud or account required
 
 ---
 
@@ -89,7 +89,7 @@ First release of Foldiq — the safest way to organize a messy photo library on 
 ## Privacy Policy Summary
 *(for the App Store listing — you'll need a hosted URL)*
 
-Foldiq does not collect, transmit, or store any personal data. All operations are performed entirely on the user's device. No analytics, no crash reporting services, no network connections of any kind. The app reads and writes files only in folders explicitly selected by the user.
+Foldiq does not collect or upload the user's photo or video library. Media processing happens on-device, with no analytics, advertising, or telemetry. Optional GPS folder naming uses Apple's geocoding service, and macOS may retrieve originals the user already stores in iCloud Photos. The app reads and writes files only in folders explicitly selected by the user.
 
 ---
 

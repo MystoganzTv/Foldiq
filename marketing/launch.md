@@ -15,7 +15,7 @@ The Mac app that finally organizes your photo library
 `Productivity` `Mac` `Photography` `Utilities` `Developer Tools`
 
 ### Short description (for the card)
-Foldiq scans your messy photo and video folders, reads real EXIF metadata, and builds a clean Year → Month → Date structure automatically. Local-only. One-time $4.99. Full undo included.
+Foldiq scans your messy photo and video folders, reads real EXIF metadata, and builds a clean Year → Month → Date structure automatically. On-device media processing. One-time $4.99. Full undo included.
 
 ### Full description
 You have thousands of photos scattered across folders named "New Folder (2)", "IMG_downloads_FINAL", and "misc". You've meant to organize them for years.
@@ -33,7 +33,7 @@ Foldiq does it in minutes.
 - Reads actual EXIF dates, not "date modified" (which lies)
 - Detects near-duplicates by hash + visual similarity
 - Supports JPG, HEIC, RAW (CR2, NEF, ARW, DNG), MOV, MP4, M4V, ZIP archives
-- 100% local — no cloud, no account, no subscription
+- Photos stay on-device — no Foldiq cloud, account, or subscription
 - Safe by design — never overwrites files, full undo manifest
 
 One-time $4.99. Runs on macOS 14 Sonoma or later.
@@ -51,7 +51,7 @@ So I built the app I actually wanted:
 → It reads real EXIF dates (not file modification dates, which are unreliable)
 → Shows you a full preview of every change before touching anything
 → Has a one-click undo that restores your entire library if you change your mind
-→ Works completely offline — your photos never leave your Mac
+→ Photos never upload to Foldiq; optional location naming uses Apple's geocoding service
 
 It's $4.99, one-time, no subscription ever.
 
@@ -81,7 +81,7 @@ The thing I cared most about: **nothing happens until you've reviewed it.** You 
 - Reads EXIF dates (not "date modified" which is unreliable)
 - Detects near-duplicates
 - Supports JPG, HEIC, RAW formats (CR2, NEF, ARW, DNG), MOV, MP4, ZIP archives
-- 100% local, no cloud, no account
+- Photos stay on-device, with no Foldiq cloud or account
 - Full undo with manifest log
 - Cleans up empty folders after organizing
 
@@ -163,7 +163,7 @@ It reads the real EXIF capture date from every photo (not the file modification 
 Before: 23 folders with random names, 11,000 files with no order
 After: clean 2016–2024 year folders, each broken down by month and shooting date
 
-$4.99 one-time at foldiq.app — no subscription, works completely offline.
+$4.99 one-time at foldiq.app — no subscription. Photos stay on-device; optional location naming uses Apple's geocoding service.
 
 ---
 

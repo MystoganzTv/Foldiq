@@ -1,0 +1,10 @@
+# The Vercel project root is configured as web/. Keep desktop, mobile, Xcode,
+# and generated installer artifacts out of website upload bundles.
+*
+!web
+!web/**
+
+web/.DS_Store
+web/.env*
+web/.vercel/
+web/node_modules/
