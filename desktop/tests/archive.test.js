@@ -134,7 +134,7 @@ test('ZIP scanner accepts streaming data-descriptor archives', async (t) => {
   assert.deepEqual(result.warnings, []);
   assert.equal(result.files.length, 2);
   assert.ok(progress.some(update => update.phase === 'archive'));
-  assert.ok(progress.some(update => update.phase === 'media' && update.total === 2));
+  assert.ok(progress.some(update => update.phase === 'metadata' && update.total === 2));
 });
 
 test('scanner hashes only same-size candidates and still finds exact duplicates', async (t) => {

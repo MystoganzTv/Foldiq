@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import s from './Screen.module.css';
 
 const MODES = [
@@ -31,14 +30,28 @@ const MODES = [
     preview: '2026/\n  2026-05 May/\n    2026-05-18/',
     groupByMonth: true, groupByDay: true,
   },
+  {
+    id: 'location',
+    label: 'By Location',
+    sub: 'Country → State → City when GPS is available. Files without GPS stay together under Unknown Location.',
+    preview: 'United States/\n  Virginia/\n    Herndon/\nUnknown Location/\n  2026/',
+    groupByMonth: false, groupByDay: false,
+  },
 ];
 
-export default function SettingsScreen({ go, config, setConfig }) {
-  const [mode, setMode] = useState('smart');
+export default function SettingsScreen({ go, files, config, setConfig }) {
+  const mode = config.organizationMode || 'smart';
+  const missingDates = files.filter(file => !file.date).length;
+  const fileDatesAvailable = files.filter(file => !file.date && file.fileModifiedDate).length;
 
   function selectMode(m) {
-    setMode(m.id);
-    setConfig(c => ({ ...c, groupByMonth: m.groupByMonth, groupByDay: m.groupByDay }));
+    setConfig(c => ({
+      ...c,
+      organizationMode: m.id,
+      groupByMonth: m.groupByMonth,
+      groupByDay: m.groupByDay,
+      useGPSLocation: m.id === 'location' ? true : c.useGPSLocation,
+    }));
   }
 
   async function pickOutput() {
@@ -106,8 +119,17 @@ export default function SettingsScreen({ go, config, setConfig }) {
         <div>
           <div className={s.sectionTitle}>Options</div>
           {[
-            { key: 'copyMode',       label: 'Copy instead of Move',  sub: 'Keep originals in place (uses more disk space)' },
-            { key: 'skipDuplicates', label: 'Skip Duplicates',       sub: "Don't move files with identical content" },
+            { key: 'copyMode', label: 'Copy instead of Move', sub: 'Keep originals in place (uses more disk space)' },
+            {
+              key: 'useFileDateFallback',
+              label: 'Estimate missing capture dates from file dates',
+              sub: `${fileDatesAvailable.toLocaleString()} of ${missingDates.toLocaleString()} missing dates have a file timestamp. Optional: copied or exported files may have a newer date than the photo.`,
+            },
+            ...(['smart', 'location'].includes(mode) ? [{
+              key: 'useGPSLocation',
+              label: 'Use GPS location in folder names',
+              sub: 'Requires internet. Approximate GPS coordinates are sent to OpenStreetMap only to obtain country, state, and city names; results are cached on this PC.',
+            }] : []),
           ].map(t => (
             <div key={t.key} className={s.toggleRow} onClick={() => toggle(t.key)}>
               <div className={`${s.toggleSwitch} ${config[t.key] ? s.on : ''}`} />
@@ -117,6 +139,20 @@ export default function SettingsScreen({ go, config, setConfig }) {
               </div>
             </div>
           ))}
+          {['smart', 'location'].includes(mode) && config.useGPSLocation && (
+            <button className={s.attributionLink} onClick={() => window.foldiq.openAttribution()}>
+              Location names © OpenStreetMap contributors · ODbL
+            </button>
+          )}
+          <div className={s.settingSelectRow}>
+            <div><div className={s.toggleLabel}>Duplicate handling</div><div className={s.toggleSub}>Choose what happens to exact and probable duplicates</div></div>
+            <select value={config.duplicateHandling} onChange={event => setConfig(c => ({ ...c, duplicateHandling: event.target.value }))}>
+              <option value="separate">Separate into Duplicates folders</option>
+              <option value="skip">Leave duplicates untouched</option>
+              <option value="organize">Organize with everything else</option>
+            </select>
+          </div>
+          <div className={s.settingsNote}>Scan included {config.includeVideos ? 'videos' : 'photos only'} and {config.includeArchives ? 'compressed archives' : 'no compressed archives'}. Change these scan options from the first screen.</div>
         </div>
       </div>
 
@@ -129,4 +165,3 @@ export default function SettingsScreen({ go, config, setConfig }) {
     </div>
   );
 }
-

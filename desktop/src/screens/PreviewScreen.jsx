@@ -39,6 +39,7 @@ function dateSourceLabel(source) {
     'embedded metadata': 'Embedded creation metadata',
     filename: 'Date encoded in filename',
     manual: 'Corrected by you',
+    'file date estimate': 'Estimated from file timestamp',
   };
   return labels[source] || 'No reliable capture date';
 }
@@ -112,9 +113,16 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
   const [showTree, setShowTree] = useState(false);
   const [showPreflight, setShowPreflight] = useState(false);
   const [dateUpdatingKey, setDateUpdatingKey] = useState(null);
+  const [planProgress, setPlanProgress] = useState(null);
+  const [locationWarning, setLocationWarning] = useState('');
 
   useEffect(() => {
     let active = true;
+    window.foldiq.onPlanProgress(progress => {
+      if (!active) return;
+      if (progress.warning) setLocationWarning(progress.warning);
+      setPlanProgress(progress);
+    });
     window.foldiq.buildPlan(files, config)
       .then(nextPlan => {
         if (!active) return;
@@ -127,7 +135,10 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
         setError(err?.message || 'Foldiq could not build the preview.');
         setLoading(false);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+      window.foldiq.removeAllListeners('plan:progress');
+    };
   }, [files, config, setPlan]);
 
   const candidates = useMemo(() => plan.filter(file => file.action !== 'skip'), [plan]);
@@ -203,7 +214,7 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
     const inclusion = new Map(plan.map(item => [fileKey(item), item.included]));
     const editedFiles = plan.map(item => (
       fileKey(item) === key
-        ? { ...item, date: corrected?.toISOString() ?? null, dateSource: corrected ? 'manual' : null, dateTag: null }
+        ? { ...item, date: corrected?.toISOString() ?? null, dateSource: corrected ? 'manual' : null, dateTag: null, dateEstimated: false }
         : item
     ));
 
@@ -238,7 +249,11 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
           <div className={s.planningOrb}><span /></div>
           <h2 className={s.loadingTitle}>Building a safe plan…</h2>
           <div className={`${s.progressBar} ${s.indeterminateBar}`} style={{ width: 380 }}><div /></div>
-          <p className={s.sub}>Comparing source paths, dates, duplicates, and destinations.</p>
+          <p className={s.sub}>
+            {planProgress?.phase === 'locations' && planProgress.total > 0
+              ? `Naming GPS locations ${Number(planProgress.current || 0).toLocaleString()} of ${Number(planProgress.total).toLocaleString()}…`
+              : 'Comparing source paths, dates, duplicates, and destinations.'}
+          </p>
         </div>
       )}
 
@@ -252,6 +267,7 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
 
       {!loading && !error && (
         <>
+          {locationWarning && <div className={s.previewWarning}>{locationWarning}</div>}
           <div className={s.previewContent}>
             <div className={s.previewToolbarTop}>
               <div className={s.previewStatsInline}>
@@ -469,6 +485,13 @@ function PreviewInspector({ file, outputFolder, onClose, onToggle, onCorrectDate
         <MetaRow label="Type" value={(file.ext || '').replace('.', '').toUpperCase() || 'File'} />
         <MetaRow label="Date" value={formatDate(file.date)} warning={!file.date} />
         <MetaRow label="Date source" value={dateSourceLabel(file.dateSource)} warning={!file.dateSource} />
+        {(file.cameraMake || file.cameraModel) && <MetaRow label="Camera" value={[file.cameraMake, file.cameraModel].filter(Boolean).join(' ')} />}
+        {file.pixelWidth && file.pixelHeight && <MetaRow label="Dimensions" value={`${file.pixelWidth} × ${file.pixelHeight}`} />}
+        {file.durationSeconds > 0 && <MetaRow label="Duration" value={`${Math.round(file.durationSeconds)} seconds`} />}
+        {file.latitude != null && file.longitude != null && <MetaRow label="GPS" value={`${Number(file.latitude).toFixed(4)}, ${Number(file.longitude).toFixed(4)}`} />}
+        {file.isDuplicate && <MetaRow label="Duplicate" value="Exact content match" warning />}
+        {file.isProbableDuplicate && <MetaRow label="Probable duplicate" value={`${file.probableMatchScore}% · ${file.probableMatchPeerFilename || 'matching file'}`} warning />}
+        {file.isProbableDuplicate && file.probableMatchReasons && <p className={s.inspectorReason}>{file.probableMatchReasons}</p>}
         <MetaRow label="Source" value={file.archiveSourcePath ? 'Compressed archive' : 'Folder'} />
         <div className={s.dateCorrection}>
           <div className={s.dateCorrectionHeader}>
@@ -483,7 +506,7 @@ function PreviewInspector({ file, outputFolder, onClose, onToggle, onCorrectDate
             onChange={event => onCorrectDate(event.target.value)}
             aria-label={`Capture date for ${file.name}`}
           />
-          <small>{dateUpdating ? 'Updating destinations…' : 'Foldiq never uses the file-modified time as a capture date.'}</small>
+          <small>{dateUpdating ? 'Updating destinations…' : file.dateEstimated ? 'Estimated from the file timestamp. Review it if this file was copied or exported.' : 'Capture metadata and filename dates are preferred over file timestamps.'}</small>
         </div>
         <div className={s.inspectorDivider} />
         <div className={s.inspectorDestination}>

@@ -62,7 +62,7 @@ function availableDiskBytes(directory) {
   }
 }
 
-async function extractZip(zipPath, isMedia, onProgress) {
+async function extractZip(zipPath, isMedia, onProgress, signal) {
   const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'foldiq-zip-'));
 
   try {
@@ -76,6 +76,7 @@ async function extractZip(zipPath, isMedia, onProgress) {
     let declaredBytes = 0;
 
     for (const entry of archive.files) {
+      if (signal?.aborted) throw new Error('Scan cancelled');
       const relativePath = safeRelativePath(entry.path);
       if ((entry.vars?.flags ?? 0) & 0x01) {
         throw new Error('Password-protected ZIP files are not supported');
@@ -111,6 +112,7 @@ async function extractZip(zipPath, isMedia, onProgress) {
     let extractedBytes = 0;
 
     for (let index = 0; index < mediaEntries.length; index++) {
+      if (signal?.aborted) throw new Error('Scan cancelled');
       const { entry, relativePath } = mediaEntries[index];
       const destination = path.join(tempDirectory, relativePath);
       const relativeDestination = path.relative(tempDirectory, destination);
@@ -130,7 +132,7 @@ async function extractZip(zipPath, isMedia, onProgress) {
         },
       });
 
-      await pipeline(entry.stream(), sizeGuard, fs.createWriteStream(destination, { flags: 'wx' }));
+      await pipeline(entry.stream(), sizeGuard, fs.createWriteStream(destination, { flags: 'wx' }), { signal });
       const modified = entry.vars?.lastModifiedDateTime;
       if (modified instanceof Date && !Number.isNaN(modified.getTime())) {
         try { fs.utimesSync(destination, modified, modified); } catch {}
@@ -214,7 +216,7 @@ function parseSevenZipProgress(output) {
   return updates;
 }
 
-function extractWithProgress(executable, args, onProgress) {
+function extractWithProgress(executable, args, onProgress, signal) {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
       windowsHide: true,
@@ -225,6 +227,8 @@ function extractWithProgress(executable, args, onProgress) {
     let progressBuffer = '\n';
     let lastPercent = -1;
     let lastActivity = Date.now();
+    const onAbort = () => child.kill();
+    signal?.addEventListener('abort', onAbort, { once: true });
 
     const remember = (current, chunk) => {
       const combined = current + chunk;
@@ -265,11 +269,17 @@ function extractWithProgress(executable, args, onProgress) {
     child.on('error', error => {
       clearTimeout(hardTimeout);
       clearInterval(stallMonitor);
+      signal?.removeEventListener('abort', onAbort);
       reject(error);
     });
     child.on('close', code => {
       clearTimeout(hardTimeout);
       clearInterval(stallMonitor);
+      signal?.removeEventListener('abort', onAbort);
+      if (signal?.aborted) {
+        reject(new Error('Scan cancelled'));
+        return;
+      }
       if (code === 0) {
         reportProgress(onProgress, { stage: 'extracting', current: 100, total: 100 });
         resolve({ stdout, stderr });
@@ -283,7 +293,7 @@ function extractWithProgress(executable, args, onProgress) {
   });
 }
 
-async function listWithSevenZip(archivePath, executable) {
+async function listWithSevenZip(archivePath, executable, signal) {
   try {
     const { stdout } = await execFileAsync(
       executable,
@@ -293,6 +303,7 @@ async function listWithSevenZip(archivePath, executable) {
         maxBuffer: MAX_LISTING_BYTES,
         windowsHide: true,
         timeout: ARCHIVE_COMMAND_TIMEOUT_MS,
+        signal,
       }
     );
     return parseTechnicalListing(stdout);
@@ -337,14 +348,15 @@ async function extractWithSevenZip(
   archivePath,
   isMedia,
   executable = bundledSevenZipPath(),
-  onProgress
+  onProgress,
+  signal
 ) {
   const label = archiveLabel(archivePath);
   const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'foldiq-archive-'));
 
   try {
     reportProgress(onProgress, { stage: 'listing', current: 0, total: 0 });
-    const listedEntries = await listWithSevenZip(archivePath, executable);
+    const listedEntries = await listWithSevenZip(archivePath, executable, signal);
     if (listedEntries.length > MAX_ARCHIVE_ENTRIES) {
       throw new Error(`${label} has too many entries (${listedEntries.length.toLocaleString()})`);
     }
@@ -401,7 +413,8 @@ async function extractWithSevenZip(
           'x', '-y', '-aoa', '-spd', '-scsUTF-8', '-bsp1', '-bb0',
           `-o${tempDirectory}`, archivePath, `@${listFile}`,
         ],
-        onProgress
+        onProgress,
+        signal
       );
     } catch (error) {
       const detail = [error.stdout, error.stderr, error.message].filter(Boolean).join('\n');
@@ -426,29 +439,29 @@ async function extractWithSevenZip(
   }
 }
 
-async function extractArchive(archivePath, isMedia, onProgress) {
+async function extractArchive(archivePath, isMedia, onProgress, signal) {
   const extension = path.extname(archivePath).toLowerCase();
   if (extension === '.zip') {
     // The streaming ZIP reader does not reliably handle every valid data-descriptor
     // layout on Windows. The verified 7-Zip runtime is already bundled there for
     // RAR/7z support, so use it for ZIP as well for consistent compatibility.
     if (process.platform === 'win32') {
-      return extractWithSevenZip(archivePath, isMedia, bundledSevenZipPath(), onProgress);
+      return extractWithSevenZip(archivePath, isMedia, bundledSevenZipPath(), onProgress, signal);
     }
 
     try {
-      return await extractZip(archivePath, isMedia, onProgress);
+      return await extractZip(archivePath, isMedia, onProgress, signal);
     } catch (zipError) {
       // Development and non-App-Store Electron builds may also have 7zip-bin.
       // Fall back when available, while preserving the original useful error if not.
       let executable;
       try { executable = bundledSevenZipPath(); } catch { throw zipError; }
       reportProgress(onProgress, { stage: 'fallback', current: 0, total: 0 });
-      return extractWithSevenZip(archivePath, isMedia, executable, onProgress);
+      return extractWithSevenZip(archivePath, isMedia, executable, onProgress, signal);
     }
   }
   if (extension === '.rar' || extension === '.7z') {
-    return extractWithSevenZip(archivePath, isMedia, bundledSevenZipPath(), onProgress);
+    return extractWithSevenZip(archivePath, isMedia, bundledSevenZipPath(), onProgress, signal);
   }
   throw new Error(`Unsupported archive format: ${extension || 'unknown'}`);
 }

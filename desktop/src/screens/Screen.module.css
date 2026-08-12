@@ -9,12 +9,30 @@
 
 .scrollArea {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 40px 48px 24px;
   display: flex;
   flex-direction: column;
   gap: 28px;
 }
+
+/* The welcome screen has a fixed action bar and a deliberately compact set of
+   controls. Use its available height before introducing a scrollbar; scrolling
+   remains available when a short window or a long source list truly needs it. */
+.welcomeContent {
+  padding: 22px 48px 14px;
+  gap: 14px;
+}
+.welcomeEmpty { overflow-y: hidden; }
+.welcomeWithSources { overflow-y: auto; }
+.welcomeHero { padding: 18px 0 8px; text-align: center; transition: padding .2s; }
+.welcomeHeroSelected { padding: 8px 0 3px; }
+.welcomeLogo { display: block; margin: 0 auto 14px; transition: width .2s, height .2s, margin .2s; }
+.welcomeHeroSelected .welcomeLogo { margin-bottom: 7px; }
+.welcomeTitle { margin-bottom: 7px; color: #0F172A; font-size: 32px; font-weight: 800; }
+.welcomeSubtitle { color: #475569; font-size: 15px; line-height: 1.45; }
+.welcomeSelectedTitle { color: #0F172A; font-size: 20px; font-weight: 700; }
 
 .bottomBar {
   display: flex;
@@ -36,12 +54,14 @@
 .dropzone {
   border: 2px dashed var(--slate-200);
   border-radius: 16px;
-  padding: 52px 32px;
+  padding: 32px;
   text-align: center;
   cursor: pointer;
   transition: border-color .15s, background .15s;
   background: var(--white);
 }
+.dropzoneSelected { padding: 16px 32px; }
+.welcomeDropIcon { margin-bottom: 8px; }
 .dropzone:hover, .dragging { border-color: var(--blue); background: var(--blue-light); }
 .dropIcon  { font-size: 48px; margin-bottom: 14px; }
 .dropTitle { font-size: 17px; font-weight: 600; color: var(--slate-700); margin-bottom: 6px; }
@@ -65,7 +85,18 @@
 .progressFill  { height: 100%; background: var(--blue); border-radius: 3px; transition: width .25s; }
 .progressLabel { font-size: 12px; color: var(--slate-400); font-family: monospace; }
 .scanHint { margin: 0; text-align: center; color: var(--slate-400); font-size: 12px; line-height: 1.45; }
+.scanPhase { margin: -4px 0 0; text-align: center; color: var(--slate-600); font-size: 11px; font-weight: 750; }
 .scanElapsed { margin: -4px 0 0; text-align: center; color: var(--slate-400); font-size: 11px; font-variant-numeric: tabular-nums; }
+.scanActions { display: flex; justify-content: center; gap: 8px; margin-top: 8px; }
+.scanActions button { padding: 7px 12px; font-size: 11px; }
+.scanStatusIcon { width: 76px; height: 76px; display: grid; place-items: center; margin: 0 auto 16px; border-radius: 50%; background: #EFF6FF; color: #3B82F6; box-shadow: inset 0 0 0 1px #DBEAFE, 0 13px 32px rgba(37,99,235,.13); animation: applyBreathe 2.1s ease-in-out infinite; }
+.dateEvidenceSummary { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 7px 14px; padding: 11px 14px; border: 1px solid var(--slate-200); border-radius: 11px; background: #F8FAFC; color: var(--slate-500); font-size: 11px; }
+.dateEvidenceSummary strong { color: var(--slate-700); }
+.dateEvidenceSummary small { flex-basis: 100%; color: var(--slate-400); text-align: center; }
+.supportDiagnosticsButton { display: block; margin: 12px auto 0; padding: 0; border: 0; background: transparent; color: currentColor; font-size: 11px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.diagnosticPrivacyNotice { color: var(--slate-600); font-size: 13px; line-height: 1.55; }
+.diagnosticPrivacyNotice ul { margin: 12px 0 0 20px; }
+.diagnosticPrivacyNotice li + li { margin-top: 6px; }
 
 /* ── Stat grid (scan) ── */
 .statsGrid {
@@ -80,6 +111,14 @@
   border-radius: 14px;
   background: #fff;
 }
+.statCardButton { width: 100%; color: inherit; text-align: left; cursor: pointer; transition: transform .15s, border-color .15s, box-shadow .15s; }
+.statCardButton:hover { transform: translateY(-1px); border-color: #BFDBFE; box-shadow: 0 8px 20px rgba(37,99,235,.08); }
+.scanFileDrilldown { max-height: 430px; overflow-y: auto; border: 1px solid var(--slate-200); border-radius: 10px; }
+.scanFileDrilldown > button { width: 100%; display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border: 0; border-bottom: 1px solid var(--slate-100); background: #fff; color: var(--slate-700); text-align: left; cursor: pointer; }
+.scanFileDrilldown > button:hover { background: #F8FAFC; }
+.scanFileDrilldown strong { font-size: 11px; }
+.scanFileDrilldown span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--slate-400); font: 9px ui-monospace, Consolas, monospace; }
+.scanFileDrilldown > p { padding: 14px; color: var(--slate-400); text-align: center; font-size: 12px; }
 .statIcon {
   width: 40px; height: 40px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
@@ -147,6 +186,10 @@
 .toggleSwitch.on::after { transform: translateX(18px); }
 .toggleLabel { font-size: 14px; font-weight: 600; color: var(--slate-800); }
 .toggleSub   { font-size: 12px; color: var(--slate-400); margin-top: 2px; }
+.settingSelectRow { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 13px 0; border-top: 1px solid var(--slate-100); }
+.settingSelectRow select { max-width: 300px; padding: 8px 10px; border: 1px solid var(--slate-200); border-radius: 8px; background: #fff; color: var(--slate-700); }
+.settingsNote { margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: #F8FAFC; color: var(--slate-500); font-size: 11px; }
+.attributionLink { display: block; margin: -1px 0 10px 58px; padding: 0; border: 0; background: transparent; color: #64748B; font-size: 10px; text-decoration: underline; cursor: pointer; }
 
 /* ── Rich preview ── */
 .previewHeader {
@@ -159,6 +202,7 @@
 }
 .previewHeaderDestination span { color: var(--slate-400); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .previewHeaderDestination strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--slate-800); font-size: 13px; }
+.previewWarning { padding: 8px 22px; border-bottom: 1px solid #FDE68A; background: #FFFBEB; color: #92400E; font-size: 11px; text-align: center; }
 .previewContent {
   min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 10px;
   padding: 13px 22px 10px; overflow: hidden; background: linear-gradient(180deg, #F7FAFE 0%, #F8FAFC 100%);
@@ -272,6 +316,7 @@
 .revealButton { width: 100%; margin-top: 12px; padding: 8px 10px; border: 1px solid var(--slate-200); border-radius: 8px; background: #fff; color: var(--slate-600); font-size: 10px; font-weight: 650; cursor: pointer; }
 .revealButton:hover { border-color: #93C5FD; color: #2563EB; }
 .warningText { color: #D97706 !important; }
+.inspectorReason { margin: 8px 0; padding: 7px 8px; border-radius: 7px; background: #FFFBEB; color: #A16207; font-size: 8px; line-height: 1.45; }
 .previewFooterSummary { display: flex; flex-direction: column; align-items: center; font-size: 12px; color: var(--slate-700); }
 .previewFooterSummary span { margin-top: 2px; color: var(--slate-400); font-size: 10px; }
 .centerBlock { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 12px; padding: 40px; }
@@ -338,10 +383,28 @@
 
 /* ── Error list ── */
 .errorList  { background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.errorListHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.errorListHeader button { padding: 6px 10px; font-size: 11px; background: #fff; }
 .errorTitle { font-size: 13px; font-weight: 700; color: var(--red); }
 .errorRow   { display: flex; gap: 12px; font-size: 12px; }
 .errorFile  { font-family: monospace; color: var(--slate-700); }
 .errorMsg   { color: var(--red); }
+.welcomeScanOptions { display: flex; justify-content: center; gap: 18px; margin: 12px 0 6px; color: var(--slate-500); font-size: 12px; }
+.welcomeScanOptions label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.welcomeFooterInfo { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 12px; color: var(--slate-400); font-size: 11px; }
+.welcomeFooterInfo button { padding: 0; border: 0; background: transparent; color: var(--slate-500); text-decoration: underline; cursor: pointer; }
+.howSteps { display: grid; gap: 9px; }
+.howSteps p { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 9px; background: #F8FAFC; }
+.howSteps strong { color: var(--slate-700); font-size: 12px; }
+.howSteps span { color: var(--slate-500); font-size: 11px; line-height: 1.45; }
+.reportSummaryBar { display: flex; align-items: center; gap: 18px; padding: 13px 16px; border: 1px solid var(--slate-200); border-radius: 11px; background: #F8FAFC; color: var(--slate-500); font-size: 12px; }
+.reportSummaryBar strong { color: var(--slate-800); }
+.reportSummaryBar button { margin-left: auto; padding: 7px 13px; font-size: 11px; }
+.cleanupCard { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 16px; border: 1px solid #BFDBFE; border-radius: 12px; background: #EFF6FF; }
+.cleanupCard strong { color: #1E3A8A; font-size: 13px; }
+.cleanupCard p { margin-top: 3px; color: #475569; font-size: 11px; line-height: 1.45; }
+.cleanupCard button { flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: #fff; }
+.reportInlineError { padding: 10px 12px; border: 1px solid #FECACA; border-radius: 9px; background: #FEF2F2; color: #B91C1C; font-size: 12px; }
 
 /* ── Buttons ── */
 .btnPrimary {
@@ -397,6 +460,6 @@
 @media (prefers-reduced-motion: reduce) {
   .screen, .fileRow, .previewInspector, .thumbnailFrame img, .thumbnailLoading span,
   .planningOrb, .planningOrb span, .indeterminateBar > div, .modalBackdrop,
-  .modalCard, .applyStatusIcon, .applySpinner { animation: none; }
+  .modalCard, .applyStatusIcon, .scanStatusIcon, .applySpinner { animation: none; }
   .fileRow { opacity: 1; }
 }

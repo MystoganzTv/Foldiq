@@ -8,17 +8,22 @@ const STAT_CARDS = [
   { key: 'dupes',     label: 'Exact Dupes',     color: '#FFF7ED', iconColor: '#F97316' },
   { key: 'probDupes', label: 'Probable Dupes',  color: '#FEFCE8', iconColor: '#EAB308' },
   { key: 'noDate',    label: 'Missing Date',    color: '#FEF2F2', iconColor: '#EF4444' },
-  { key: 'noMeta',    label: 'No Metadata',     color: '#F8FAFC', iconColor: '#94A3B8' },
+  { key: 'fileDate',  label: 'File Date Available', color: '#F8FAFC', iconColor: '#64748B' },
   { key: 'total',     label: 'Total Files',     color: '#F0FDF4', iconColor: '#22C55E' },
 ];
 
-export default function ScanScreen({ go, folders, setFiles }) {
+export default function ScanScreen({ go, folders, setFiles, config }) {
   const [progress, setProgress] = useState({ current: 0, total: 0, file: '' });
   const [done,     setDone]     = useState(false);
   const [stats,    setStats]    = useState(null);
   const [warnings, setWarnings] = useState([]);
   const [error,    setError]    = useState('');
   const [elapsed,  setElapsed]  = useState(0);
+  const [scannedFiles, setScannedFiles] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [showDiagnosticConsent, setShowDiagnosticConsent] = useState(false);
+  const [creatingSupportEmail, setCreatingSupportEmail] = useState(false);
   const startedAt = useRef(Date.now());
 
   useEffect(() => {
@@ -26,10 +31,14 @@ export default function ScanScreen({ go, folders, setFiles }) {
     startedAt.current = Date.now();
     const timer = setInterval(() => setElapsed(Date.now() - startedAt.current), 1000);
     window.foldiq.onScanProgress(p => setProgress(p));
-    window.foldiq.startScan(folders).then(result => {
+    window.foldiq.startScan(folders, {
+      includeVideos: config.includeVideos,
+      includeArchives: config.includeArchives,
+    }).then(result => {
       if (!active) return;
       const files = Array.isArray(result) ? result : result.files;
       setFiles(files);
+      setScannedFiles(files);
       const photoExts = new Set(['.jpg','.jpeg','.png','.heic','.heif','.tiff','.tif','.webp','.cr2','.cr3','.nef','.arw','.dng','.raf','.orf','.rw2']);
       const videoExts = new Set(['.mov','.mp4','.m4v','.avi','.mkv']);
       setStats({
@@ -37,9 +46,11 @@ export default function ScanScreen({ go, folders, setFiles }) {
         videos:    files.filter(f => videoExts.has(f.ext)).length,
         zips:      Array.isArray(result) ? 0 : result.archivesExtracted,
         dupes:     files.filter(f => f.isDuplicate).length,
-        probDupes: 0,
+        probDupes: files.filter(f => f.isProbableDuplicate).length,
         noDate:    files.filter(f => !f.date).length,
-        noMeta:    0,
+        fileDate:  files.filter(f => !f.date && f.fileModifiedDate).length,
+        embeddedDates: files.filter(f => f.date && f.dateSource !== 'filename').length,
+        filenameDates: files.filter(f => f.date && f.dateSource === 'filename').length,
         total:     files.length,
       });
       setWarnings(Array.isArray(result) ? [] : result.warnings);
@@ -56,22 +67,56 @@ export default function ScanScreen({ go, folders, setFiles }) {
       clearInterval(timer);
       window.foldiq.removeAllListeners('scan:progress');
     };
-  }, [folders, setFiles]);
+  }, [config.includeArchives, config.includeVideos, folders, setFiles]);
+
+  async function cancelScan() {
+    setCancelling(true);
+    try { await window.foldiq.cancelScan(); } finally { go('welcome'); }
+  }
+
+  async function createSupportEmail() {
+    setCreatingSupportEmail(true);
+    try {
+      await window.foldiq.createDiagnosticsEmail();
+      setShowDiagnosticConsent(false);
+    } finally {
+      setCreatingSupportEmail(false);
+    }
+  }
 
   const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
   const openingArchives = progress.phase === 'archive' || progress.phase === 'archive-list';
   const hasDeterminateProgress = progress.total > 0;
+  const phaseLabel = {
+    cleanup: 'Preparing workspace',
+    archive: 'Extracting archive',
+    'archive-list': 'Archive ready',
+    indexing: 'Indexing files',
+    metadata: 'Reading capture dates',
+    duplicates: 'Checking exact duplicates',
+    finalizing: 'Preparing results',
+  }[progress.phase] || 'Scanning files';
 
   return (
     <div className={s.screen}>
       <div className={s.scrollArea}>
         <div style={{ textAlign: 'center', padding: '16px 0 24px' }}>
+          {!done && (
+            <div className={s.scanStatusIcon} aria-hidden="true">
+              <svg className={s.applySpinner} width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+            </div>
+          )}
           <h1 className={s.title}>
-            {done ? 'Scan Complete' : openingArchives ? 'Opening Archives…' : 'Scanning…'}
+            {done ? (error ? 'Scan Failed' : 'Scan Complete') : openingArchives ? 'Opening Archives…' : 'Scanning…'}
           </h1>
           <p className={s.sub} style={{ margin: '0 auto' }}>
             {done
-              ? folders.map(f => f.split(/[\\/]/).pop()).join(', ')
+              ? error
+                ? 'Foldiq could not complete this scan.'
+                : folders.map(f => f.split(/[\\/]/).pop()).join(', ')
               : openingArchives
                 ? 'The original compressed files remain untouched.'
                 : 'Reading metadata from every file…'}
@@ -90,12 +135,16 @@ export default function ScanScreen({ go, folders, setFiles }) {
                 ? `${progress.current.toLocaleString()} / ${progress.total.toLocaleString()} — ${progress.file}`
                 : progress.file || 'Preparing scan…'}
             </p>
+            <p className={s.scanPhase}>{phaseLabel}</p>
             <p className={s.scanElapsed}>Elapsed {formatDuration(elapsed)}</p>
             {openingArchives && (
               <p className={s.scanHint}>
                 Large archives can take several minutes. Foldiq is working locally and the original archive stays untouched.
               </p>
             )}
+            <div className={s.scanActions}>
+              <button className={s.btnDanger} disabled={cancelling} onClick={cancelScan}>{cancelling ? 'Cancelling…' : 'Cancel Scan'}</button>
+            </div>
           </div>
         )}
 
@@ -108,11 +157,12 @@ export default function ScanScreen({ go, folders, setFiles }) {
                     {warning.archive.split(/[\\/]/).pop()}: {warning.message}
                   </div>
                 ))}
+                <button className={s.supportDiagnosticsButton} onClick={() => setShowDiagnosticConsent(true)}>Send diagnostics to developer</button>
               </div>
             )}
             <div className={s.statsGrid}>
               {STAT_CARDS.map(card => (
-                <div key={card.key} className={s.statCard}>
+                <button key={card.key} className={`${s.statCard} ${s.statCardButton}`} onClick={() => setSelectedCategory(card)}>
                   <div className={s.statIcon} style={{ background: card.color }}>
                     <StatIcon name={card.key} color={card.iconColor} />
                   </div>
@@ -120,14 +170,22 @@ export default function ScanScreen({ go, folders, setFiles }) {
                     <div className={s.statNum}>{stats[card.key].toLocaleString()}</div>
                     <div className={s.statLabel}>{card.label}</div>
                   </div>
-                </div>
+                </button>
               ))}
+            </div>
+            <div className={s.dateEvidenceSummary}>
+              <strong>Date evidence</strong>
+              <span>{stats.embeddedDates.toLocaleString()} embedded</span>
+              <span>{stats.filenameDates.toLocaleString()} from filenames</span>
+              <span>{stats.noDate.toLocaleString()} missing</span>
+              {stats.fileDate > 0 && <small>{stats.fileDate.toLocaleString()} missing dates have an optional file-timestamp estimate available in Organization Settings.</small>}
             </div>
           </>
         )}
         {done && error && (
           <div style={{ maxWidth: 620, margin: '24px auto', padding: 16, borderRadius: 10, background: '#FEF2F2', color: '#991B1B', textAlign: 'center' }}>
-            {error}
+            <p>{error}</p>
+            <button className={s.supportDiagnosticsButton} onClick={() => setShowDiagnosticConsent(true)}>Send diagnostics to developer</button>
           </div>
         )}
       </div>
@@ -138,6 +196,72 @@ export default function ScanScreen({ go, folders, setFiles }) {
           <button className={s.btnPrimary} disabled={!stats || stats.total === 0} onClick={() => go('settings')}>Configure Organization →</button>
         </div>
       )}
+
+      {selectedCategory && (
+        <CategoryModal
+          card={selectedCategory}
+          files={filesForCategory(selectedCategory.key, scannedFiles)}
+          onClose={() => setSelectedCategory(null)}
+        />
+      )}
+
+      {showDiagnosticConsent && (
+        <div className={s.modalBackdrop} onMouseDown={event => { if (event.target === event.currentTarget) setShowDiagnosticConsent(false); }}>
+          <section className={s.modalCard} role="dialog" aria-modal="true" aria-label="Send diagnostics to developer">
+            <div className={s.modalHeader}><h2>Send diagnostics to developer?</h2><button onClick={() => setShowDiagnosticConsent(false)}>×</button></div>
+            <div className={s.modalBody}>
+              <div className={s.diagnosticPrivacyNotice}>
+                <p>Foldiq will open your default email app with a short technical summary.</p>
+                <ul>
+                  <li>Includes the Foldiq version, Windows version, scan stages, timing, and error codes.</li>
+                  <li>Does not include photos, filenames, or folder paths.</li>
+                  <li>Nothing is sent until you review the email and press Send.</li>
+                </ul>
+              </div>
+              <div className={s.modalActions}>
+                <button className={s.btnSecondary} onClick={() => setShowDiagnosticConsent(false)}>Cancel</button>
+                <button className={s.btnPrimary} disabled={creatingSupportEmail} onClick={createSupportEmail}>{creatingSupportEmail ? 'Opening email…' : 'Create support email'}</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function filesForCategory(key, files) {
+  const photos = new Set(['.jpg','.jpeg','.png','.heic','.heif','.tiff','.tif','.webp','.cr2','.cr3','.nef','.arw','.dng','.raf','.orf','.rw2']);
+  const videos = new Set(['.mov','.mp4','.m4v','.avi','.mkv']);
+  if (key === 'photos') return files.filter(file => photos.has(file.ext));
+  if (key === 'videos') return files.filter(file => videos.has(file.ext));
+  if (key === 'dupes') return files.filter(file => file.isDuplicate);
+  if (key === 'probDupes') return files.filter(file => file.isProbableDuplicate);
+  if (key === 'noDate') return files.filter(file => !file.date);
+  if (key === 'fileDate') return files.filter(file => !file.date && file.fileModifiedDate);
+  if (key === 'zips') return files.filter(file => file.archiveSourcePath);
+  return files;
+}
+
+function CategoryModal({ card, files, onClose }) {
+  return (
+    <div className={s.modalBackdrop} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={s.modalCard} role="dialog" aria-modal="true" aria-label={card.label}>
+        <div className={s.modalHeader}><h2>{card.label} — {files.length.toLocaleString()}</h2><button onClick={onClose}>×</button></div>
+        <div className={s.modalBody}>
+          <div className={s.scanFileDrilldown}>
+            {files.length === 0 && <p>No matching files.</p>}
+            {files.slice(0, 500).map(file => (
+              <button key={file.path} onClick={() => window.foldiq.revealFile(file.archiveSourcePath || file.path)}>
+                <strong>{file.name}</strong>
+                <span>{file.isProbableDuplicate ? `${file.probableMatchScore}% · ${file.probableMatchReasons}` : file.path}</span>
+              </button>
+            ))}
+            {files.length > 500 && <p>Showing the first 500 files.</p>}
+          </div>
+          <div className={s.modalActions}><button className={s.btnPrimary} onClick={onClose}>Done</button></div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -158,6 +282,7 @@ function StatIcon({ name, color }) {
     probDupes: <svg {...p}><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
     noDate:    <svg {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
     noMeta:    <svg {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+    fileDate:  <svg {...p}><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>,
     total:     <svg {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   };
   return icons[name] || null;

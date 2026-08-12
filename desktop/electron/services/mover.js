@@ -121,13 +121,14 @@ async function apply(plan, config, onProgress) {
         size: sourceSize,
       });
     } catch (err) {
-      errors.push({ file: item.name, error: err.message });
+      errors.push({
+        file: item.name,
+        path: item.path,
+        destPath: item.destPath,
+        action: item.action,
+        error: err.message,
+      });
     }
-  }
-
-  // Clean up empty source folders if moving
-  if (!config.copyMode) {
-    cleanEmptyFolders(config.sourceFolders || []);
   }
 
   // Write manifest for undo
@@ -139,6 +140,12 @@ async function apply(plan, config, onProgress) {
     skipped:      skipped.length,
     errors,
     manifestPath: mPath,
+    manifestPaths: [mPath],
+    completed: manifest.moves.map(entry => ({
+      path: entry.src,
+      destPath: entry.dest,
+      action: entry.action,
+    })),
   };
 }
 
@@ -184,21 +191,50 @@ async function undo(mPath, manifestDirectory = null) {
   return { restored, errors, manifestPath: errors.length ? mPath : null };
 }
 
-function cleanEmptyFolders(roots) {
-  for (const root of roots) {
-    removeEmpty(root, true);
-  }
+function isSameOrInside(candidate, parent) {
+  const relative = path.relative(path.resolve(parent), path.resolve(candidate));
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-function removeEmpty(dir, preserveRoot = false) {
-  if (!fs.existsSync(dir)) return;
-  let entries;
-  try { entries = fs.readdirSync(dir); } catch { return; }
-  for (const e of entries) removeEmpty(path.join(dir, e), false);
-  try {
-    entries = fs.readdirSync(dir);
-    if (!preserveRoot && entries.length === 0) fs.rmdirSync(dir);
-  } catch {}
+function findEmptyFolders(roots, skipPaths = []) {
+  const empty = [];
+  const resolvedSkips = skipPaths.filter(Boolean).map(item => path.resolve(item));
+
+  function visit(directory, preserveRoot) {
+    if (resolvedSkips.some(skip => isSameOrInside(directory, skip))) return false;
+    let entries;
+    try { entries = fs.readdirSync(directory, { withFileTypes: true }); } catch { return false; }
+    let hasContent = false;
+    for (const entry of entries) {
+      const child = path.join(directory, entry.name);
+      if (!entry.isDirectory()) {
+        hasContent = true;
+      } else if (!visit(child, false)) {
+        hasContent = true;
+      }
+    }
+    if (!hasContent && !preserveRoot) empty.push(directory);
+    return !hasContent;
+  }
+
+  for (const root of roots) {
+    try {
+      if (fs.statSync(root).isDirectory()) visit(root, true);
+    } catch {}
+  }
+  return empty.sort((left, right) => right.length - left.length);
+}
+
+function removeEmptyFolders(roots, skipPaths = []) {
+  const folders = findEmptyFolders(roots, skipPaths);
+  let removed = 0;
+  for (const folder of folders) {
+    try {
+      fs.rmdirSync(folder);
+      removed++;
+    } catch {}
+  }
+  return removed;
 }
 
 module.exports = {
@@ -210,4 +246,6 @@ module.exports = {
   discardManifest,
   cleanupManifests,
   assertInternalManifest,
+  findEmptyFolders,
+  removeEmptyFolders,
 };

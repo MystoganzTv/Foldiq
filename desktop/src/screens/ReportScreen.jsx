@@ -1,22 +1,110 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import s from './Screen.module.css';
 
-export default function ReportScreen({ go, result, config, setFolders, setFiles, setPlan, setResult }) {
+export default function ReportScreen({ go, result, config, plan, setFolders, setFiles, setPlan, setResult }) {
   const [undoing, setUndoing] = useState(false);
   const [undone,  setUndone]  = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryProgress, setRetryProgress] = useState({ current: 0, total: 0 });
+  const [undoError, setUndoError] = useState('');
+  const [emptyFolderCount, setEmptyFolderCount] = useState(0);
+  const [cleaning, setCleaning] = useState(false);
+  const [foldersRemoved, setFoldersRemoved] = useState(null);
+  const completed = result?.completed || [];
+  const copied = completed.filter(file => file.action === 'copy').length;
+  const moved = completed.filter(file => file.action === 'move').length;
+
+  useEffect(() => {
+    if (!result || config.copyMode) return;
+    window.foldiq.countEmptyFolders().then(setEmptyFolderCount).catch(() => {});
+  }, [config.copyMode, result]);
+
+  useEffect(() => {
+    if (!retrying) return undefined;
+    window.foldiq.onApplyProgress(progress => setRetryProgress(progress));
+    return () => window.foldiq.removeAllListeners('apply:progress');
+  }, [retrying]);
+
+  async function exportReport() {
+    const completedPaths = new Set(completed.map(file => `${file.path}\n${file.destPath}`));
+    const errorPaths = new Set(result.errors.map(file => `${file.path}\n${file.destPath}`));
+    await window.foldiq.exportCSV(plan.map(file => ({
+      file: file.name,
+      source: file.archiveSourcePath || file.path,
+      destination: file.destPath || '',
+      operation: file.action,
+      included: file.included !== false,
+      date: file.date || '',
+      duplicate: file.isDuplicate ? 'exact' : file.isProbableDuplicate ? 'probable' : '',
+      status: file.action === 'skip' || file.included === false
+        ? 'untouched'
+        : errorPaths.has(`${file.path}\n${file.destPath}`)
+          ? 'error'
+          : completedPaths.has(`${file.path}\n${file.destPath}`) ? 'completed' : 'not processed',
+    })));
+  }
 
   async function handleUndo() {
     setUndoing(true);
-    await window.foldiq.undoApply(result.manifestPath);
-    setUndone(true);
-    setUndoing(false);
+    setUndoError('');
+    try {
+      const manifests = result.manifestPaths || [result.manifestPath].filter(Boolean);
+      const undoResult = await window.foldiq.undoAll(manifests);
+      if (undoResult.errors.length > 0) {
+        setUndoError(undoResult.errors[0]?.error || 'Some files could not be restored safely.');
+        setResult(current => ({ ...current, manifestPaths: undoResult.manifestPaths }));
+      } else {
+        setUndone(true);
+      }
+    } catch (error) {
+      setUndoError(error?.message || 'Undo could not be completed safely.');
+    } finally {
+      setUndoing(false);
+    }
+  }
+
+  async function retryFailed() {
+    const failedKeys = new Set(result.errors.map(error => `${error.path || ''}\n${error.destPath || ''}`));
+    const failedNames = new Set(result.errors.map(error => error.file));
+    const retryPlan = plan.filter(file => (
+      failedKeys.has(`${file.path || ''}\n${file.destPath || ''}`) ||
+      (!result.errors.some(error => error.path) && failedNames.has(file.name))
+    ));
+    if (retryPlan.length === 0) return;
+
+    setRetrying(true);
+    setRetryProgress({ current: 0, total: retryPlan.length });
+    try {
+      const retried = await window.foldiq.retryApply(retryPlan, config);
+      setResult(current => ({
+        ...current,
+        moved: current.moved + retried.moved,
+        errors: retried.errors,
+        completed: [...(current.completed || []), ...(retried.completed || [])],
+        manifestPaths: [...(current.manifestPaths || [current.manifestPath].filter(Boolean)), ...retried.manifestPaths],
+      }));
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  async function removeEmptyFolders() {
+    setCleaning(true);
+    try {
+      const removed = await window.foldiq.removeEmptyFolders();
+      setFoldersRemoved(removed);
+      setEmptyFolderCount(0);
+    } finally {
+      setCleaning(false);
+    }
   }
 
   async function startOver() {
     setRestarting(true);
     try {
-      if (result.manifestPath) await window.foldiq.discardUndo(result.manifestPath);
+      const manifests = result.manifestPaths || [result.manifestPath].filter(Boolean);
+      if (manifests.length > 0) await window.foldiq.discardUndoAll(manifests);
     } finally {
       setFolders([]); setFiles([]); setPlan([]); setResult(null);
       go('welcome');
@@ -45,7 +133,9 @@ export default function ReportScreen({ go, result, config, setFolders, setFiles,
       <div className={s.scrollArea}>
         <div>
           <h1 className={s.title}>Organization Report</h1>
-          <p className={s.sub}>Your photo library is now organized.</p>
+          <p className={s.sub}>{result.errors.length > 0
+            ? 'The completed files are safe, but some files still need attention.'
+            : 'Your photo library is now organized.'}</p>
         </div>
 
         <div className={s.statsGrid} style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
@@ -57,7 +147,7 @@ export default function ReportScreen({ go, result, config, setFolders, setFiles,
             </div>
             <div>
               <div className={s.statNum}>{result.moved.toLocaleString()}</div>
-              <div className={s.statLabel}>Files {config.copyMode ? 'copied' : 'moved'}</div>
+              <div className={s.statLabel}>Files organized</div>
             </div>
           </div>
           <div className={s.statCard}>
@@ -87,9 +177,23 @@ export default function ReportScreen({ go, result, config, setFolders, setFiles,
           </div>
         </div>
 
+        <div className={s.reportSummaryBar}>
+          <span><strong>{copied.toLocaleString()}</strong> copied</span>
+          <span><strong>{moved.toLocaleString()}</strong> moved</span>
+          <span><strong>{result.skipped.toLocaleString()}</strong> untouched</span>
+          <button className={s.btnOutline} onClick={exportReport}>Export CSV</button>
+        </div>
+
         {result.errors.length > 0 && (
           <div className={s.errorList}>
-            <p className={s.errorTitle}>⚠ Files with errors</p>
+            <div className={s.errorListHeader}>
+              <p className={s.errorTitle}>⚠ Files with errors</p>
+              <button className={s.btnOutline} onClick={retryFailed} disabled={retrying}>
+                {retrying
+                  ? `Retrying ${retryProgress.current || 0} of ${retryProgress.total || result.errors.length}…`
+                  : `↻ Retry ${result.errors.length === 1 ? 'Failed File' : 'Failed Files'}`}
+              </button>
+            </div>
             {result.errors.map((e, i) => (
               <div key={i} className={s.errorRow}>
                 <span className={s.errorFile}>{e.file}</span>
@@ -98,6 +202,24 @@ export default function ReportScreen({ go, result, config, setFolders, setFiles,
             ))}
           </div>
         )}
+
+        {!config.copyMode && (emptyFolderCount > 0 || foldersRemoved != null) && (
+          <div className={s.cleanupCard}>
+            <div>
+              <strong>{foldersRemoved != null ? 'Empty-folder cleanup complete' : `${emptyFolderCount.toLocaleString()} empty folder${emptyFolderCount === 1 ? '' : 's'} found`}</strong>
+              <p>{foldersRemoved != null
+                ? `${foldersRemoved.toLocaleString()} empty folder${foldersRemoved === 1 ? '' : 's'} removed.`
+                : 'These folders contain no files. Your selected source folders and organized output are always preserved.'}</p>
+            </div>
+            {foldersRemoved == null && (
+              <button className={s.btnOutline} onClick={removeEmptyFolders} disabled={cleaning}>
+                {cleaning ? 'Removing…' : 'Remove Empty Folders'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {undoError && <div className={s.reportInlineError}>{undoError}</div>}
       </div>
 
       <div className={s.bottomBar}>

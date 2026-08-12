@@ -1,9 +1,19 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import s from './Screen.module.css';
 
-export default function WelcomeScreen({ go, folders, setFolders }) {
+export default function WelcomeScreen({ go, folders, setFolders, config, setConfig }) {
   const [dragging, setDragging] = useState(false);
+  const [showHow, setShowHow] = useState(false);
+  const [appInfo, setAppInfo] = useState(null);
   const listRef = useRef(null);
+
+  useEffect(() => {
+    if (!window.foldiq?.getAppInfo) {
+      setAppInfo({ version: '1.0.16', platform: 'browser-preview' });
+      return;
+    }
+    window.foldiq.getAppInfo().then(setAppInfo).catch(() => {});
+  }, []);
 
   function addSources(selected) {
     if (selected.length) {
@@ -33,10 +43,10 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
 
   return (
     <div className={s.screen}>
-      <div className={s.scrollArea}>
+      <div className={`${s.scrollArea} ${s.welcomeContent} ${hasFolders ? s.welcomeWithSources : s.welcomeEmpty}`}>
         {/* Hero — compact when folders selected */}
-        <div style={{ textAlign: 'center', padding: hasFolders ? '16px 0 8px' : '32px 0 16px', transition: 'padding .2s' }}>
-          <svg width={hasFolders ? 52 : 80} height={hasFolders ? 52 : 80} viewBox="0 0 80 80" fill="none" style={{ marginBottom: hasFolders ? 12 : 24, transition: 'all .2s' }}>
+        <div className={`${s.welcomeHero} ${hasFolders ? s.welcomeHeroSelected : ''}`}>
+          <svg className={s.welcomeLogo} width={hasFolders ? 52 : 80} height={hasFolders ? 52 : 80} viewBox="0 0 80 80" fill="none">
             <rect width="80" height="80" rx="20" fill="url(#grad)"/>
             <defs>
               <linearGradient id="grad" x1="0" y1="0" x2="80" y2="80" gradientUnits="userSpaceOnUse">
@@ -51,16 +61,16 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
           </svg>
           {!hasFolders && (
             <>
-              <h1 style={{ fontSize: 34, fontWeight: 800, color: '#0F172A', marginBottom: 10 }}>
+              <h1 className={s.welcomeTitle}>
                 Organize Your Library
               </h1>
-              <p style={{ fontSize: 16, color: '#475569', lineHeight: 1.6 }}>
+              <p className={s.welcomeSubtitle}>
                 Clean up and organize thousands of messy<br />photos and videos safely, right on your PC.
               </p>
             </>
           )}
           {hasFolders && (
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0F172A' }}>
+            <h1 className={s.welcomeSelectedTitle}>
               {folders.length} item{folders.length > 1 ? 's' : ''} selected
             </h1>
           )}
@@ -68,8 +78,7 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
 
         {/* Drop zone — compact when folders already added */}
         <div
-          className={`${s.dropzone} ${dragging ? s.dragging : ''}`}
-          style={hasFolders ? { padding: '20px 32px' } : {}}
+          className={`${s.dropzone} ${hasFolders ? s.dropzoneSelected : ''} ${dragging ? s.dragging : ''}`}
           role="button"
           tabIndex={0}
           onClick={pickFolders}
@@ -84,7 +93,7 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
           onDrop={onDrop}
         >
           {!hasFolders && (
-            <div style={{ marginBottom: 12 }}>
+            <div className={s.welcomeDropIcon}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
               </svg>
@@ -123,9 +132,16 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
           </div>
         )}
 
-        <p style={{ textAlign: 'center', fontSize: 13, color: '#94A3B8' }}>
-          Nothing is deleted without your permission.
-        </p>
+        <div className={s.welcomeScanOptions}>
+          <label><input type="checkbox" checked={config.includeVideos} onChange={() => setConfig(c => ({ ...c, includeVideos: !c.includeVideos }))} /> Include videos</label>
+          <label><input type="checkbox" checked={config.includeArchives} onChange={() => setConfig(c => ({ ...c, includeArchives: !c.includeArchives }))} /> Include ZIP, RAR, and 7z</label>
+        </div>
+
+        <div className={s.welcomeFooterInfo}>
+          <span>Nothing is deleted without your permission.</span>
+          <button onClick={() => setShowHow(true)}>How it works</button>
+          <span>{appInfo ? `v${appInfo.version} · Windows` : 'Foldiq for Windows'}</span>
+        </div>
       </div>
 
       <div className={s.bottomBar}>
@@ -142,6 +158,23 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
           </button>
         </div>
       </div>
+
+      {showHow && (
+        <div className={s.modalBackdrop} onMouseDown={event => { if (event.target === event.currentTarget) setShowHow(false); }}>
+          <section className={s.modalCard} role="dialog" aria-modal="true" aria-label="How Foldiq works">
+            <div className={s.modalHeader}><h2>How Foldiq works</h2><button onClick={() => setShowHow(false)}>×</button></div>
+            <div className={s.modalBody}>
+              <div className={s.howSteps}>
+                <p><strong>1. Scan locally</strong><span>Foldiq reads folders or compressed archives without uploading your media.</span></p>
+                <p><strong>2. Review everything</strong><span>Dates, duplicates, destinations, and operations are shown before changes are made.</span></p>
+                <p><strong>3. Organize safely</strong><span>Foldiq never overwrites files. Archive originals remain untouched.</span></p>
+                <p><strong>4. Undo if needed</strong><span>A local manifest verifies files before reversing an operation.</span></p>
+              </div>
+              <div className={s.modalActions}><button className={s.btnPrimary} onClick={() => setShowHow(false)}>Got it</button></div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

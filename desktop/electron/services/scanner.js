@@ -2,7 +2,8 @@
 const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { exiftool } = require('exiftool-vendored');
+const { spawn } = require('child_process');
+const { exiftoolPath } = require('exiftool-vendored');
 const { extractArchive } = require('./archive');
 const { isArchive } = require('./sources');
 
@@ -14,6 +15,53 @@ const SUPPORTED = new Set([
 ]);
 const EARLIEST_YEAR = 1900;
 const MAX_FUTURE_OFFSET_MS = 24 * 60 * 60 * 1000;
+const METADATA_BATCH_SIZE = 40;
+const METADATA_CONCURRENCY = 2;
+const HASH_CONCURRENCY = 2;
+const METADATA_TIMEOUT_MS = 15 * 1000;
+const METADATA_READ_ARGS = [
+  '-fast',
+  // Keep coordinates and duration machine-readable. Without -n ExifTool emits
+  // GPS values as DMS text (for example `38 deg ... N`), which Number()
+  // correctly rejects and caused valid Windows GPS metadata to disappear.
+  '-n',
+  '-api', 'largefilesupport=1',
+  '-DateTimeOriginal',
+  '-DateTimeDigitized',
+  '-MediaCreateDate',
+  '-TrackCreateDate',
+  '-CreationDate',
+  '-CreateDate',
+  '-Make', '-Model', '-ImageWidth', '-ImageHeight',
+  '-GPSLatitude', '-GPSLongitude', '-Duration',
+];
+let diagnosticsLogPath = null;
+
+function configureDiagnostics(logPath) {
+  diagnosticsLogPath = logPath;
+  if (!logPath) return;
+  try {
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.writeFileSync(logPath, `${JSON.stringify({ at: new Date().toISOString(), event: 'app-start' })}\n`);
+  } catch {}
+}
+
+function diagnostic(event, details = {}) {
+  if (!diagnosticsLogPath) return;
+  try {
+    fs.appendFileSync(diagnosticsLogPath, `${JSON.stringify({ at: new Date().toISOString(), event, ...details })}\n`);
+  } catch {}
+}
+
+function abortError() {
+  const error = new Error('Scan cancelled');
+  error.name = 'AbortError';
+  return error;
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw abortError();
+}
 
 function isMedia(filePath) {
   return SUPPORTED.has(path.extname(filePath).toLowerCase());
@@ -155,28 +203,190 @@ function resolveDateCandidates(metadataInfo, filenameDate) {
   return metadataInfo;
 }
 
-async function extractDateInfo(filePath, now = new Date()) {
-  let metadataInfo = null;
-  try {
-    const tags = await exiftool.read(filePath);
-    metadataInfo = dateFromTrustedMetadata(tags, now);
-  } catch {}
-
+function metadataResult(filePath, tags = {}, now = new Date()) {
+  const metadataInfo = dateFromTrustedMetadata(tags, now);
   const filenameDate = dateFromFilename(filePath, now);
-  return resolveDateCandidates(metadataInfo, filenameDate);
+  const dateInfo = resolveDateCandidates(metadataInfo, filenameDate);
+  const number = value => Number.isFinite(Number(value)) ? Number(value) : null;
+  return {
+    dateInfo,
+    cameraMake: typeof tags.Make === 'string' ? tags.Make : null,
+    cameraModel: typeof tags.Model === 'string' ? tags.Model : null,
+    pixelWidth: number(tags.ImageWidth),
+    pixelHeight: number(tags.ImageHeight),
+    latitude: number(tags.GPSLatitude),
+    longitude: number(tags.GPSLongitude),
+    durationSeconds: number(tags.Duration),
+  };
+}
+
+async function resolveExiftoolExecutable({
+  platform = process.platform,
+  resourcesPath = process.resourcesPath,
+  projectRoot = path.resolve(__dirname, '..', '..'),
+} = {}) {
+  if (platform === 'win32') {
+    const candidates = [
+      resourcesPath && path.join(resourcesPath, 'exiftool', 'exiftool.exe'),
+      path.join(projectRoot, '.vendor', 'exiftool-win', 'exiftool.exe'),
+    ].filter(Boolean);
+    const executable = candidates.find(candidate => fs.existsSync(candidate));
+    if (!executable) {
+      const error = new Error('The Windows metadata engine is missing from this Foldiq installation');
+      error.code = 'EXIFTOOL_RUNTIME_MISSING';
+      throw error;
+    }
+    return executable;
+  }
+
+  return Promise.resolve(typeof exiftoolPath === 'function' ? exiftoolPath() : exiftoolPath);
+}
+
+async function runMetadataBatch(filePaths, { signal, batchNumber = 0 } = {}) {
+  throwIfAborted(signal);
+  if (filePaths.some(filePath => /[\r\n]/.test(filePath))) {
+    const error = new Error('A filename contains an unsupported line break');
+    error.code = 'METADATA_UNSUPPORTED_PATH';
+    throw error;
+  }
+  const executable = await resolveExiftoolExecutable();
+  // Windows limits CreateProcess command lines to roughly 32K characters. Large NAS
+  // libraries easily exceed that with 40 full paths, so stream the paths via
+  // ExifTool's argument-file input instead.
+  const args = ['-json', '-charset', 'filename=utf8', ...METADATA_READ_ARGS, '-@', '-'];
+  const timeoutMs = Math.min(60_000, Math.max(METADATA_TIMEOUT_MS, filePaths.length * 1_500));
+  diagnostic('metadata-batch-start', { batchNumber, count: filePaths.length });
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
+      callback(value);
+    };
+    const onAbort = () => {
+      child.kill();
+      finish(reject, abortError());
+    };
+    const timeout = setTimeout(() => {
+      child.kill();
+      const error = new Error(`Metadata batch timed out after ${timeoutMs / 1000} seconds`);
+      error.code = 'METADATA_TIMEOUT';
+      finish(reject, error);
+    }, timeoutMs);
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+    child.stdout.on('data', chunk => {
+      stdout += chunk.toString('utf8');
+      if (stdout.length > 32 * 1024 * 1024) onAbort();
+    });
+    child.stdin.on('error', () => {});
+    child.stdin.end(`${filePaths.join('\n')}\n`);
+    child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString('utf8')).slice(-8192); });
+    child.on('error', error => finish(reject, error));
+    child.on('close', code => {
+      if (settled) return;
+      try {
+        if (code !== 0 && !stdout.trim()) throw new Error(stderr.trim() || `ExifTool exited with code ${code}`);
+        const rows = JSON.parse(stdout || '[]');
+        diagnostic('metadata-batch-finish', { batchNumber, count: filePaths.length, returned: rows.length, code });
+        finish(resolve, rows);
+      } catch (error) {
+        finish(reject, error);
+      }
+    });
+  });
+}
+
+async function readMetadataWithRecovery(filePaths, {
+  signal,
+  batchNumber = 0,
+  runner = runMetadataBatch,
+  onRetry = () => {},
+} = {}) {
+  throwIfAborted(signal);
+  try {
+    return {
+      rows: await runner(filePaths, { signal, batchNumber }),
+      failedCount: 0,
+      splitCount: 0,
+    };
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
+    if (filePaths.length <= 1) {
+      diagnostic('metadata-file-error', { batchNumber, message: error.message });
+      return { rows: [], failedCount: 1, splitCount: 0 };
+    }
+
+    diagnostic('metadata-batch-retry', { batchNumber, count: filePaths.length, message: error.message });
+    onRetry(filePaths.length);
+    const middle = Math.ceil(filePaths.length / 2);
+    const left = await readMetadataWithRecovery(filePaths.slice(0, middle), {
+      signal, batchNumber, runner, onRetry,
+    });
+    const right = await readMetadataWithRecovery(filePaths.slice(middle), {
+      signal, batchNumber, runner, onRetry,
+    });
+    return {
+      rows: [...left.rows, ...right.rows],
+      failedCount: left.failedCount + right.failedCount,
+      splitCount: left.splitCount + right.splitCount + 1,
+    };
+  }
+}
+
+async function extractDateInfo(filePath, now = new Date()) {
+  try {
+    const rows = await runMetadataBatch([filePath]);
+    return metadataResult(filePath, rows[0], now).dateInfo;
+  } catch {
+    return metadataResult(filePath, {}, now).dateInfo;
+  }
 }
 
 async function extractDate(filePath, now = new Date()) {
   return (await extractDateInfo(filePath, now))?.date ?? null;
 }
 
-async function scan(folders, onProgress) {
+async function mapWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
+    }
+  }
+
+  const workerCount = Math.min(items.length, Math.max(1, concurrency));
+  await Promise.all(Array.from({ length: workerCount }, runWorker));
+  return results;
+}
+
+async function scan(folders, onProgress, options = {}) {
+  const { signal, includeVideos = true, includeArchives = true } = options;
   const progress = typeof onProgress === 'function' ? onProgress : () => {};
+  const startedAt = Date.now();
+  diagnostic('scan-start', { sourceCount: folders.length, includeVideos, includeArchives });
+  throwIfAborted(signal);
   progress({ phase: 'cleanup', current: 0, total: 0, file: 'Preparing temporary workspace…' });
   await cleanupTempDirs();
   const mediaPaths = new Set();
   const archivePaths = new Set();
   for (const folder of folders) collectSource(folder, mediaPaths, archivePaths);
+  if (!includeArchives) archivePaths.clear();
+  if (!includeVideos) {
+    for (const filePath of mediaPaths) {
+      if (['.mov', '.mp4', '.m4v', '.avi', '.mkv'].includes(path.extname(filePath).toLowerCase())) mediaPaths.delete(filePath);
+    }
+  }
 
   const allFiles = Array.from(mediaPaths, filePath => ({ filePath }));
   const warnings = [];
@@ -184,6 +394,7 @@ async function scan(folders, onProgress) {
 
   const archiveList = Array.from(archivePaths);
   for (let archiveIndex = 0; archiveIndex < archiveList.length; archiveIndex++) {
+    throwIfAborted(signal);
     const archivePath = archiveList[archiveIndex];
     const archiveName = path.basename(archivePath);
     progress({
@@ -207,7 +418,7 @@ async function scan(folders, onProgress) {
           total: archiveProgress.total,
           file: messages[archiveProgress.stage] ?? `Opening ${archiveName}…`,
         });
-      });
+      }, signal);
       tempDirectories.add(extracted.tempDirectory);
       archivesExtracted++;
       for (const filePath of extracted.mediaPaths) {
@@ -218,6 +429,7 @@ async function scan(folders, onProgress) {
         });
       }
     } catch (error) {
+      if (signal?.aborted) throw abortError();
       warnings.push({ archive: archivePath, message: error.message });
     }
     progress({
@@ -231,6 +443,7 @@ async function scan(folders, onProgress) {
   const preparedFiles = [];
   const sizeCounts = new Map();
   for (let i = 0; i < allFiles.length; i++) {
+    throwIfAborted(signal);
     const candidate = allFiles[i];
     progress({
       phase: 'indexing',
@@ -247,23 +460,108 @@ async function scan(folders, onProgress) {
   }
 
   const total = preparedFiles.length;
+  const metadataBatches = [];
+  for (let index = 0; index < preparedFiles.length; index += METADATA_BATCH_SIZE) {
+    metadataBatches.push(preparedFiles.slice(index, index + METADATA_BATCH_SIZE));
+  }
+  let metadataCompleted = 0;
+  const metadataWarnings = [];
+  const batchResults = await mapWithConcurrency(
+    metadataBatches,
+    METADATA_CONCURRENCY,
+    async (batch, batchIndex) => {
+      throwIfAborted(signal);
+      progress({
+        phase: 'metadata',
+        current: metadataCompleted,
+        total,
+        file: `Reading capture dates in batch ${batchIndex + 1} of ${metadataBatches.length}`,
+      });
+      const recovery = await readMetadataWithRecovery(
+        batch.map(item => item.candidate.filePath),
+        {
+          signal,
+          batchNumber: batchIndex + 1,
+          onRetry: count => progress({
+            phase: 'metadata',
+            current: metadataCompleted,
+            total,
+            file: `Recovering dates from a slow group of ${count} files…`,
+          }),
+        }
+      );
+      const rows = recovery.rows;
+      if (recovery.failedCount > 0) {
+        metadataWarnings.push(`${recovery.failedCount} file${recovery.failedCount === 1 ? '' : 's'} could not be read in metadata batch ${batchIndex + 1}`);
+      }
+      const byPath = new Map(rows.map(row => [
+        path.resolve(row.SourceFile || '').toLowerCase(), row,
+      ]));
+      const result = batch.map(item => metadataResult(
+        item.candidate.filePath,
+        byPath.get(path.resolve(item.candidate.filePath).toLowerCase()) || {}
+      ));
+      metadataCompleted += batch.length;
+      progress({
+        phase: 'metadata',
+        current: metadataCompleted,
+        total,
+        file: `Metadata read: ${metadataCompleted.toLocaleString()} of ${total.toLocaleString()}`,
+      });
+      return result;
+    }
+  );
+  const metadataResults = batchResults.flat();
+  if (metadataWarnings.length > 0) {
+    warnings.push({ archive: 'Metadata', message: metadataWarnings.join(' ') });
+  }
+
+  const duplicateCandidates = preparedFiles
+    .map((prepared, index) => ({ prepared, index }))
+    .filter(({ prepared }) => sizeCounts.get(prepared.stat.size) > 1);
+  let hashesCompleted = 0;
+  const hashResults = await mapWithConcurrency(
+    duplicateCandidates,
+    HASH_CONCURRENCY,
+    async ({ prepared }) => {
+      throwIfAborted(signal);
+      const name = path.basename(prepared.candidate.filePath);
+      progress({
+        phase: 'duplicates',
+        current: hashesCompleted,
+        total: duplicateCandidates.length,
+        file: `Checking possible duplicate: ${name}`,
+      });
+      const hash = await hashFile(prepared.candidate.filePath);
+      hashesCompleted++;
+      progress({
+        phase: 'duplicates',
+        current: hashesCompleted,
+        total: duplicateCandidates.length,
+        file: `Possible duplicates checked: ${hashesCompleted.toLocaleString()} of ${duplicateCandidates.length.toLocaleString()}`,
+      });
+      return hash;
+    }
+  );
+  const hashesByIndex = new Map(
+    duplicateCandidates.map((candidate, resultIndex) => [candidate.index, hashResults[resultIndex]])
+  );
+
   const files = [];
   const hashMap = new Map();
-
   for (let i = 0; i < preparedFiles.length; i++) {
     const { candidate, stat } = preparedFiles[i];
     const filePath = candidate.filePath;
-    const ext  = path.extname(filePath).toLowerCase();
+    const ext = path.extname(filePath).toLowerCase();
+    const metadata = metadataResults[i] || metadataResult(filePath);
+    const dateInfo = metadata.dateInfo;
+    const hash = hashesByIndex.get(i) ?? null;
     progress({
-      phase: 'media',
+      phase: 'finalizing',
       current: i,
       total,
-      file: `Analyzing ${path.basename(filePath)}…`,
+      file: `Preparing result: ${path.basename(filePath)}`,
     });
-    const [dateInfo, hash] = await Promise.all([
-      extractDateInfo(filePath),
-      sizeCounts.get(stat.size) > 1 ? hashFile(filePath) : Promise.resolve(null),
-    ]);
 
     const duplicateOf = hash ? hashMap.get(hash) : null;
     const isDuplicate = duplicateOf != null;
@@ -279,23 +577,83 @@ async function scan(folders, onProgress) {
       date:        dateInfo?.date.toISOString() ?? null,
       dateSource:  dateInfo?.source ?? null,
       dateTag:     dateInfo?.tag ?? null,
+      cameraMake: metadata.cameraMake,
+      cameraModel: metadata.cameraModel,
+      pixelWidth: metadata.pixelWidth,
+      pixelHeight: metadata.pixelHeight,
+      latitude: metadata.latitude,
+      longitude: metadata.longitude,
+      durationSeconds: metadata.durationSeconds,
       hash,
       isDuplicate: isDuplicate,
       duplicateOf: isDuplicate ? duplicateOf : null,
       archiveSourcePath: candidate.archiveSourcePath ?? null,
       archiveTempDirectory: candidate.archiveTempDirectory ?? null,
+      fileModifiedDate: isPlausibleDate(stat.mtime) ? stat.mtime.toISOString() : null,
     };
 
     files.push(file);
-    progress({ phase: 'media', current: i + 1, total, file: file.name });
+    progress({ phase: 'finalizing', current: i + 1, total, file: file.name });
   }
 
-  return { files, archivesExtracted, warnings };
+  detectProbableDuplicates(files);
+
+  diagnostic('scan-finish', { files: files.length, warnings: warnings.length, elapsedMs: Date.now() - startedAt });
+  return { files, archivesExtracted, warnings, diagnosticsAvailable: Boolean(diagnosticsLogPath) };
+}
+
+function detectProbableDuplicates(files) {
+  const groups = new Map();
+  for (const file of files) {
+    if (file.isDuplicate) continue;
+    const stem = path.basename(file.name, path.extname(file.name)).toLowerCase();
+    if (!groups.has(stem)) groups.set(stem, []);
+    groups.get(stem).push(file);
+  }
+
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const assigned = new Set();
+    const matches = [];
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const a = group[i], b = group[j];
+        let score = 50;
+        const reasons = ['Same filename'];
+        const larger = Math.max(a.size, b.size);
+        const sizeRatio = larger > 0 ? Math.abs(a.size - b.size) / larger : 1;
+        if (sizeRatio <= 0.01) { score += 25; reasons.push('Size within 1%'); }
+        else if (sizeRatio <= 0.03) { score += 10; reasons.push('Size within 3%'); }
+        if (a.date && b.date) {
+          const diff = Math.abs(new Date(a.date) - new Date(b.date));
+          if (diff <= 5 * 60 * 1000) { score += 20; reasons.push('Capture time within 5 min'); }
+          else if (diff <= 60 * 60 * 1000) { score += 17; reasons.push('Capture time within 1 hour'); }
+          else if (diff <= 24 * 60 * 60 * 1000) { score += 10; reasons.push('Capture time within 24 hours'); }
+        }
+        if (a.pixelWidth && a.pixelHeight && a.pixelWidth === b.pixelWidth && a.pixelHeight === b.pixelHeight) {
+          score += 10; reasons.push(`Dimensions ${a.pixelWidth}×${a.pixelHeight}`);
+        }
+        if (score >= 90) matches.push({ a, b, score: Math.min(100, score), reasons: reasons.join(' · ') });
+      }
+    }
+    matches.sort((left, right) => right.score - left.score);
+    for (const match of matches) {
+      if (assigned.has(match.a.id) || assigned.has(match.b.id)) continue;
+      const rank = file => (file.archiveSourcePath ? 0 : 100) + (file.date ? 10 : 0) - file.path.split(/[\\/]/).length;
+      const original = rank(match.a) >= rank(match.b) ? match.a : match.b;
+      const duplicate = original === match.a ? match.b : match.a;
+      duplicate.isProbableDuplicate = true;
+      duplicate.probableMatchScore = match.score;
+      duplicate.probableMatchReasons = match.reasons;
+      duplicate.probableMatchPeerFilename = original.name;
+      assigned.add(original.id);
+      assigned.add(duplicate.id);
+    }
+  }
 }
 
 async function end() {
   await cleanupTempDirs();
-  try { await exiftool.end(); } catch {}
 }
 
 module.exports = {
@@ -309,5 +667,15 @@ module.exports = {
   resolveDateCandidates,
   extractDateInfo,
   extractDate,
+  metadataResult,
+  resolveExiftoolExecutable,
+  runMetadataBatch,
+  readMetadataWithRecovery,
+  detectProbableDuplicates,
+  configureDiagnostics,
+  mapWithConcurrency,
+  METADATA_CONCURRENCY,
+  HASH_CONCURRENCY,
+  METADATA_TIMEOUT_MS,
   end,
 };

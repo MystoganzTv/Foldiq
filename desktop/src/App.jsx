@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import StepBar    from './components/StepBar';
 import Welcome    from './screens/WelcomeScreen';
 import Scan       from './screens/ScanScreen';
@@ -15,12 +15,33 @@ export default function App() {
   const [plan,    setPlan]    = useState([]);
   const [config,  setConfig]  = useState({
     outputFolder:   '',
+    organizationMode: 'smart',
     groupByMonth:   true,
     groupByDay:     true,
     copyMode:       false,
-    skipDuplicates: true,
+    duplicateHandling: 'separate',
+    includeVideos: true,
+    includeArchives: true,
+    useFileDateFallback: false,
+    useGPSLocation: false,
   });
   const [result, setResult] = useState(null);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    window.foldiq.getPreferences()
+      .then(saved => {
+        if (active && saved) setConfig(current => ({ ...current, ...saved }));
+      })
+      .finally(() => { if (active) setPreferencesReady(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!preferencesReady) return;
+    window.foldiq.savePreferences(config).catch(() => {});
+  }, [config, preferencesReady]);
 
   function go(s) { setScreen(s); }
 
