@@ -79,6 +79,13 @@ export default function HomeScreen({ navigation }: Props) {
           </Text>
         </View>
 
+        <View style={styles.archiveNotice}>
+          <Icon name="information-circle-outline" size={20} color="#475569" />
+          <Text style={styles.archiveNoticeText}>
+            Mobile works with your photo library only. ZIP, RAR, and 7z archives are not processed on iPhone or Android.
+          </Text>
+        </View>
+
         {/* Permission banner */}
         {!granted && (
           <TouchableOpacity style={styles.permissionBanner} onPress={handlePermission}>
@@ -165,6 +172,11 @@ const styles = StyleSheet.create({
   logoText: { fontSize: 24, fontWeight: '700', color: '#1E293B' },
   headline: { fontSize: 32, fontWeight: '800', color: '#1E293B', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#64748B', lineHeight: 24 },
+  archiveNotice: {
+    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#F1F5F9',
+    borderRadius: 12, padding: 14, gap: 10, marginBottom: 20,
+  },
+  archiveNoticeText: { flex: 1, fontSize: 13, color: '#475569', lineHeight: 19 },
 
   permissionBanner: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF',

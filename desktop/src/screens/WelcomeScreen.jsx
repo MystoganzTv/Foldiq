@@ -91,9 +91,9 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
             </div>
           )}
           <p className={s.dropTitle} style={hasFolders ? { fontSize: 14 } : {}}>
-            {hasFolders ? '+ Drop more folders or ZIPs, or click to add a folder' : 'Drop folders or ZIPs here, or click to browse'}
+            {hasFolders ? '+ Drop more folders or archives, or click to add a folder' : 'Drop folders or ZIP, RAR, or 7z archives here'}
           </p>
-          {!hasFolders && <p className={s.dropSub}>Supports ZIP, JPG, HEIC, RAW, MOV, MP4 and more</p>}
+          {!hasFolders && <p className={s.dropSub}>Supports ZIP, RAR, 7z, JPG, HEIC, RAW, MOV, MP4 and more</p>}
         </div>
 
         {/* Selected folders */}
@@ -102,7 +102,7 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
             {folders.map((f, i) => (
               <div key={f} className={s.folderItem}>
                 <span className={s.folderIcon}>
-                  {f.toLowerCase().endsWith('.zip') ? (
+                  {['.zip', '.rar', '.7z'].some(ext => f.toLowerCase().endsWith(ext)) ? (
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 11v7M9.5 14.5h5"/>
                     </svg>
@@ -132,7 +132,7 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
         <div />
         <div className={s.bottomBarRight}>
           <button className={s.btnSecondary} onClick={pickFolders}>+ Add Folders</button>
-          <button className={s.btnSecondary} onClick={pickArchives}>+ Add ZIPs</button>
+          <button className={s.btnSecondary} onClick={pickArchives}>+ Add Archives</button>
           <button
             className={s.btnPrimary}
             disabled={folders.length === 0}

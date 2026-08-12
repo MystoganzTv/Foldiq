@@ -10,6 +10,8 @@ No demo account is needed (the app has no sign-up or login). The only thing a re
 Foldiq is a local photo & video organizer. It exports organized COPIES of items from
 the Photos Library into Files (iCloud Drive, On My iPhone/iPad, or a connected USB drive).
 It never modifies or deletes anything in the Photos Library — originals always stay in place.
+The mobile app works with Photos Library assets only. It does not import or process ZIP, RAR,
+or 7z archives; compressed archive support is a desktop feature.
 
 NO ACCOUNT / NO LOGIN: The app has no sign-up, no login, and no paywall. Every feature is
 available immediately. The only permission required is Photos access.

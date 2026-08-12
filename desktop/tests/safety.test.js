@@ -45,7 +45,7 @@ test('planner resolves collisions for extensionless files', (t) => {
   assert.equal(planner.resolveCollision(existing, new Set()), path.join(dir, 'README_1'));
 });
 
-test('planner copies extracted ZIP media even when Move is selected', (t) => {
+test('planner copies extracted archive media even when Move is selected', (t) => {
   const dir = tempDir(t);
   const plan = planner.buildPlan([{
     id: 1,
@@ -63,6 +63,29 @@ test('planner copies extracted ZIP media even when Move is selected', (t) => {
   });
 
   assert.equal(plan[0].action, 'copy');
+  assert.equal(plan[0].included, true);
+});
+
+test('apply leaves files excluded by the user untouched', async (t) => {
+  const dir = tempDir(t);
+  const source = path.join(dir, 'source.jpg');
+  const destination = path.join(dir, 'output', 'source.jpg');
+  fs.writeFileSync(source, 'original');
+
+  const result = await mover.apply([
+    {
+      name: 'source.jpg',
+      path: source,
+      destPath: destination,
+      action: 'move',
+      included: false,
+    },
+  ], applyConfig(dir, { copyMode: false }), () => {});
+
+  assert.equal(result.moved, 0);
+  assert.equal(result.skipped, 1);
+  assert.equal(fs.readFileSync(source, 'utf8'), 'original');
+  assert.equal(fs.existsSync(destination), false);
 });
 
 test('apply refuses to overwrite a destination created after preview', async (t) => {

@@ -1,10 +1,13 @@
 // ArchiveExtractor.swift
-// Extracts media files from ZIP archives to a temporary directory.
-// Uses system libz (always available on macOS, sandbox-safe) via ZipInflate.c.
-// Supports ZIP compression methods: 0 = STORE, 8 = DEFLATE.
+// Extracts media files from ZIP, RAR/RAR5, and 7z archives to a temporary directory.
+// ZIP uses system libz; RAR/7z use the sandbox-safe embedded libarchive package.
 // The original archive is NEVER modified or moved — it stays exactly where it is.
 
 import Foundation
+#if os(macOS)
+import CArchive
+import SevenZip
+#endif
 
 // MARK: ─── ZIP format constants ───────────────────────────────────────────────
 
@@ -60,10 +63,10 @@ enum ZipError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidFormat(let r):          return "Invalid ZIP format: \(r)"
+        case .invalidFormat(let r):          return "Invalid archive: \(r)"
         case .unsupportedCompression(let m): return "Unsupported ZIP compression method \(m)"
         case .decompressionFailed:           return "DEFLATE decompression failed"
-        case .encrypted:                     return "This ZIP is password-protected and cannot be extracted automatically. Open it manually and place the files in a regular folder."
+        case .encrypted:                     return "This archive is password-protected and cannot be extracted automatically. Open it manually and place the files in a regular folder."
         }
     }
 }
@@ -90,7 +93,7 @@ actor ArchiveExtractor {
         var errorDescription: String? {
             switch self {
             case .unsupportedFormat(let ext):
-                return ".\(ext) archives cannot be extracted — format not supported on macOS without external tools."
+                return ".\(ext) archives are not supported. Foldiq accepts ZIP, RAR, and 7z on desktop."
             case .extractionFailed(let reason):
                 return "Extraction failed: \(reason)"
             }
@@ -101,7 +104,7 @@ actor ArchiveExtractor {
 
     /// Returns true if this file extension can be extracted in the macOS sandbox.
     static func isExtractable(_ ext: String) -> Bool {
-        ext.lowercased() == "zip"
+        MediaTypes.archiveExtensions.contains(ext.lowercased())
     }
 
     /// Extract the archive at `url` to a new temporary directory.
@@ -109,7 +112,7 @@ actor ArchiveExtractor {
     /// The caller is responsible for deleting `result.tempDirectory` after use.
     func extract(_ url: URL) throws -> ExtractionResult {
         let ext = url.pathExtension.lowercased()
-        guard ext == "zip" else {
+        guard Self.isExtractable(ext) else {
             throw ArchiveError.unsupportedFormat(ext)
         }
 
@@ -119,68 +122,281 @@ actor ArchiveExtractor {
         try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
         do {
-            let zipData = try Data(contentsOf: url, options: .mappedIfSafe)
-            let entries = try parseCentralDirectory(zipData)
-
-            // Validate every entry before writing anything. This prevents a
-            // crafted filename such as ../photo.jpg from escaping the temp dir.
-            for entry in entries {
-                _ = try safeDestinationURL(for: entry.filename, inside: tempDir)
-            }
-
-            let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions)
-            let mediaEntries = entries.filter { entry in
-                guard !entry.isDirectory else { return false }
-                let normalized = entry.filename.replacingOccurrences(of: "\\", with: "/")
-                let ext = URL(fileURLWithPath: normalized).pathExtension.lowercased()
-                return supported.contains(ext)
-            }
-
-            var declaredBytes: UInt64 = 0
-            for entry in mediaEntries {
-                let (next, overflow) = declaredBytes.addingReportingOverflow(UInt64(entry.uncompressedSize))
-                guard !overflow, next <= kMaxArchiveMediaBytes else {
-                    throw ZipError.invalidFormat("media expands beyond the safe extraction limit")
-                }
-                declaredBytes = next
-            }
-
-            if let freeBytes = try? tempDir.resourceValues(
-                forKeys: [.volumeAvailableCapacityForImportantUsageKey]
-            ).volumeAvailableCapacityForImportantUsage,
-               declaredBytes > UInt64(max(0, freeBytes - kDiskReserveBytes)) {
-                throw ZipError.invalidFormat("not enough free disk space to extract safely")
-            }
-
-            // Only media is extracted. Unrelated files stay inside the untouched ZIP.
-            for entry in mediaEntries {
-                let destURL = try safeDestinationURL(for: entry.filename, inside: tempDir)
-                // Create intermediate directories if needed
-                let destDir = destURL.deletingLastPathComponent()
-                try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
-
-                let raw = try compressedData(for: entry, in: zipData)
-                let fileData: Data
-
-                switch entry.compressionMethod {
-                case 0:   // STORE — no compression
-                    fileData = raw
-                case 8:   // DEFLATE
-                    fileData = try deflateDecompress(raw, uncompressedSize: Int(entry.uncompressedSize))
-                default:
-                    throw ZipError.unsupportedCompression(entry.compressionMethod)
-                }
-
-                try fileData.write(to: destURL, options: .atomic)
+            if ext == "zip" {
+                try extractZIP(url, to: tempDir)
+            } else if ext == "7z" {
+                #if os(macOS)
+                try extractSevenZip(url, to: tempDir)
+                #else
+                throw ArchiveError.unsupportedFormat(ext)
+                #endif
+            } else {
+                #if os(macOS)
+                try extractRAR(url, to: tempDir)
+                #else
+                throw ArchiveError.unsupportedFormat(ext)
+                #endif
             }
         } catch {
             try? fm.removeItem(at: tempDir)
+            if let archiveError = error as? ArchiveError { throw archiveError }
             throw ArchiveError.extractionFailed(error.localizedDescription)
         }
 
         let mediaURLs = collectMedia(in: tempDir)
         return ExtractionResult(tempDirectory: tempDir, mediaURLs: mediaURLs)
     }
+
+    private func extractZIP(_ url: URL, to tempDir: URL) throws {
+        let zipData = try Data(contentsOf: url, options: .mappedIfSafe)
+        let entries = try parseCentralDirectory(zipData)
+
+        // Validate every entry before writing anything. This prevents a
+        // crafted filename such as ../photo.jpg from escaping the temp dir.
+        for entry in entries {
+            _ = try safeDestinationURL(for: entry.filename, inside: tempDir)
+        }
+
+        let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions)
+        let mediaEntries = entries.filter { entry in
+            guard !entry.isDirectory else { return false }
+            let normalized = entry.filename.replacingOccurrences(of: "\\", with: "/")
+            let ext = URL(fileURLWithPath: normalized).pathExtension.lowercased()
+            return supported.contains(ext)
+        }
+
+        var zipDestinations: Set<String> = []
+        for entry in mediaEntries {
+            let destination = try safeDestinationURL(for: entry.filename, inside: tempDir)
+            guard zipDestinations.insert(destination.path).inserted else {
+                throw ZipError.invalidFormat("duplicate archive path: \(entry.filename)")
+            }
+        }
+
+        var declaredBytes: UInt64 = 0
+        for entry in mediaEntries {
+            let (next, overflow) = declaredBytes.addingReportingOverflow(UInt64(entry.uncompressedSize))
+            guard !overflow, next <= kMaxArchiveMediaBytes else {
+                throw ZipError.invalidFormat("media expands beyond the safe extraction limit")
+            }
+            declaredBytes = next
+        }
+
+        if let freeBytes = try? tempDir.resourceValues(
+            forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+        ).volumeAvailableCapacityForImportantUsage,
+           declaredBytes > UInt64(max(0, freeBytes - kDiskReserveBytes)) {
+            throw ZipError.invalidFormat("not enough free disk space to extract safely")
+        }
+
+        // Only media is extracted. Unrelated files stay inside the untouched ZIP.
+        for entry in mediaEntries {
+            let destURL = try safeDestinationURL(for: entry.filename, inside: tempDir)
+            let destDir = destURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+            let raw = try compressedData(for: entry, in: zipData)
+            let fileData: Data
+
+            switch entry.compressionMethod {
+            case 0:   // STORE — no compression
+                fileData = raw
+            case 8:   // DEFLATE
+                fileData = try deflateDecompress(raw, uncompressedSize: Int(entry.uncompressedSize))
+            default:
+                throw ZipError.unsupportedCompression(entry.compressionMethod)
+            }
+
+            try fileData.write(to: destURL, options: .atomic)
+        }
+    }
+
+    #if os(macOS)
+    /// Extracts standard LZMA/LZMA2 7z entries using the embedded 7-Zip SDK.
+    /// The SDK expands one solid block in memory, so an entry is bounded relative
+    /// to the device's physical memory before extraction starts.
+    private func extractSevenZip(_ url: URL, to tempDir: URL) throws {
+        let sevenZip: SevenZip.Archive
+        do {
+            sevenZip = try SevenZip.Archive(fileURL: url)
+        } catch {
+            throw ArchiveError.extractionFailed("Could not read this 7z archive. It may be corrupt or password-protected.")
+        }
+
+        guard sevenZip.entries.count <= kMaxArchiveEntries else {
+            throw ZipError.invalidFormat("too many archive entries")
+        }
+
+        let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions)
+        let maximumEntryBytes = min(
+            UInt64(8 * 1024 * 1024 * 1024),
+            max(UInt64(256 * 1024 * 1024), ProcessInfo.processInfo.physicalMemory / 3)
+        )
+        var declaredBytes: UInt64 = 0
+        var selected: [(entry: SevenZip.Entry, destination: URL)] = []
+        var destinations: Set<String> = []
+
+        for entry in sevenZip.entries {
+            let destination = try safeDestinationURL(for: entry.path, inside: tempDir)
+            guard !entry.directory, supported.contains(destination.pathExtension.lowercased()) else { continue }
+            guard destinations.insert(destination.path).inserted else {
+                throw ZipError.invalidFormat("duplicate archive path: \(entry.path)")
+            }
+            guard entry.uncompressedSize <= maximumEntryBytes else {
+                throw ZipError.invalidFormat("a 7z entry is too large to extract safely in memory")
+            }
+            let (next, overflow) = declaredBytes.addingReportingOverflow(entry.uncompressedSize)
+            guard !overflow, next <= kMaxArchiveMediaBytes else {
+                throw ZipError.invalidFormat("media expands beyond the safe extraction limit")
+            }
+            declaredBytes = next
+            selected.append((entry, destination))
+        }
+
+        if let freeBytes = try? tempDir.resourceValues(
+            forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+        ).volumeAvailableCapacityForImportantUsage,
+           declaredBytes > UInt64(max(0, freeBytes - kDiskReserveBytes)) {
+            throw ZipError.invalidFormat("not enough free disk space to extract safely")
+        }
+
+        for item in selected {
+            do {
+                let data = try sevenZip.extract(entry: item.entry)
+                guard UInt64(data.count) == item.entry.uncompressedSize else {
+                    throw ZipError.invalidFormat("7z entry size did not match its contents")
+                }
+                try FileManager.default.createDirectory(
+                    at: item.destination.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                guard !FileManager.default.fileExists(atPath: item.destination.path) else {
+                    throw ZipError.invalidFormat("duplicate archive path: \(item.entry.path)")
+                }
+                try data.write(to: item.destination, options: .atomic)
+            } catch let error as ZipError {
+                throw error
+            } catch {
+                throw ArchiveError.extractionFailed("Could not extract this 7z archive. Password-protected 7z files are not supported.")
+            }
+        }
+    }
+
+    /// Streams RAR/RAR5 entries through libarchive. Only supported media
+    /// is written, and every archive path is checked before touching disk.
+    private func extractRAR(_ url: URL, to tempDir: URL) throws {
+        guard let archive = archive_read_new() else {
+            throw ArchiveError.extractionFailed("Could not initialize the archive reader")
+        }
+        defer { archive_read_free(archive) }
+
+        archive_read_support_filter_all(archive)
+        archive_read_support_format_all(archive)
+        guard archive_read_open_filename(archive, url.path, 10_240) == ARCHIVE_OK else {
+            throw ArchiveError.extractionFailed(libArchiveMessage(archive))
+        }
+
+        let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions)
+        let fm = FileManager.default
+        var entryPointer: OpaquePointer?
+        var entryCount = 0
+        var extractedBytes: UInt64 = 0
+        var writtenDestinations: Set<String> = []
+
+        while true {
+            let status = archive_read_next_header(archive, &entryPointer)
+            if status == ARCHIVE_EOF { break }
+            guard status == ARCHIVE_OK || status == ARCHIVE_WARN, let entry = entryPointer else {
+                throw ArchiveError.extractionFailed(libArchiveMessage(archive))
+            }
+
+            entryCount += 1
+            guard entryCount <= kMaxArchiveEntries else {
+                throw ZipError.invalidFormat("too many archive entries")
+            }
+            guard let rawPath = archive_entry_pathname(entry) else {
+                throw ZipError.invalidFormat("archive entry has no filename")
+            }
+            let filename = String(cString: rawPath)
+            let destination = try safeDestinationURL(for: filename, inside: tempDir)
+
+            if archive_entry_is_encrypted(entry) > 0 {
+                throw ZipError.encrypted
+            }
+            if archive_entry_symlink(entry) != nil || archive_entry_hardlink(entry) != nil {
+                throw ZipError.invalidFormat("symbolic and hard links are not supported")
+            }
+
+            let ext = destination.pathExtension.lowercased()
+            // POSIX S_IFREG (0o100000). The macro is not imported into Swift.
+            guard archive_entry_filetype(entry) == 0o100000, supported.contains(ext) else {
+                archive_read_data_skip(archive)
+                continue
+            }
+            guard writtenDestinations.insert(destination.path).inserted else {
+                throw ZipError.invalidFormat("duplicate archive path: \(filename)")
+            }
+
+            let declaredSize = archive_entry_size(entry)
+            guard declaredSize >= 0 else {
+                throw ZipError.invalidFormat("invalid file size: \(filename)")
+            }
+            let (nextTotal, overflow) = extractedBytes.addingReportingOverflow(UInt64(declaredSize))
+            guard !overflow, nextTotal <= kMaxArchiveMediaBytes else {
+                throw ZipError.invalidFormat("media expands beyond the safe extraction limit")
+            }
+            if let freeBytes = try? tempDir.resourceValues(
+                forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+            ).volumeAvailableCapacityForImportantUsage,
+               nextTotal > UInt64(max(0, freeBytes - kDiskReserveBytes)) {
+                throw ZipError.invalidFormat("not enough free disk space to extract safely")
+            }
+
+            try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            guard !fm.fileExists(atPath: destination.path),
+                  fm.createFile(atPath: destination.path, contents: nil) else {
+                throw ZipError.invalidFormat("duplicate archive path: \(filename)")
+            }
+
+            do {
+                let handle = try FileHandle(forWritingTo: destination)
+                defer { try? handle.close() }
+                var buffer: UnsafeRawPointer?
+                var blockSize = 0
+                var offset: Int64 = 0
+                var written: UInt64 = 0
+
+                while true {
+                    let readStatus = archive_read_data_block(archive, &buffer, &blockSize, &offset)
+                    if readStatus == ARCHIVE_EOF { break }
+                    guard readStatus == ARCHIVE_OK, let buffer, blockSize >= 0, offset >= 0 else {
+                        throw ArchiveError.extractionFailed(libArchiveMessage(archive))
+                    }
+                    let blockEnd = UInt64(offset) + UInt64(blockSize)
+                    guard blockEnd <= UInt64(declaredSize), nextTotal <= kMaxArchiveMediaBytes else {
+                        throw ZipError.invalidFormat("archive entry expanded beyond its declared size")
+                    }
+                    try handle.seek(toOffset: UInt64(offset))
+                    try handle.write(contentsOf: Data(bytes: buffer, count: blockSize))
+                    written = max(written, blockEnd)
+                }
+                guard written == UInt64(declaredSize) else {
+                    throw ZipError.invalidFormat("archive entry size did not match its contents")
+                }
+            } catch {
+                try? fm.removeItem(at: destination)
+                throw error
+            }
+            extractedBytes = nextTotal
+        }
+
+        if archive_read_has_encrypted_entries(archive) > 0 { throw ZipError.encrypted }
+    }
+
+    private func libArchiveMessage(_ archive: OpaquePointer) -> String {
+        archive_error_string(archive).map { String(cString: $0) } ?? "Unknown archive error"
+    }
+    #endif
 
     // MARK: - ZIP Parsing
 

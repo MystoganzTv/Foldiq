@@ -146,6 +146,34 @@
 .toggleSub   { font-size: 12px; color: var(--slate-400); margin-top: 2px; }
 
 /* ── File list (preview) ── */
+.previewHeader {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 24px 32px 18px; border-bottom: 1px solid var(--slate-200);
+}
+.previewContent {
+  min-height: 0; flex: 1; display: flex; flex-direction: column;
+  gap: 14px; padding: 18px 32px 12px; background: var(--slate-50);
+}
+.previewStats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.previewStat {
+  min-width: 0; display: flex; align-items: center; gap: 11px;
+  padding: 12px 14px; border: 1px solid var(--slate-200); border-radius: 12px; background: #fff;
+}
+.previewStatPrimary { border-color: #BFDBFE; background: var(--blue-light); }
+.previewStatIcon {
+  width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+  background: var(--slate-100); color: var(--blue); font-size: 15px; font-weight: 800; flex-shrink: 0;
+}
+.previewStat div { min-width: 0; display: flex; flex-direction: column; }
+.previewStat strong { font-size: 17px; color: var(--slate-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.previewStat span:last-child { font-size: 11px; color: var(--slate-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.previewToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.previewBulkActions { display: flex; gap: 6px; }
+.previewBulkActions button {
+  padding: 6px 10px; border-radius: 7px; background: #fff; color: var(--slate-600);
+  border: 1px solid var(--slate-200); font-size: 12px; font-weight: 600;
+}
+.previewBulkActions button:hover { border-color: var(--blue); color: var(--blue); }
 .filterRow { display: flex; gap: 8px; flex-wrap: wrap; }
 .filterBtn {
   padding: 6px 14px; border-radius: 99px;
@@ -155,18 +183,44 @@
 }
 .filterBtn:hover  { background: var(--slate-200); }
 .filterBtn.active { background: var(--blue); color: #fff; }
-.fileList         { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 360px; }
+.fileList         { min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
 .fileRow {
   display: flex; align-items: center; gap: 12px;
-  padding: 9px 12px; border-radius: 8px;
+  padding: 10px 12px; border-radius: 10px;
   background: #fff; border: 1px solid var(--slate-100);
 }
+.fileRowExcluded { opacity: .58; background: var(--slate-50); }
+.previewCheckbox { position: relative; width: 20px; height: 20px; flex: 0 0 20px; cursor: pointer; }
+.previewCheckbox input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.previewCheckbox span {
+  display: block; width: 20px; height: 20px; border: 1.5px solid var(--slate-300, #CBD5E1);
+  border-radius: 6px; background: #fff;
+}
+.previewCheckbox input:checked + span { border-color: var(--blue); background: var(--blue); }
+.previewCheckbox input:checked + span::after {
+  content: ''; display: block; width: 8px; height: 4px; border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff; transform: translate(5px, 5px) rotate(-45deg);
+}
+.previewCheckbox input:disabled + span { background: var(--slate-200); border-color: var(--slate-200); cursor: not-allowed; }
 .fileExt  { font-size: 10px; font-weight: 700; color: var(--blue); background: var(--blue-light); padding: 3px 7px; border-radius: 6px; min-width: 40px; text-align: center; }
-.fileInfo { flex: 1; overflow: hidden; }
-.fileName { font-size: 13px; font-weight: 500; color: var(--slate-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fileDest { font-size: 11px; color: var(--slate-400); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-.fileSize { font-size: 12px; color: var(--slate-400); flex-shrink: 0; }
+.fileInfo { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(140px, .8fr) auto minmax(220px, 1.4fr); align-items: center; gap: 10px; overflow: hidden; }
+.fileName { font-size: 13px; font-weight: 600; color: var(--slate-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fileDestinationLabel { font-size: 10px; font-weight: 700; color: var(--slate-400); text-transform: uppercase; letter-spacing: .04em; }
+.fileDest { font-size: 12px; color: var(--slate-600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fileMeta { min-width: 82px; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 11px; color: var(--slate-400); }
+.includedLabel { color: var(--green); font-weight: 700; }
+.excludedLabel { color: var(--slate-500); font-weight: 700; }
+.previewEmpty { display: grid; place-items: center; min-height: 180px; color: var(--slate-400); font-size: 14px; }
+.previewFooterSummary { display: flex; flex-direction: column; align-items: center; font-size: 13px; color: var(--slate-700); }
+.previewFooterSummary span { font-size: 11px; color: var(--slate-400); margin-top: 2px; }
 .moreRow  { text-align: center; padding: 10px; font-size: 13px; color: var(--slate-400); }
+
+@media (max-width: 930px) {
+  .previewStats { grid-template-columns: repeat(2, 1fr); }
+  .previewToolbar { align-items: flex-start; flex-direction: column; }
+  .fileInfo { grid-template-columns: minmax(140px, 1fr); gap: 3px; }
+  .fileDestinationLabel { display: none; }
+}
 
 /* ── Apply center ── */
 .centerBlock { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 12px; padding: 40px; }

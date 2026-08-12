@@ -77,13 +77,13 @@ ipcMain.handle('dialog:selectFolders', async () => {
   return result.canceled ? [] : result.filePaths;
 });
 
-// Pick ZIP archive(s) directly. Windows cannot combine file and directory
-// selection in one native dialog, so folders and ZIPs use separate pickers.
+// Pick archive(s) directly. Windows cannot combine file and directory
+// selection in one native dialog, so folders and archives use separate pickers.
 ipcMain.handle('dialog:selectArchives', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile', 'multiSelections'],
-    title: 'Select ZIP archives to organize',
-    filters: [{ name: 'ZIP archives', extensions: ['zip'] }],
+    title: 'Select ZIP, RAR, or 7z archives to organize',
+    filters: [{ name: 'Compressed archives', extensions: ['zip', 'rar', '7z'] }],
   });
   return result.canceled ? [] : filterSupportedSources(result.filePaths);
 });

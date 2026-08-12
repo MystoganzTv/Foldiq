@@ -4,7 +4,7 @@ import s from './Screen.module.css';
 const STAT_CARDS = [
   { key: 'photos',    label: 'Photos',         color: '#EFF6FF', iconColor: '#3B82F6' },
   { key: 'videos',    label: 'Videos',          color: '#F5F3FF', iconColor: '#8B5CF6' },
-  { key: 'zips',      label: 'ZIPs Extracted',  color: '#F0FDFA', iconColor: '#14B8A6' },
+  { key: 'zips',      label: 'Archives Extracted', color: '#F0FDFA', iconColor: '#14B8A6' },
   { key: 'dupes',     label: 'Exact Dupes',     color: '#FFF7ED', iconColor: '#F97316' },
   { key: 'probDupes', label: 'Probable Dupes',  color: '#FEFCE8', iconColor: '#EAB308' },
   { key: 'noDate',    label: 'Missing Date',    color: '#FEF2F2', iconColor: '#EF4444' },

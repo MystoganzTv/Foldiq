@@ -14,7 +14,7 @@ export default function ApplyScreen({ go, plan, config, setResult }) {
     return () => window.foldiq.removeAllListeners('apply:progress');
   }, []);
 
-  const total = plan.filter(f => f.action !== 'skip').length;
+  const total = plan.filter(f => f.action !== 'skip' && f.included !== false).length;
   const pct   = total > 0 ? Math.round((progress.current / total) * 100) : 0;
 
   return (

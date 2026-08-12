@@ -38,6 +38,7 @@ Carthage/Build/
 desktop/node_modules/
 desktop/dist-electron/
 desktop/dist/
+desktop/.vendor/
 FoldiqMobile/node_modules/
 
 # Expo / mobile (folder renamed from FoldiqMobile -> mobile)

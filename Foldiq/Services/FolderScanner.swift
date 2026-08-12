@@ -1,8 +1,8 @@
 // FolderScanner.swift
 // Recursively walks the root folder and discovers all media files.
-// When a .zip archive is encountered it is extracted to a temporary directory
+// When a supported desktop archive is encountered it is extracted to a temporary directory
 // and the media files found inside are added to the results.
-// The original .zip is never moved or modified.
+// The original archive is never moved or modified.
 // Reports progress via the onProgress callback for live UI updates.
 
 import Foundation
@@ -22,9 +22,9 @@ actor FolderScanner {
     private let archiveExtractor = ArchiveExtractor()
 
     /// Scan `rootURL` and return all discovered media files.
-    /// ZIP archives are extracted transparently — their contents appear in results
-    /// with `archiveSourceURL` set; the original .zip file is not included.
-    /// If `rootURL` is itself a .zip file it is extracted directly.
+    /// ZIP, RAR, and 7z archives are extracted transparently — their contents appear
+    /// in results with `archiveSourceURL` set; the original archive is not included.
+    /// If `rootURL` is itself an archive file it is extracted directly.
     /// Folders whose `lastPathComponent` appears in `excludedFolderNames` are
     /// skipped entirely — this prevents Foldiq from re-scanning its own output.
     func scan(
@@ -40,7 +40,7 @@ actor FolderScanner {
             throw ScanError.notReadable(rootURL.path)
         }
 
-        // ── If rootURL is a .zip file, extract it directly ───────────────────
+        // ── If rootURL is an archive file, extract it directly ──────────────
         var isDirectory: ObjCBool = false
         FileManager.default.fileExists(atPath: rootURL.path, isDirectory: &isDirectory)
         if !isDirectory.boolValue {
@@ -90,9 +90,8 @@ actor FolderScanner {
 
             let ext = fileURL.pathExtension.lowercased()
 
-            // ── ZIP extraction ────────────────────────────────────────────────
-            // When a .zip is found, extract it and add the media inside.
-            // The .zip itself is NOT added to results — it stays untouched on disk.
+            // ── Archive extraction ───────────────────────────────────────────
+            // Extract supported media; the original archive stays untouched.
             if includeArchives && MediaTypes.archiveExtensions.contains(ext) {
                 do {
                     let result = try await archiveExtractor.extract(fileURL)
@@ -167,7 +166,7 @@ actor FolderScanner {
 
     // MARK: - Archive-as-root extraction
 
-    /// Called when the user selects a .zip file directly (not a folder).
+    /// Called when the user selects an archive file directly (not a folder).
     /// Extracts it and returns the contained media files.
     private func extractSingleArchive(
         _ url: URL,
@@ -221,7 +220,7 @@ struct DiscoveredFile {
     let creationDate: Date?
     let modificationDate: Date?
     let isScreenshot: Bool
-    /// Non-nil when this file was extracted from a .zip archive.
+    /// Non-nil when this file was extracted from a supported archive.
     /// The value is the URL of the original archive on disk.
     let archiveSourceURL: URL?
     /// The temporary directory the archive was extracted into.

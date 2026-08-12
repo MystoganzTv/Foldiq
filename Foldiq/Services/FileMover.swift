@@ -167,7 +167,7 @@ final class FileMover {
 
             await Task.detached(priority: .utility) {
                 if fromArchive {
-                    // The file was extracted from a .zip that was never touched.
+                    // The file was extracted from an archive that was never touched.
                     // "Undo" means removing the organized copy — the original
                     // content remains safely inside the untouched archive.
                     try? FileManager.default.removeItem(at: newURL)
@@ -225,7 +225,7 @@ final class FileMover {
 
     // MARK: - Archive temp directory cleanup
 
-    /// Delete temporary directories that were created when extracting .zip archives
+    /// Delete temporary directories that were created when extracting archives.
     /// during the scan phase. Call this once after apply() completes successfully.
     func cleanupTempDirs(_ dirs: [URL]) async {
         guard !dirs.isEmpty else { return }
@@ -404,8 +404,8 @@ final class FileMover {
 // MARK: ─── URL + SHA-256 ──────────────────────────────────────────────────────
 
 extension URL {
-    /// True when the URL points to a file with a .zip extension.
-    var isZipFile: Bool { pathExtension.lowercased() == "zip" }
+    /// True when the URL points to a supported compressed archive.
+    var isArchiveFile: Bool { MediaTypes.archiveExtensions.contains(pathExtension.lowercased()) }
 
     /// Compute SHA-256 of file contents. Returns nil if file is unreadable.
     func sha256() -> String? {

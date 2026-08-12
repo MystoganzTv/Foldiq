@@ -20,7 +20,7 @@ final class ScanSession {
     var missingDateCount: Int
     var missingMetaCount: Int
     var errorCount: Int
-    var archivesExtractedCount: Int   // number of .zip files extracted during scan
+    var archivesExtractedCount: Int   // number of compressed archives extracted during scan
     var probableDuplicateCount: Int   // files marked isProbableDuplicate by second-pass detector
 
     @Relationship(deleteRule: .cascade, inverse: \MediaFile.session)
@@ -87,7 +87,7 @@ final class MediaFile {
     // Destination computed by the organization planner
     var plannedDestinationPath: String?
 
-    // Archive origin — non-nil when this file was extracted from a .zip archive.
+    // Archive origin — non-nil when this file was extracted from an archive.
     // The value is the absolute path of the original archive file.
     var archiveSourcePath: String?
 
@@ -186,7 +186,7 @@ final class OrganizationPlan {
     var statusRaw: String        // "pending" | "done" | "skipped" | "error"
     var errorMessage: String?
     var appliedAt: Date?
-    /// Non-nil when the source file was extracted from a .zip archive.
+    /// Non-nil when the source file was extracted from an archive.
     /// On undo, archive-sourced files are deleted rather than moved back,
     /// because the original lives inside the zip which was never touched.
     var archiveSourcePath: String?
@@ -256,7 +256,7 @@ final class UndoEntry {
     var contentHash: String
     var operationRaw: String   // "move" | "copy"
     var timestamp: Date
-    /// True when the file was extracted from a .zip archive.
+    /// True when the file was extracted from an archive.
     /// Undo for these entries deletes the organized copy instead of moving it back,
     /// because the original content is still safely inside the untouched archive.
     var isFromArchive: Bool
@@ -365,7 +365,7 @@ extension OrganizationConfig {
     /// If the user already selected the organized output folder itself,
     /// reuse it directly instead of nesting another output folder inside.
     ///
-    /// When `rootURL` is a file (e.g., a .zip archive), the output is placed
+    /// When `rootURL` is an archive file, the output is placed
     /// *next to* the file in its parent directory — never inside the file path.
     func outputRoot(forSelectedRoot rootURL: URL) -> URL {
         if let customOutputParentPath, !customOutputParentPath.isEmpty {
@@ -376,13 +376,13 @@ extension OrganizationConfig {
         // If rootURL is a file (archive), base the output in its parent directory.
         // A previously selected folder may no longer exist when a saved session is
         // reopened; in that case, keep treating folder-like paths as folders instead
-        // of silently moving the output one level up. Foldiq only accepts ZIP files
+        // of silently moving the output one level up. Foldiq only accepts archive files
         // as file roots, so the extension is a reliable fallback discriminator.
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: rootURL.path, isDirectory: &isDir)
         let isArchiveFile = exists
             ? !isDir.boolValue
-            : rootURL.pathExtension.lowercased() == "zip"
+            : MediaTypes.archiveExtensions.contains(rootURL.pathExtension.lowercased())
         let base = isArchiveFile ? rootURL.deletingLastPathComponent() : rootURL
 
         guard base.lastPathComponent != outputFolderName else { return base }

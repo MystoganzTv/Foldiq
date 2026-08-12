@@ -32,7 +32,7 @@ final class ScanCoordinator: ObservableObject {
     private let detector         = DuplicateDetector()
     private let probableDetector = ProbableDuplicateDetector()
 
-    /// Temporary directories created when extracting .zip archives during scan.
+    /// Temporary directories created when extracting archives during scan.
     /// Must be cleaned up after FileMover.apply() completes (or on restart).
     private(set) var archiveTempDirs: [URL] = []
 

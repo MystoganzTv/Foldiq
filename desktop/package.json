@@ -1,17 +1,19 @@
 {
   "name": "foldiq-desktop",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Foldiq — Photo & Video Organizer for Windows",
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "build": "vite build && electron-builder",
-    "build:win": "vite build && electron-builder --win",
+    "prepare:7zip": "node scripts/prepare-7zip.js",
+    "build": "npm run prepare:7zip && vite build && electron-builder",
+    "build:win": "npm run prepare:7zip && vite build && electron-builder --win",
     "build:mac": "vite build && electron-builder --mac",
     "test": "node --test tests/*.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
+    "7zip-bin": "^5.2.0",
     "exiftool-vendored": "^37.2.0",
     "unzipper": "0.12.5"
   },
@@ -42,7 +44,14 @@
           ]
         }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "extraResources": [
+        {
+          "from": ".vendor/7zip-win",
+          "to": "7zip",
+          "filter": ["**/*"]
+        }
+      ]
     },
     "mac": {
       "target": [
@@ -67,7 +76,8 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "!node_modules/7zip-bin/{linux,mac,win,7x.sh}/**/*"
     ]
   }
 }

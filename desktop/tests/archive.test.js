@@ -4,8 +4,10 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const zlib = require('node:zlib');
+const { execFileSync } = require('node:child_process');
+const { path7za } = require('7zip-bin');
 
-const { extractZip, safeRelativePath } = require('../electron/services/archive');
+const { extractArchive, extractZip, safeRelativePath } = require('../electron/services/archive');
 const scanner = require('../electron/services/scanner');
 const { filterSupportedSources } = require('../electron/services/sources');
 
@@ -116,19 +118,62 @@ test('ZIP extraction rejects path traversal', async (t) => {
   assert.equal(fs.existsSync(path.join(directory, 'escaped.jpg')), false);
 });
 
-test('source filtering accepts folders and ZIPs but rejects unrelated files', (t) => {
+test('source filtering accepts folders, ZIP, RAR, and 7z but rejects unrelated files', (t) => {
   const directory = tempDir(t);
   const zipPath = path.join(directory, 'photos.ZIP');
+  const rarPath = path.join(directory, 'photos.RAR');
+  const sevenZipPath = path.join(directory, 'photos.7z');
   const textPath = path.join(directory, 'notes.txt');
   fs.writeFileSync(zipPath, createZip([]));
+  fs.writeFileSync(rarPath, 'rar placeholder');
+  fs.writeFileSync(sevenZipPath, '7z placeholder');
   fs.writeFileSync(textPath, 'notes');
 
   assert.deepEqual(
-    filterSupportedSources([directory, zipPath, textPath, zipPath]),
-    [directory, zipPath]
+    filterSupportedSources([directory, zipPath, rarPath, sevenZipPath, textPath, zipPath]),
+    [directory, zipPath, rarPath, sevenZipPath]
   );
 });
 
 test('safe ZIP paths accept nested media paths', () => {
   assert.equal(safeRelativePath('album/2026/photo.jpg'), path.join('album', '2026', 'photo.jpg'));
+});
+
+test('7z scanner extracts nested media and keeps the archive untouched', async (t) => {
+  const directory = tempDir(t);
+  const sourceDirectory = path.join(directory, 'source');
+  const archivePath = path.join(directory, 'photos.7z');
+  fs.mkdirSync(path.join(sourceDirectory, 'album'), { recursive: true });
+  fs.writeFileSync(path.join(sourceDirectory, 'album', 'one.jpg'), 'photo data');
+  fs.writeFileSync(path.join(sourceDirectory, 'notes.txt'), 'not media');
+  if (process.platform !== 'win32') fs.chmodSync(path7za, 0o755);
+  execFileSync(path7za, ['a', '-t7z', archivePath, '.'], { cwd: sourceDirectory, stdio: 'ignore' });
+
+  const before = fs.readFileSync(archivePath);
+  const result = await extractArchive(archivePath, filePath => path.extname(filePath) === '.jpg');
+  t.after(() => fs.rmSync(result.tempDirectory, { recursive: true, force: true }));
+
+  assert.equal(result.mediaPaths.length, 1);
+  assert.equal(path.basename(result.mediaPaths[0]), 'one.jpg');
+  assert.equal(fs.readFileSync(result.mediaPaths[0], 'utf8'), 'photo data');
+  assert.deepEqual(fs.readFileSync(archivePath), before);
+
+  const scanResult = await scanner.scan([archivePath], () => {});
+  assert.equal(scanResult.archivesExtracted, 1);
+  assert.equal(scanResult.files.length, 1);
+  assert.equal(scanResult.files[0].archiveSourcePath, archivePath);
+});
+
+test('bundled Windows engine extracts real RAR media', {
+  skip: process.platform !== 'win32',
+}, async (t) => {
+  const archivePath = path.resolve(__dirname, '..', '..', 'FoldiqTests', 'Fixtures', 'archive-media.rar');
+  const before = fs.readFileSync(archivePath);
+  const result = await extractArchive(archivePath, filePath => path.extname(filePath) === '.jpg');
+  t.after(() => fs.rmSync(result.tempDirectory, { recursive: true, force: true }));
+
+  assert.equal(result.mediaPaths.length, 1);
+  assert.equal(path.basename(result.mediaPaths[0]), 'test.jpg');
+  assert.equal(fs.readFileSync(result.mediaPaths[0], 'utf8'), 'test text document\r\n');
+  assert.deepEqual(fs.readFileSync(archivePath), before);
 });

@@ -23,9 +23,13 @@ enum MediaTypes {
     ]
 
     // MARK: Archives / compressed
-    // Only ZIP can be extracted on macOS in the sandbox without external tools.
-    // Other formats (rar, 7z, tar, etc.) are not recognised — they are ignored by the scanner.
-    static let archiveExtensions: Set<String> = ["zip"]
+    // Desktop archives are handled locally. The iPhone/iPad flow reads the Photos
+    // Library directly and intentionally does not accept compressed files.
+    #if os(macOS)
+    static let archiveExtensions: Set<String> = ["zip", "rar", "7z"]
+    #else
+    static let archiveExtensions: Set<String> = []
+    #endif
 
     // MARK: All supported
     static let allExtensions: Set<String> = photoExtensions

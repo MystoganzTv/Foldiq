@@ -25,11 +25,11 @@ Finally organize your photo library the way you've always meant to. Smart folder
 
 Your photo library deserves better than a folder called "Misc 2019 backup copy (2)."
 
-Foldiq scans any folder of photos and videos on your Mac — including ZIP archives — and automatically builds a clean, dated folder structure based on the actual date each photo was taken. No manual sorting. No cloud required. No subscriptions.
+Foldiq scans any folder of photos and videos on your Mac — including ZIP, RAR, and 7z archives — and automatically builds a clean, dated folder structure based on the actual date each photo was taken. No manual sorting. No cloud required. No subscriptions.
 
 **How it works**
 
-1. Select any folder, multiple folders, or a .zip archive containing your media.
+1. Select any folder, multiple folders, or a ZIP, RAR, or 7z archive containing your media.
 2. Foldiq reads EXIF data, GPS metadata, and filenames to identify every file's true capture date.
 3. You review every planned file movement in a full preview table — nothing moves until you say so.
 4. Foldiq reorganizes your library and writes a complete undo log, so you can reverse every change.
@@ -53,7 +53,7 @@ Every organization run creates a detailed undo manifest. If you change your mind
 **What Foldiq organizes**
 Photos: JPG, JPEG, PNG, HEIC, TIFF, and RAW formats including CR2, NEF, ARW, and DNG.
 Videos: MOV, MP4, and M4V.
-Archives: .zip files are automatically extracted and their contents organized alongside your other media.
+Archives: unencrypted ZIP, RAR, and 7z files are automatically extracted and their contents organized alongside your other media. The original archive stays untouched.
 
 **Privacy first**
 
@@ -76,7 +76,7 @@ First release of Foldiq — the safest way to organize a messy photo library on 
 - Duplicate detection (exact SHA-256 + probable match)
 - Full preview before any file moves
 - Complete undo with one click
-- ZIP archive support
+- ZIP, RAR, and 7z archive support
 - 100% local — no cloud, no account required
 
 ---
