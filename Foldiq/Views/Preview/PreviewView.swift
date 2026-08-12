@@ -56,8 +56,8 @@ struct PreviewView: View {
 
     enum FilterStatus: String, CaseIterable {
         case all = "All"
-        case photo = "Photos"
-        case video = "Videos"
+        case included = "Included"
+        case excluded = "Excluded"
         case duplicate = "Duplicates"
         case unknownDate = "Unknown Date"
     }
@@ -79,12 +79,10 @@ struct PreviewView: View {
 
         switch filterStatus {
         case .all: break
-        case .photo:
-            result = result.filter { MediaTypes.photoExtensions.contains(
-                URL(fileURLWithPath: $0.sourceAbsPath).pathExtension.lowercased()) }
-        case .video:
-            result = result.filter { MediaTypes.videoExtensions.contains(
-                URL(fileURLWithPath: $0.sourceAbsPath).pathExtension.lowercased()) }
+        case .included:
+            result = result.filter { $0.status != .skipped }
+        case .excluded:
+            result = result.filter { $0.status == .skipped }
         case .duplicate:
             result = result.filter { $0.destinationAbsPath.contains("/Duplicates/") }
         case .unknownDate:
@@ -105,12 +103,20 @@ struct PreviewView: View {
         return result
     }
 
+    var includedPlans: [OrganizationPlan] {
+        plans.filter { $0.status != .skipped }
+    }
+
+    var excludedPlans: [OrganizationPlan] {
+        plans.filter { $0.status == .skipped }
+    }
+
     var duplicatePlanCount: Int {
-        plans.filter { $0.destinationAbsPath.contains("/Duplicates/") }.count
+        includedPlans.filter { $0.destinationAbsPath.contains("/Duplicates/") }.count
     }
 
     var unknownDatePlanCount: Int {
-        plans.filter { $0.destinationAbsPath.contains("/Unknown Date/") }.count
+        includedPlans.filter { $0.destinationAbsPath.contains("/Unknown Date/") }.count
     }
 
     var destinationSummary: String {
@@ -193,10 +199,16 @@ struct PreviewView: View {
                 // Stat summary — icon + number + label, no pill backgrounds
                 HStack(spacing: 16) {
                     PlanStat(
-                        icon: "doc.fill",
-                        value: "\(plans.count)",
-                        label: "files",
-                        color: .blue
+                        icon: "checkmark.circle.fill",
+                        value: "\(includedPlans.count)",
+                        label: "included",
+                        color: .green
+                    )
+                    PlanStat(
+                        icon: "minus.circle.fill",
+                        value: "\(excludedPlans.count)",
+                        label: "excluded",
+                        color: .secondary
                     )
                     PlanStat(
                         icon: nav.organizationConfig.fileOperation == .move
@@ -225,7 +237,7 @@ struct PreviewView: View {
                     ForEach(FilterStatus.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 340)
+                .frame(width: 390)
 
                 TextField("Search paths…", text: $searchQuery)
                     .textFieldStyle(.roundedBorder)
@@ -248,6 +260,15 @@ struct PreviewView: View {
                 .help("Export CSV report")
                 .padding(.leading, 6)
 
+                Menu {
+                    Button("Include Shown") { setDisplayedIncluded(true) }
+                    Button("Exclude Shown") { setDisplayedIncluded(false) }
+                } label: {
+                    Image(systemName: "checklist")
+                }
+                .help("Change which shown files will be processed")
+                .padding(.leading, 6)
+
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
@@ -266,11 +287,19 @@ struct PreviewView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Table(displayedPlans, selection: $selectedPlanID) {
+                        TableColumn("") { plan in
+                            PlanInclusionButton(plan: plan) {
+                                setIncluded(plan, plan.status == .skipped)
+                            }
+                        }
+                        .width(28)
+
                         TableColumn("Current Path") { plan in
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(URL(fileURLWithPath: plan.sourceAbsPath).lastPathComponent)
                                     .fontWeight(.medium)
                                     .lineLimit(1)
+                                    .foregroundStyle(plan.status == .skipped ? .secondary : .primary)
                                 Text(plan.sourceURL.deletingLastPathComponent().path)
                                     .font(.caption2).foregroundStyle(.secondary)
                                     .lineLimit(1).truncationMode(.head)
@@ -282,9 +311,10 @@ struct PreviewView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(URL(fileURLWithPath: plan.destinationAbsPath).lastPathComponent)
                                     .lineLimit(1)
-                                Text(plan.destinationURL.deletingLastPathComponent().path)
+                                    .foregroundStyle(plan.status == .skipped ? .secondary : .primary)
+                                Text(friendlyDestination(for: plan))
                                     .font(.caption2).foregroundStyle(.secondary)
-                                    .lineLimit(1).truncationMode(.head)
+                                    .lineLimit(1).truncationMode(.middle)
                             }
                         }
                         .width(min: 180, ideal: 260)
@@ -354,6 +384,9 @@ struct PreviewView: View {
                                 if let idx = plans.firstIndex(where: { $0.id == updatedPlan.id }) {
                                     plans[idx] = updatedPlan
                                 }
+                            },
+                            onInclusionChanged: { updatedPlan in
+                                setIncluded(updatedPlan, updatedPlan.status == .skipped)
                             }
                         )
                     }
@@ -372,7 +405,7 @@ struct PreviewView: View {
 
                 Spacer()
 
-                Text("\(displayedPlans.count) of \(plans.count) shown")
+                Text("\(includedPlans.count) included · \(excludedPlans.count) excluded")
                     .font(.caption).foregroundStyle(.secondary)
 
                 Spacer()
@@ -383,20 +416,22 @@ struct PreviewView: View {
                     HStack {
                         Image(systemName: nav.organizationConfig.fileOperation == .move
                               ? "arrow.right.circle.fill" : "doc.on.doc.fill")
-                        Text("Apply — \(nav.organizationConfig.fileOperation.rawValue.capitalized) \(plans.count) Files")
+                        Text("Confirm \(includedPlans.count) Files")
                             .fontWeight(.semibold)
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .tint(nav.organizationConfig.fileOperation == .move ? .blue : .green)
+                .disabled(includedPlans.isEmpty)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
         }
         .sheet(isPresented: $showingConfirmation) {
             ApplyPreflightSheet(
-                planCount: plans.count,
+                planCount: includedPlans.count,
+                excludedCount: excludedPlans.count,
                 duplicateCount: duplicatePlanCount,
                 unknownDateCount: unknownDatePlanCount,
                 operation: nav.organizationConfig.fileOperation,
@@ -412,9 +447,41 @@ struct PreviewView: View {
             if let session = nav.scanSession {
                 let outputRoot = nav.organizationConfig
                     .outputRoot(forSelectedRoot: URL(fileURLWithPath: session.rootPath))
-                FolderTreeSheet(plans: plans, outputRoot: outputRoot)
+                FolderTreeSheet(plans: includedPlans, outputRoot: outputRoot)
             }
         }
+    }
+
+    private func setIncluded(_ plan: OrganizationPlan, _ included: Bool) {
+        plan.status = included ? .pending : .skipped
+        try? context.save()
+        // SwiftData models are reference types. Reassigning the array makes the
+        // aggregate counts and filters update immediately as well.
+        plans = Array(plans)
+        if filterStatus == .included && !included || filterStatus == .excluded && included {
+            selectedPlanID = nil
+        }
+    }
+
+    private func setDisplayedIncluded(_ included: Bool) {
+        let ids = Set(displayedPlans.map(\.id))
+        for plan in plans where ids.contains(plan.id) {
+            plan.status = included ? .pending : .skipped
+        }
+        try? context.save()
+        plans = Array(plans)
+        selectedPlanID = nil
+    }
+
+    private func friendlyDestination(for plan: OrganizationPlan) -> String {
+        let root = URL(fileURLWithPath: destinationSummary).standardizedFileURL.path
+        let destination = plan.destinationURL.standardizedFileURL.path
+        guard destination.hasPrefix(root + "/") else {
+            return plan.destinationURL.deletingLastPathComponent().lastPathComponent
+        }
+        return String(destination.dropFirst(root.count + 1))
+            .split(separator: "/")
+            .joined(separator: "  ›  ")
     }
 
     // MARK: - Build Plan
@@ -495,8 +562,28 @@ struct PreviewView: View {
     }
 }
 
+private struct PlanInclusionButton: View {
+    let plan: OrganizationPlan
+    let action: () -> Void
+
+    private var isExcluded: Bool { plan.status == .skipped }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isExcluded ? "square" : "checkmark.square.fill")
+                .foregroundStyle(isExcluded ? Color.secondary : Color.blue)
+        }
+        .buttonStyle(.plain)
+        .help(isExcluded ? "Include this file" : "Exclude this file")
+        .accessibilityLabel(isExcluded
+                            ? "Include \(plan.sourceURL.lastPathComponent)"
+                            : "Exclude \(plan.sourceURL.lastPathComponent)")
+    }
+}
+
 struct ApplyPreflightSheet: View {
     let planCount: Int
+    let excludedCount: Int
     let duplicateCount: Int
     let unknownDateCount: Int
     let operation: FileOperation
@@ -525,6 +612,10 @@ struct ApplyPreflightSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 16) {
                     PlanStat(icon: "doc.fill", value: "\(planCount)", label: "files", color: .blue)
+                    if excludedCount > 0 {
+                        PlanStat(icon: "minus.circle.fill",
+                                 value: "\(excludedCount)", label: "excluded", color: .secondary)
+                    }
                     if duplicateCount > 0 {
                         PlanStat(icon: "square.on.square.fill",
                                  value: "\(duplicateCount)", label: "duplicates", color: .orange)
@@ -593,6 +684,7 @@ struct FileInspectorPanel: View {
     let config: OrganizationConfig
     let context: ModelContext
     let onDateAssigned: (OrganizationPlan) -> Void
+    let onInclusionChanged: (OrganizationPlan) -> Void
 
     @State private var thumbnail: PlatformImage?
     @State private var mediaFile: MediaFile?
@@ -656,6 +748,19 @@ struct FileInspectorPanel: View {
                         .fontWeight(.semibold)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        onInclusionChanged(plan)
+                    } label: {
+                        Label(
+                            plan.status == .skipped ? "Include in Organization" : "Exclude from Organization",
+                            systemImage: plan.status == .skipped
+                                ? "checkmark.circle" : "minus.circle"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(plan.status == .skipped ? .blue : .secondary)
 
                     Divider()
 

@@ -81,7 +81,7 @@ struct SettingsView: View {
 
             Section("Rules") {
                 Toggle("Include video files alongside photos", isOn: $includeVideos)
-                Toggle("Include compressed archives (ZIP, etc.)", isOn: $includeArchives)
+                Toggle("Include ZIP, RAR, and 7z archives", isOn: $includeArchives)
                 Toggle("Route duplicates to a Duplicates/ subfolder", isOn: $separateDuplicates)
                 Toggle("Use GPS location in folder names (requires internet)", isOn: $useGPS)
             }

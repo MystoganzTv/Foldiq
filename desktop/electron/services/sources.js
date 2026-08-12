@@ -1,8 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-function isZip(filePath) {
-  return path.extname(filePath).toLowerCase() === '.zip';
+const ARCHIVE_EXTENSIONS = new Set(['.zip', '.rar', '.7z']);
+
+function isArchive(filePath) {
+  return ARCHIVE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
 function filterSupportedSources(sourcePaths) {
@@ -18,7 +20,7 @@ function filterSupportedSources(sourcePaths) {
 
     try {
       const stat = fs.statSync(resolved);
-      if (!stat.isDirectory() && !(stat.isFile() && isZip(resolved))) continue;
+      if (!stat.isDirectory() && !(stat.isFile() && isArchive(resolved))) continue;
       seen.add(key);
       supported.push(resolved);
     } catch {}
@@ -27,4 +29,4 @@ function filterSupportedSources(sourcePaths) {
   return supported;
 }
 
-module.exports = { filterSupportedSources, isZip };
+module.exports = { ARCHIVE_EXTENSIONS, filterSupportedSources, isArchive };

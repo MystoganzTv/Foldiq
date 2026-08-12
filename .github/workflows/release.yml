@@ -10,6 +10,79 @@ permissions:
   contents: write
 
 jobs:
+  # ── macOS Universal (signed + notarized DMG) ──────────────────────────────
+  build-macos:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Import Developer ID certificate
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/foldiq-developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/foldiq-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+
+          printf '%s' "$CERTIFICATE_P12_BASE64" | base64 -D > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Build signed universal macOS app
+        run: |
+          xcodebuild \
+            -project Foldiq.xcodeproj \
+            -scheme Foldiq \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$RUNNER_TEMP/Foldiq.xcarchive" \
+            archive \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY='Developer ID Application' \
+            DEVELOPMENT_TEAM=V6F97AK8AD
+
+      - name: Create and sign DMG
+        run: |
+          APP_PATH="$RUNNER_TEMP/Foldiq.xcarchive/Products/Applications/Foldiq.app"
+          STAGE_PATH="$RUNNER_TEMP/foldiq-dmg"
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
+          DMG_PATH="$RUNNER_TEMP/Foldiq-$VERSION.dmg"
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          mkdir -p "$STAGE_PATH"
+          ditto "$APP_PATH" "$STAGE_PATH/Foldiq.app"
+          ln -s /Applications "$STAGE_PATH/Applications"
+          hdiutil create -volname "Foldiq $VERSION" -srcfolder "$STAGE_PATH" -ov -format UDZO "$DMG_PATH"
+          codesign --force --timestamp --sign 'Developer ID Application' "$DMG_PATH"
+
+      - name: Notarize and staple DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          DMG_PATH="$(find "$RUNNER_TEMP" -maxdepth 1 -name 'Foldiq-*.dmg' -print -quit)"
+          test -n "$DMG_PATH"
+          xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id V6F97AK8AD \
+            --wait
+          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          codesign --verify --verbose=2 "$DMG_PATH"
+
+      - name: Upload notarized Mac DMG
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-dmg
+          path: ${{ runner.temp }}/Foldiq-*.dmg
+
   # ── Windows x64 ────────────────────────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
@@ -30,8 +103,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test ZIP, RAR, 7z, drag/drop sources, and file safety
+        run: npm run prepare:7zip && npm test
+
       - name: Build (Vite + Electron Windows x64)
-        run: npx vite build && npx electron-builder --win --x64
+        run: npm run build:win -- --x64
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
@@ -41,7 +117,7 @@ jobs:
 
   # ── GitHub Release ─────────────────────────────────────────────────────────
   release:
-    needs: [build-windows]
+    needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -51,6 +127,12 @@ jobs:
         with:
           name: windows-installer
           path: artifacts/windows
+
+      - name: Download notarized Mac DMG
+        uses: actions/download-artifact@v8
+        with:
+          name: macos-dmg
+          path: artifacts/macos
 
       - name: Rename for clean URLs
         run: |
@@ -62,5 +144,6 @@ jobs:
           name: "Foldiq ${{ github.ref_name }}"
           files: |
             artifacts/windows/Foldiq-Setup.exe
+            artifacts/macos/Foldiq-*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

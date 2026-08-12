@@ -1,5 +1,5 @@
 // WelcomeView.swift
-// Step 1: Intro + folder/zip picker (supports selecting multiple folders and .zip files).
+// Step 1: Intro + folder/archive picker (supports ZIP, RAR, and 7z on macOS).
 
 import SwiftUI
 import SwiftData
@@ -21,6 +21,9 @@ struct WelcomeView: View {
     @State private var showUndoToast = false
     @State private var undoRestoredCount: Int?
     private var isCompact: Bool { horizontalSizeClass == .compact }
+    private var archiveContentTypes: [UTType] {
+        MediaTypes.archiveExtensions.compactMap { UTType(filenameExtension: $0) }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,8 +60,8 @@ struct WelcomeView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(nav.selectedFolderURLs, id: \.path) { url in
                         HStack(spacing: 8) {
-                            Image(systemName: url.isZipFile ? "doc.zipper" : "folder.fill")
-                                .foregroundStyle(url.isZipFile ? .orange : .blue)
+                            Image(systemName: url.isArchiveFile ? "doc.zipper" : "folder.fill")
+                                .foregroundStyle(url.isArchiveFile ? .orange : .blue)
                                 .font(.caption)
                             Text(url.path)
                                 .font(.caption)
@@ -100,7 +103,7 @@ struct WelcomeView: View {
                 Image(systemName: "arrow.down.circle")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                Text("You can also drag folders or ZIPs directly onto this window")
+                Text("You can also drag folders or ZIP, RAR, and 7z archives onto this window")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -140,7 +143,7 @@ struct WelcomeView: View {
         }
         .fileImporter(
             isPresented: $showingItemImporter,
-            allowedContentTypes: [.folder, UTType(filenameExtension: "zip") ?? .zip],
+            allowedContentTypes: [.folder] + archiveContentTypes,
             allowsMultipleSelection: true
         ) { result in
             handleImportedItems(result)
@@ -160,7 +163,7 @@ struct WelcomeView: View {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 44))
                                 .foregroundStyle(.blue)
-                            Text("Drop folders or ZIPs to add them")
+                            Text("Drop folders or archives to add them")
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(.blue)
                         }
@@ -204,7 +207,7 @@ struct WelcomeView: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: nav.selectedFolderURLs.isEmpty ? "folder.badge.plus" : "plus.circle")
-                Text(nav.selectedFolderURLs.isEmpty ? "Select Folders or ZIPs" : "Add More")
+                Text(nav.selectedFolderURLs.isEmpty ? "Select Folders or Archives" : "Add More")
                     .fontWeight(.semibold)
             }
             .font(.title3)
@@ -219,7 +222,7 @@ struct WelcomeView: View {
         }
         .buttonStyle(.plain)
         .onHover { isHoveringButton = $0 }
-        .help("Choose folders or .zip archives containing your photos and videos")
+        .help("Choose folders or ZIP, RAR, and 7z archives containing your photos and videos")
 
         if !nav.selectedFolderURLs.isEmpty {
             Button {
@@ -267,15 +270,15 @@ struct WelcomeView: View {
         }
     }
 
-    /// Label for the Scan button, reflecting the mix of folders and ZIPs selected.
+    /// Label for the Scan button, reflecting the mix of folders and archives selected.
     private var scanButtonLabel: String {
         let total = nav.selectedFolderURLs.count
-        let zips    = nav.selectedFolderURLs.filter(\.isZipFile).count
-        let folders = total - zips
+        let archives = nav.selectedFolderURLs.filter(\.isArchiveFile).count
+        let folders = total - archives
 
         if folders == 0 {
-            return zips == 1 ? "Scan ZIP" : "Scan \(zips) ZIPs"
-        } else if zips == 0 {
+            return archives == 1 ? "Scan Archive" : "Scan \(archives) Archives"
+        } else if archives == 0 {
             return folders == 1 ? "Scan Folder" : "Scan \(folders) Folders"
         } else {
             return "Scan \(total) Items"
@@ -294,7 +297,7 @@ struct WelcomeView: View {
 
                 var isDir: ObjCBool = false
                 FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-                guard isDir.boolValue || url.isZipFile else { return }
+                guard isDir.boolValue || url.isArchiveFile else { return }
                 guard !existing.contains(url.path) else { return }
 
                 DispatchQueue.main.async {
@@ -311,9 +314,8 @@ struct WelcomeView: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
         panel.prompt = "Select"
-        panel.message = "Choose folders or .zip archives. The app will scan and organize all supported media inside."
-        // Allow any folder or specifically ZIP files
-        panel.allowedContentTypes = [.folder, UTType(filenameExtension: "zip") ?? .zip]
+        panel.message = "Choose folders or ZIP, RAR, or 7z archives. Foldiq will organize the supported media inside."
+        panel.allowedContentTypes = [.folder] + archiveContentTypes
 
         guard panel.runModal() == .OK else { return }
 
@@ -321,11 +323,11 @@ struct WelcomeView: View {
         let existing = Set(nav.selectedFolderURLs.map(\.path))
         let newURLs = panel.urls.filter { url in
             guard !existing.contains(url.path) else { return false }
-            // Accept directories and .zip files; reject anything else
+            // Accept directories and supported archive files; reject anything else.
             var isDir: ObjCBool = false
             FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
             if isDir.boolValue { return true }
-            return url.isZipFile
+            return url.isArchiveFile
         }
         nav.addSelectedFolderURLs(newURLs)
         #else
@@ -344,7 +346,7 @@ struct WelcomeView: View {
             var isDir: ObjCBool = false
             FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
             if isDir.boolValue { return true }
-            return url.isZipFile
+            return url.isArchiveFile
         }
         nav.addSelectedFolderURLs(newURLs)
     }

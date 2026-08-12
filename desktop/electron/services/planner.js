@@ -62,7 +62,13 @@ function buildPlan(files, config) {
   for (const file of files) {
     // Skip duplicates if configured
     if (config.skipDuplicates && file.isDuplicate) {
-      moves.push({ ...file, action: 'skip', reason: 'duplicate', destPath: null });
+      moves.push({
+        ...file,
+        action: 'skip',
+        included: false,
+        reason: 'duplicate',
+        destPath: null,
+      });
       continue;
     }
 
@@ -71,9 +77,10 @@ function buildPlan(files, config) {
 
     moves.push({
       ...file,
-      // Extracted files are temporary copies. The original remains inside the ZIP,
+      // Extracted files are temporary copies. The original remains inside the archive,
       // so they must behave as copies even when the user selected Move.
       action:   file.archiveSourcePath ? 'copy' : (config.copyMode ? 'copy' : 'move'),
+      included: true,
       destPath,
       reason:   null,
     });

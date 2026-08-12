@@ -9,7 +9,7 @@ struct OnboardingView: View {
     @State private var isHoveringCTA = false
 
     private let steps: [(icon: String, title: String, detail: String)] = [
-        ("folder.badge.plus",      "Select",  "Pick any folder or .zip archive containing your photos and videos"),
+        ("folder.badge.plus",      "Select",  "Pick folders or ZIP, RAR, and 7z archives containing your photos and videos"),
         ("magnifyingglass.circle", "Scan",    "Foldiq reads dates, location data, and spots duplicate files"),
         ("eye",                    "Review",  "See every planned file movement in a full preview — nothing moves until you say so"),
         ("checkmark.circle.fill",  "Apply",   "Foldiq organizes your library and writes a full undo log so you can reverse everything"),

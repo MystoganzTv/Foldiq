@@ -91,8 +91,8 @@ function writeManifestAtomic(mPath, manifest) {
 
 async function apply(plan, config, onProgress) {
   if (!config.manifestDirectory) throw new Error('Internal Undo storage is not configured');
-  const moves   = plan.filter(f => f.action !== 'skip');
-  const skipped = plan.filter(f => f.action === 'skip');
+  const moves   = plan.filter(f => f.action !== 'skip' && f.included !== false);
+  const skipped = plan.filter(f => f.action === 'skip' || f.included === false);
   const manifest = { moves: [], skipped, createdAt: new Date().toISOString() };
   const errors = [];
   const mPath  = manifestPath(config.manifestDirectory);

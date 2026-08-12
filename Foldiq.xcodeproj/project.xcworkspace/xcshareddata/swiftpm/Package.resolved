@@ -1,0 +1,23 @@
+{
+  "originHash" : "61fcca60fe512c177020789e41582b93f6e4d4b72d2d7afb428f7954e341887c",
+  "pins" : [
+    {
+      "identity" : "sevenzip.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mtgto/SevenZip.swift",
+      "state" : {
+        "revision" : "215c504fe9452ee58e7cacd88f20c9793f2fc103"
+      }
+    },
+    {
+      "identity" : "swift-archive",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/marcprux/swift-archive",
+      "state" : {
+        "revision" : "48fddd77a1d8301ce04e0d7c093fcf0867fa1ff8",
+        "version" : "3.8.9"
+      }
+    }
+  ],
+  "version" : 3
+}

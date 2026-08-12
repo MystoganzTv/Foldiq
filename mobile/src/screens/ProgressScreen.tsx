@@ -101,7 +101,7 @@ export default function ProgressScreen({ navigation, route }: Props) {
 
         {/* Destination reminder */}
         <View style={styles.destBadge}>
-          <Ionicons
+          <Icon
             name={
               config.destination === 'googledrive' ? 'logo-google' :
               config.destination === 'dropbox' ? 'cube-outline' :

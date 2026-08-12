@@ -149,7 +149,7 @@ struct SettingsStepView: View {
                             )
                             ToggleRow(
                                 label: "Include archives",
-                                detail: "Organize compressed files (zip, rar, 7z…) alongside your media",
+                                detail: "Extract media from ZIP, RAR, and 7z archives",
                                 isOn: $nav.organizationConfig.includeArchives
                             )
                             ToggleRow(

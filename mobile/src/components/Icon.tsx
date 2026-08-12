@@ -22,6 +22,7 @@ const ICONS: Record<string, string> = {
   'download':          '↓',
   'download-outline':  '↓',
   'cloud-upload-outline': '↑',
+  'information-circle-outline': 'ⓘ',
 
   // Media
   'images':              '🖼',

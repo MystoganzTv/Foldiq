@@ -216,7 +216,7 @@ struct ScanResultsPanel: View {
         var id: String { rawValue }
         case photos             = "Photos"
         case videos             = "Videos"
-        case archives           = "From ZIP Archives"
+        case archives           = "From Archives"
         case duplicates         = "Exact Duplicates"
         case probableDuplicates = "Probable Duplicates"
         case missingDate        = "Missing Date"
@@ -244,7 +244,7 @@ struct ScanResultsPanel: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 16) {
                 TappableStatCard(icon: "photo.stack",          label: "Photos",           value: session.photoCount,             color: .blue)   { drillCategory = .photos }
                 TappableStatCard(icon: "video.fill",           label: "Videos",           value: session.videoCount,             color: .purple) { drillCategory = .videos }
-                TappableStatCard(icon: "doc.zipper",           label: "ZIPs Extracted",   value: session.archivesExtractedCount, color: .teal)   { drillCategory = .archives }
+                TappableStatCard(icon: "doc.zipper",           label: "Archives Extracted", value: session.archivesExtractedCount, color: .teal) { drillCategory = .archives }
                 TappableStatCard(icon: "square.on.square",     label: "Exact Dupes",      value: session.duplicateCount,         color: .orange) { drillCategory = .duplicates }
                 TappableStatCard(icon: "equal.circle",         label: "Probable Dupes",   value: session.probableDuplicateCount, color: .yellow) { drillCategory = .probableDuplicates }
                 TappableStatCard(icon: "questionmark.circle",  label: "Missing Date",     value: session.missingDateCount,       color: .red)    { drillCategory = .missingDate }
@@ -350,7 +350,7 @@ struct FileDrillSheet: View {
     var explainerText: String {
         switch category {
         case .archives:
-            return "These photos and videos were extracted from ZIP archives. The original .zip files are left untouched in their current location. On undo, these organized copies are removed — the originals remain safely inside the zips."
+            return "These photos and videos were extracted from compressed archives. The original ZIP, RAR, or 7z files remain untouched. On undo, Foldiq removes only the organized copies."
         case .missingDate:
             return "These files have no EXIF date in their metadata. They could not be reliably dated and will be placed in an \"Unknown Date\" folder. You can assign them a date manually in the Preview step."
         case .noMetadata:

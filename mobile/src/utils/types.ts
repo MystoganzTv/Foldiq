@@ -1,6 +1,6 @@
 import * as MediaLibrary from 'expo-media-library';
 
-export type MediaAsset = MediaLibrary.Asset;
+export type MediaAsset = MediaLibrary.Asset & { fileSize?: number };
 
 export type OrganizationMode =
   | 'smartHybrid'

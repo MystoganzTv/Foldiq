@@ -38,6 +38,9 @@
 		AA000030 /* IOSPhotosExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* IOSPhotosExportView.swift */; };
 		AA100001 /* OrganizationPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100001 /* OrganizationPlannerTests.swift */; };
 		AA100002 /* ProbableDuplicateDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100002 /* ProbableDuplicateDetectorTests.swift */; };
+		AA100003 /* ArchiveExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100003 /* ArchiveExtractorTests.swift */; };
+		AA100004 /* archive-media.7z in Resources */ = {isa = PBXBuildFile; fileRef = BB100004 /* archive-media.7z */; };
+		AA100005 /* archive-media.rar in Resources */ = {isa = PBXBuildFile; fileRef = BB100005 /* archive-media.rar */; };
 		AA200001 /* FoldiqApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000001 /* FoldiqApp.swift */; };
 		AA200002 /* AppNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000002 /* AppNavigator.swift */; };
 		AA200003 /* FoldiqCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000003 /* FoldiqCommands.swift */; };
@@ -68,6 +71,8 @@
 		AA200029 /* IOSPhotosExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000030 /* IOSPhotosExportView.swift */; };
 		AA000031 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BB000031 /* PrivacyInfo.xcprivacy */; };
 		AA200030 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BB000031 /* PrivacyInfo.xcprivacy */; };
+		AA000032 /* Archive in Frameworks */ = {isa = PBXBuildFile; productRef = FF000002 /* Archive */; };
+		AA000033 /* SevenZip in Frameworks */ = {isa = PBXBuildFile; productRef = FF000004 /* SevenZip */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -114,6 +119,9 @@
 		BB000031 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		BB100001 /* OrganizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationPlannerTests.swift; sourceTree = "<group>"; };
 		BB100002 /* ProbableDuplicateDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbableDuplicateDetectorTests.swift; sourceTree = "<group>"; };
+		BB100003 /* ArchiveExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveExtractorTests.swift; sourceTree = "<group>"; };
+		BB100004 /* archive-media.7z */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fixtures/archive-media.7z"; sourceTree = "<group>"; };
+		BB100005 /* archive-media.rar */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fixtures/archive-media.rar"; sourceTree = "<group>"; };
 		CC000001 /* Foldiq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foldiq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC100001 /* FoldiqTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FoldiqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC200001 /* Foldiq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foldiq.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -124,6 +132,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA000032 /* Archive in Frameworks */,
+				AA000033 /* SevenZip in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -183,6 +193,9 @@
 			children = (
 				BB100001 /* OrganizationPlannerTests.swift */,
 				BB100002 /* ProbableDuplicateDetectorTests.swift */,
+				BB100003 /* ArchiveExtractorTests.swift */,
+				BB100004 /* archive-media.7z */,
+				BB100005 /* archive-media.rar */,
 			);
 			path = FoldiqTests;
 			sourceTree = "<group>";
@@ -307,6 +320,10 @@
 			dependencies = (
 			);
 			name = Foldiq;
+			packageProductDependencies = (
+				FF000002 /* Archive */,
+				FF000004 /* SevenZip */,
+			);
 			productName = Foldiq;
 			productReference = CC000001 /* Foldiq.app */;
 			productType = "com.apple.product-type.application";
@@ -379,6 +396,10 @@
 			);
 			mainGroup = MainGroup;
 			productRefGroup = ProductsGroup /* Products */;
+			packageReferences = (
+				FF000001 /* XCRemoteSwiftPackageReference "swift-archive" */,
+				FF000003 /* XCRemoteSwiftPackageReference "SevenZip.swift" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -403,6 +424,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA100004 /* archive-media.7z in Resources */,
+				AA100005 /* archive-media.rar in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -492,6 +515,7 @@
 			files = (
 				AA100001 /* OrganizationPlannerTests.swift in Sources */,
 				AA100002 /* ProbableDuplicateDetectorTests.swift in Sources */,
+				AA100003 /* ArchiveExtractorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -584,7 +608,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Foldiq/Foldiq.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEVELOPMENT_TEAM = V6F97AK8AD;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -593,7 +617,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 1.0.8;
 				OTHER_LDFLAGS = "-lz";
 				PRODUCT_BUNDLE_IDENTIFIER = com.MystoganzTv.Foldiq;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -609,7 +633,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Foldiq/Foldiq.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEVELOPMENT_TEAM = V6F97AK8AD;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -618,7 +642,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 1.0.8;
 				OTHER_LDFLAGS = "-lz";
 				PRODUCT_BUNDLE_IDENTIFIER = com.MystoganzTv.Foldiq;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -634,6 +658,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = V6F97AK8AD;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.MystoganzTv.FoldiqTests;
@@ -651,6 +676,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = V6F97AK8AD;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.MystoganzTv.FoldiqTests;
@@ -761,6 +787,38 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		FF000001 /* XCRemoteSwiftPackageReference "swift-archive" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/marcprux/swift-archive";
+			requirement = {
+				kind = exactVersion;
+				version = 3.8.9;
+			};
+		};
+		FF000003 /* XCRemoteSwiftPackageReference "SevenZip.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mtgto/SevenZip.swift";
+			requirement = {
+				kind = revision;
+				revision = 215c504fe9452ee58e7cacd88f20c9793f2fc103;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FF000002 /* Archive */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FF000001 /* XCRemoteSwiftPackageReference "swift-archive" */;
+			productName = Archive;
+		};
+		FF000004 /* SevenZip */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FF000003 /* XCRemoteSwiftPackageReference "SevenZip.swift" */;
+			productName = SevenZip;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = FoldiqProject /* Project object */;
 }

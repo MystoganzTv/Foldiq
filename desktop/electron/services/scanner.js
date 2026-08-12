@@ -3,8 +3,8 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { exiftool } = require('exiftool-vendored');
-const { extractZip } = require('./archive');
-const { isZip } = require('./sources');
+const { extractArchive } = require('./archive');
+const { isArchive } = require('./sources');
 
 const SUPPORTED = new Set([
   '.jpg', '.jpeg', '.png', '.heic', '.heif',
@@ -43,7 +43,7 @@ function walkDir(dir, mediaPaths, archivePaths) {
       walkDir(full, mediaPaths, archivePaths);
     } else if (entry.isFile() && isMedia(full)) {
       mediaPaths.add(full);
-    } else if (entry.isFile() && isZip(full)) {
+    } else if (entry.isFile() && isArchive(full)) {
       archivePaths.add(full);
     }
   }
@@ -57,7 +57,7 @@ function collectSource(sourcePath, mediaPaths, archivePaths) {
     walkDir(sourcePath, mediaPaths, archivePaths);
   } else if (stat.isFile() && isMedia(sourcePath)) {
     mediaPaths.add(sourcePath);
-  } else if (stat.isFile() && isZip(sourcePath)) {
+  } else if (stat.isFile() && isArchive(sourcePath)) {
     archivePaths.add(sourcePath);
   }
 }
@@ -168,7 +168,7 @@ async function scan(folders, onProgress) {
   for (const archivePath of archivePaths) {
     progress({ current: 0, total: 0, file: `Extracting ${path.basename(archivePath)}…` });
     try {
-      const extracted = await extractZip(archivePath, isMedia);
+      const extracted = await extractArchive(archivePath, isMedia);
       tempDirectories.add(extracted.tempDirectory);
       archivesExtracted++;
       for (const filePath of extracted.mediaPaths) {

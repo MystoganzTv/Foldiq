@@ -48,7 +48,7 @@ final class AppNavigator: ObservableObject {
     @Published var organizationConfig: OrganizationConfig = .load() {
         didSet { organizationConfig.save() }
     }
-    /// Temp directories created when extracting .zip archives during scan.
+    /// Temp directories created when extracting archives during scan.
     /// Cleaned up by FileMover after apply, or discarded on restart.
     var archiveTempDirs: [URL] = []
     private var securityScopedURLs: Set<URL> = []

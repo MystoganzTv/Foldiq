@@ -136,6 +136,13 @@ struct IOSPhotosExportView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+
+            Label("Mobile works with items from your Photos Library only. ZIP, RAR, and 7z archives are not processed on iPhone or iPad.", systemImage: "doc.zipper")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .padding(12)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
