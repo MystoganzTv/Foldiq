@@ -1,0 +1,79 @@
+name: Windows Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Windows version from desktop/package.json
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate requested version
+        shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          $packageVersion = (Get-Content package.json | ConvertFrom-Json).version
+          if ($packageVersion -ne $env:REQUESTED_VERSION) {
+            throw "Requested version $env:REQUESTED_VERSION does not match package version $packageVersion"
+          }
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test ZIP, RAR, 7z, drag/drop sources, and file safety
+        run: npm run prepare:7zip && npm test
+
+      - name: Build Windows installer
+        run: npm run build:win -- --x64
+
+      - name: Prepare release asset
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem 'dist-electron/Foldiq Setup*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Windows installer was not created' }
+          Copy-Item $installer.FullName 'dist-electron/Foldiq-Setup.exe'
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer-${{ inputs.version }}
+          path: desktop/dist-electron/Foldiq-Setup.exe
+
+      - name: Publish Windows release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}-windows
+          target_commitish: main
+          name: Foldiq ${{ inputs.version }} for Windows
+          make_latest: true
+          body: |
+            Windows 10/11 64-bit release.
+
+            - Fixes ZIP archives that could remain on “Scanning” when they used streaming data descriptors.
+            - Uses the bundled verified 7-Zip engine for ZIP, RAR, and 7z compatibility.
+            - Shows archive-opening progress and clear extraction errors.
+            - Leaves the original compressed archive untouched.
+          files: desktop/dist-electron/Foldiq-Setup.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

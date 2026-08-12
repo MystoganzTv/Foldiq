@@ -38,24 +38,33 @@ function createZip(entries) {
     const method = item.method ?? 0;
     const compressed = method === 8 ? zlib.deflateRawSync(contents) : contents;
     const checksum = crc32(contents);
+    const usesDataDescriptor = item.dataDescriptor === true;
+    const flags = usesDataDescriptor ? 0x08 : 0;
 
     const localHeader = Buffer.alloc(30);
     localHeader.writeUInt32LE(0x04034b50, 0);
     localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(0, 6);
+    localHeader.writeUInt16LE(flags, 6);
     localHeader.writeUInt16LE(method, 8);
-    localHeader.writeUInt32LE(checksum, 14);
-    localHeader.writeUInt32LE(compressed.length, 18);
-    localHeader.writeUInt32LE(contents.length, 22);
+    localHeader.writeUInt32LE(usesDataDescriptor ? 0 : checksum, 14);
+    localHeader.writeUInt32LE(usesDataDescriptor ? 0 : compressed.length, 18);
+    localHeader.writeUInt32LE(usesDataDescriptor ? 0 : contents.length, 22);
     localHeader.writeUInt16LE(name.length, 26);
 
-    localParts.push(localHeader, name, compressed);
+    const dataDescriptor = usesDataDescriptor ? Buffer.alloc(16) : Buffer.alloc(0);
+    if (usesDataDescriptor) {
+      dataDescriptor.writeUInt32LE(0x08074b50, 0);
+      dataDescriptor.writeUInt32LE(checksum, 4);
+      dataDescriptor.writeUInt32LE(compressed.length, 8);
+      dataDescriptor.writeUInt32LE(contents.length, 12);
+    }
+    localParts.push(localHeader, name, compressed, dataDescriptor);
 
     const centralHeader = Buffer.alloc(46);
     centralHeader.writeUInt32LE(0x02014b50, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(0, 8);
+    centralHeader.writeUInt16LE(flags, 8);
     centralHeader.writeUInt16LE(method, 10);
     centralHeader.writeUInt32LE(checksum, 16);
     centralHeader.writeUInt32LE(compressed.length, 20);
@@ -64,7 +73,7 @@ function createZip(entries) {
     centralHeader.writeUInt32LE(offset, 42);
     centralParts.push(centralHeader, name);
 
-    offset += localHeader.length + name.length + compressed.length;
+    offset += localHeader.length + name.length + compressed.length + dataDescriptor.length;
   }
 
   const centralDirectory = Buffer.concat(centralParts);
@@ -107,6 +116,24 @@ test('ZIP scanner finds stored and deflated media and ignores other files', asyn
   const directResult = await scanner.scan([zipPath], () => {});
   assert.equal(directResult.archivesExtracted, 1);
   assert.equal(directResult.files.length, 2);
+});
+
+test('ZIP scanner accepts streaming data-descriptor archives', async (t) => {
+  const directory = tempDir(t);
+  const zipPath = path.join(directory, 'streaming-photos.zip');
+  fs.writeFileSync(zipPath, createZip([
+    { name: 'album/one.jpg', contents: 'streamed photo', method: 8, dataDescriptor: true },
+    { name: 'album/two.png', contents: 'another streamed photo', method: 8, dataDescriptor: true },
+  ]));
+
+  const progress = [];
+  const result = await scanner.scan([zipPath], update => progress.push(update));
+
+  assert.equal(result.archivesExtracted, 1);
+  assert.deepEqual(result.warnings, []);
+  assert.equal(result.files.length, 2);
+  assert.ok(progress.some(update => update.phase === 'archive'));
+  assert.ok(progress.some(update => update.phase === 'media' && update.total === 2));
 });
 
 test('ZIP extraction rejects path traversal', async (t) => {

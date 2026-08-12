@@ -52,14 +52,21 @@ export default function ScanScreen({ go, folders, setFiles }) {
   }, [folders, setFiles]);
 
   const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+  const openingArchives = progress.phase === 'archive' || progress.phase === 'archive-list';
 
   return (
     <div className={s.screen}>
       <div className={s.scrollArea}>
         <div style={{ textAlign: 'center', padding: '16px 0 24px' }}>
-          <h1 className={s.title}>{done ? 'Scan Complete' : 'Scanning…'}</h1>
+          <h1 className={s.title}>
+            {done ? 'Scan Complete' : openingArchives ? 'Opening Archives…' : 'Scanning…'}
+          </h1>
           <p className={s.sub} style={{ margin: '0 auto' }}>
-            {done ? folders.map(f => f.split(/[\\/]/).pop()).join(', ') : 'Reading metadata from every file…'}
+            {done
+              ? folders.map(f => f.split(/[\\/]/).pop()).join(', ')
+              : openingArchives
+                ? 'The original compressed files remain untouched.'
+                : 'Reading metadata from every file…'}
           </p>
         </div>
 
@@ -69,7 +76,9 @@ export default function ScanScreen({ go, folders, setFiles }) {
               <div className={s.progressFill} style={{ width: `${pct}%` }} />
             </div>
             <p className={s.progressLabel} style={{ textAlign: 'center' }}>
-              {progress.current.toLocaleString()} / {progress.total.toLocaleString()} — {progress.file}
+              {progress.total > 0
+                ? `${progress.current.toLocaleString()} / ${progress.total.toLocaleString()} — ${progress.file}`
+                : progress.file || 'Preparing scan…'}
             </p>
           </div>
         )}

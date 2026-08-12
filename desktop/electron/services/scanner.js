@@ -165,10 +165,32 @@ async function scan(folders, onProgress) {
   const warnings = [];
   let archivesExtracted = 0;
 
-  for (const archivePath of archivePaths) {
-    progress({ current: 0, total: 0, file: `Extracting ${path.basename(archivePath)}…` });
+  const archiveList = Array.from(archivePaths);
+  for (let archiveIndex = 0; archiveIndex < archiveList.length; archiveIndex++) {
+    const archivePath = archiveList[archiveIndex];
+    const archiveName = path.basename(archivePath);
+    progress({
+      phase: 'archive',
+      current: archiveIndex,
+      total: archiveList.length,
+      file: `Reading ${archiveName}…`,
+    });
     try {
-      const extracted = await extractArchive(archivePath, isMedia);
+      const extracted = await extractArchive(archivePath, isMedia, archiveProgress => {
+        const messages = {
+          listing: `Reading the contents of ${archiveName}…`,
+          extracting: archiveProgress.file
+            ? `Extracting ${archiveProgress.file} from ${archiveName}…`
+            : `Extracting media from ${archiveName}…`,
+          fallback: `Opening ${archiveName} with the compatibility engine…`,
+        };
+        progress({
+          phase: 'archive',
+          current: archiveProgress.current,
+          total: archiveProgress.total,
+          file: messages[archiveProgress.stage] ?? `Opening ${archiveName}…`,
+        });
+      });
       tempDirectories.add(extracted.tempDirectory);
       archivesExtracted++;
       for (const filePath of extracted.mediaPaths) {
@@ -181,6 +203,12 @@ async function scan(folders, onProgress) {
     } catch (error) {
       warnings.push({ archive: archivePath, message: error.message });
     }
+    progress({
+      phase: 'archive-list',
+      current: archiveIndex + 1,
+      total: archiveList.length,
+      file: archiveName,
+    });
   }
 
   const total = allFiles.length;
@@ -194,7 +222,7 @@ async function scan(folders, onProgress) {
     try {
       stat = fs.statSync(filePath);
     } catch {
-      progress({ current: i + 1, total, file: path.basename(filePath) });
+      progress({ phase: 'media', current: i + 1, total, file: path.basename(filePath) });
       continue;
     }
 
@@ -222,7 +250,7 @@ async function scan(folders, onProgress) {
     };
 
     files.push(file);
-    progress({ current: i + 1, total, file: file.name });
+    progress({ phase: 'media', current: i + 1, total, file: file.name });
   }
 
   return { files, archivesExtracted, warnings };
