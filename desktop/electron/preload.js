@@ -1,10 +1,13 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 // Expose a safe API to the renderer (React app)
 contextBridge.exposeInMainWorld('foldiq', {
   // Dialogs
   selectFolders:  ()           => ipcRenderer.invoke('dialog:selectFolders'),
+  selectArchives: ()           => ipcRenderer.invoke('dialog:selectArchives'),
   selectOutput:   ()           => ipcRenderer.invoke('dialog:selectOutput'),
+  getPathForFile: (file)       => webUtils.getPathForFile(file),
+  filterSources:  (paths)      => ipcRenderer.invoke('sources:filterSupported', { sourcePaths: paths }),
 
   // Scan
   startScan:      (folders)    => ipcRenderer.invoke('scan:start', { folders }),

@@ -1,28 +1,32 @@
-import { useRef } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import s from './Screen.module.css';
 
 export default function WelcomeScreen({ go, folders, setFolders }) {
   const [dragging, setDragging] = useState(false);
   const listRef = useRef(null);
 
-  async function pickFolders() {
-    const selected = await window.foldiq.selectFolders();
+  function addSources(selected) {
     if (selected.length) {
       setFolders(prev => [...new Set([...prev, ...selected])]);
-      // scroll list into view after state update
       setTimeout(() => listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
     }
   }
 
-  function onDrop(e) {
+  async function pickFolders() {
+    addSources(await window.foldiq.selectFolders());
+  }
+
+  async function pickArchives() {
+    addSources(await window.foldiq.selectArchives());
+  }
+
+  async function onDrop(e) {
     e.preventDefault();
     setDragging(false);
-    const paths = Array.from(e.dataTransfer.files).map(f => f.path).filter(Boolean);
-    if (paths.length) {
-      setFolders(prev => [...new Set([...prev, ...paths])]);
-      setTimeout(() => listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
-    }
+    const candidates = Array.from(e.dataTransfer.files)
+      .map(file => window.foldiq.getPathForFile(file))
+      .filter(Boolean);
+    addSources(await window.foldiq.filterSources(candidates));
   }
 
   const hasFolders = folders.length > 0;
@@ -57,7 +61,7 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
           )}
           {hasFolders && (
             <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0F172A' }}>
-              {folders.length} folder{folders.length > 1 ? 's' : ''} selected
+              {folders.length} item{folders.length > 1 ? 's' : ''} selected
             </h1>
           )}
         </div>
@@ -66,7 +70,15 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
         <div
           className={`${s.dropzone} ${dragging ? s.dragging : ''}`}
           style={hasFolders ? { padding: '20px 32px' } : {}}
+          role="button"
+          tabIndex={0}
           onClick={pickFolders}
+          onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              pickFolders();
+            }
+          }}
           onDragOver={e => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
@@ -79,23 +91,33 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
             </div>
           )}
           <p className={s.dropTitle} style={hasFolders ? { fontSize: 14 } : {}}>
-            {hasFolders ? '+ Drop more folders or click to add' : 'Drop folders here or click to browse'}
+            {hasFolders ? '+ Drop more folders or ZIPs, or click to add a folder' : 'Drop folders or ZIPs here, or click to browse'}
           </p>
-          {!hasFolders && <p className={s.dropSub}>Supports JPG, HEIC, RAW, MOV, MP4 and more</p>}
+          {!hasFolders && <p className={s.dropSub}>Supports ZIP, JPG, HEIC, RAW, MOV, MP4 and more</p>}
         </div>
 
         {/* Selected folders */}
         {hasFolders && (
           <div ref={listRef} className={s.folderList}>
             {folders.map((f, i) => (
-              <div key={i} className={s.folderItem}>
+              <div key={f} className={s.folderItem}>
                 <span className={s.folderIcon}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#3B82F6">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                  </svg>
+                  {f.toLowerCase().endsWith('.zip') ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 11v7M9.5 14.5h5"/>
+                    </svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#3B82F6">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                  )}
                 </span>
                 <span className={s.folderPath}>{f}</span>
-                <button className={s.folderRemove} onClick={e => { e.stopPropagation(); setFolders(folders.filter((_, j) => j !== i)); }}>✕</button>
+                <button
+                  className={s.folderRemove}
+                  aria-label={`Remove ${f}`}
+                  onClick={e => { e.stopPropagation(); setFolders(folders.filter((_, j) => j !== i)); }}
+                >✕</button>
               </div>
             ))}
           </div>
@@ -109,13 +131,14 @@ export default function WelcomeScreen({ go, folders, setFolders }) {
       <div className={s.bottomBar}>
         <div />
         <div className={s.bottomBarRight}>
-          <button className={s.btnSecondary} onClick={pickFolders}>+ Add More</button>
+          <button className={s.btnSecondary} onClick={pickFolders}>+ Add Folders</button>
+          <button className={s.btnSecondary} onClick={pickArchives}>+ Add ZIPs</button>
           <button
             className={s.btnPrimary}
             disabled={folders.length === 0}
             onClick={() => go('scan')}
           >
-            Scan Folder →
+            Scan Items →
           </button>
         </div>
       </div>

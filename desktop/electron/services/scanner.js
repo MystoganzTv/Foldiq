@@ -3,6 +3,8 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { exiftool } = require('exiftool-vendored');
+const { extractZip } = require('./archive');
+const { isZip } = require('./sources');
 
 const SUPPORTED = new Set([
   '.jpg', '.jpeg', '.png', '.heic', '.heif',
@@ -26,20 +28,43 @@ function hashFile(filePath) {
   });
 }
 
-function walkDir(dir, results = []) {
+const tempDirectories = new Set();
+
+function walkDir(dir, mediaPaths, archivePaths) {
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
-  catch { return results; }
+  catch { return; }
 
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      walkDir(full, results);
+      walkDir(full, mediaPaths, archivePaths);
     } else if (entry.isFile() && isMedia(full)) {
-      results.push(full);
+      mediaPaths.add(full);
+    } else if (entry.isFile() && isZip(full)) {
+      archivePaths.add(full);
     }
   }
-  return results;
+}
+
+function collectSource(sourcePath, mediaPaths, archivePaths) {
+  let stat;
+  try { stat = fs.statSync(sourcePath); } catch { return; }
+
+  if (stat.isDirectory()) {
+    walkDir(sourcePath, mediaPaths, archivePaths);
+  } else if (stat.isFile() && isMedia(sourcePath)) {
+    mediaPaths.add(sourcePath);
+  } else if (stat.isFile() && isZip(sourcePath)) {
+    archivePaths.add(sourcePath);
+  }
+}
+
+function cleanupTempDirs() {
+  for (const directory of tempDirectories) {
+    try { fs.rmSync(directory, { recursive: true, force: true }); } catch {}
+  }
+  tempDirectories.clear();
 }
 
 async function extractDate(filePath) {
@@ -75,21 +100,47 @@ async function extractDate(filePath) {
 }
 
 async function scan(folders, onProgress) {
-  // 1. Collect all files
-  const allPaths = [];
-  for (const folder of folders) walkDir(folder, allPaths);
+  cleanupTempDirs();
 
-  const total = allPaths.length;
+  const progress = typeof onProgress === 'function' ? onProgress : () => {};
+  const mediaPaths = new Set();
+  const archivePaths = new Set();
+  for (const folder of folders) collectSource(folder, mediaPaths, archivePaths);
+
+  const allFiles = Array.from(mediaPaths, filePath => ({ filePath }));
+  const warnings = [];
+  let archivesExtracted = 0;
+
+  for (const archivePath of archivePaths) {
+    progress({ current: 0, total: 0, file: `Extracting ${path.basename(archivePath)}…` });
+    try {
+      const extracted = await extractZip(archivePath, isMedia);
+      tempDirectories.add(extracted.tempDirectory);
+      archivesExtracted++;
+      for (const filePath of extracted.mediaPaths) {
+        allFiles.push({
+          filePath,
+          archiveSourcePath: archivePath,
+          archiveTempDirectory: extracted.tempDirectory,
+        });
+      }
+    } catch (error) {
+      warnings.push({ archive: archivePath, message: error.message });
+    }
+  }
+
+  const total = allFiles.length;
   const files = [];
-  const hashMap = {};
+  const hashMap = new Map();
 
-  for (let i = 0; i < allPaths.length; i++) {
-    const filePath = allPaths[i];
+  for (let i = 0; i < allFiles.length; i++) {
+    const candidate = allFiles[i];
+    const filePath = candidate.filePath;
     let stat;
     try {
       stat = fs.statSync(filePath);
     } catch {
-      onProgress({ current: i + 1, total, file: path.basename(filePath) });
+      progress({ current: i + 1, total, file: path.basename(filePath) });
       continue;
     }
 
@@ -97,11 +148,13 @@ async function scan(folders, onProgress) {
     const date = await extractDate(filePath);
     const hash = await hashFile(filePath);
 
-    const isDuplicate = hash && hashMap[hash] != null;
-    if (hash) hashMap[hash] = (hashMap[hash] ?? i);
+    const duplicateOf = hash ? hashMap.get(hash) : null;
+    const isDuplicate = duplicateOf != null;
+    const id = files.length;
+    if (hash && !hashMap.has(hash)) hashMap.set(hash, id);
 
     const file = {
-      id:          i,
+      id,
       path:        filePath,
       name:        path.basename(filePath),
       ext,
@@ -109,18 +162,21 @@ async function scan(folders, onProgress) {
       date:        date.toISOString(),
       hash,
       isDuplicate: isDuplicate,
-      duplicateOf: isDuplicate ? hashMap[hash] : null,
+      duplicateOf: isDuplicate ? duplicateOf : null,
+      archiveSourcePath: candidate.archiveSourcePath ?? null,
+      archiveTempDirectory: candidate.archiveTempDirectory ?? null,
     };
 
     files.push(file);
-    onProgress({ current: i + 1, total, file: file.name });
+    progress({ current: i + 1, total, file: file.name });
   }
 
-  return files;
+  return { files, archivesExtracted, warnings };
 }
 
 async function end() {
+  cleanupTempDirs();
   try { await exiftool.end(); } catch {}
 }
 
-module.exports = { scan, hashFile, end };
+module.exports = { scan, hashFile, cleanupTempDirs, end };

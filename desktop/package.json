@@ -1,6 +1,6 @@
 {
   "name": "foldiq-desktop",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Foldiq — Photo & Video Organizer for Windows",
   "main": "electron/main.js",
   "scripts": {
@@ -12,7 +12,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "exiftool-vendored": "^37.2.0"
+    "exiftool-vendored": "^37.2.0",
+    "unzipper": "0.12.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.5",

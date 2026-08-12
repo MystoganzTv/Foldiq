@@ -36,6 +36,26 @@ test('planner resolves collisions for extensionless files', (t) => {
   assert.equal(planner.resolveCollision(existing, new Set()), path.join(dir, 'README_1'));
 });
 
+test('planner copies extracted ZIP media even when Move is selected', (t) => {
+  const dir = tempDir(t);
+  const plan = planner.buildPlan([{
+    id: 1,
+    path: path.join(dir, 'temporary', 'photo.jpg'),
+    name: 'photo.jpg',
+    date: '2026-08-11T12:00:00.000Z',
+    archiveSourcePath: path.join(dir, 'photos.zip'),
+    isDuplicate: false,
+  }], {
+    outputFolder: path.join(dir, 'output'),
+    groupByMonth: false,
+    groupByDay: false,
+    copyMode: false,
+    skipDuplicates: true,
+  });
+
+  assert.equal(plan[0].action, 'copy');
+});
+
 test('apply refuses to overwrite a destination created after preview', async (t) => {
   const dir = tempDir(t);
   const source = path.join(dir, 'source.jpg');

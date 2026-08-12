@@ -39,94 +39,9 @@ jobs:
           name: windows-installer
           path: desktop/dist-electron/Foldiq Setup*.exe
 
-  # ── macOS ──────────────────────────────────────────────────────────────────
-  build-mac:
-    runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: desktop
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: desktop/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate icon.icns from icon.png
-        run: |
-          mkdir -p assets/icon.iconset
-          sips -z 16 16     assets/icon.png --out assets/icon.iconset/icon_16x16.png
-          sips -z 32 32     assets/icon.png --out assets/icon.iconset/icon_16x16@2x.png
-          sips -z 32 32     assets/icon.png --out assets/icon.iconset/icon_32x32.png
-          sips -z 64 64     assets/icon.png --out assets/icon.iconset/icon_32x32@2x.png
-          sips -z 128 128   assets/icon.png --out assets/icon.iconset/icon_128x128.png
-          sips -z 256 256   assets/icon.png --out assets/icon.iconset/icon_128x128@2x.png
-          sips -z 256 256   assets/icon.png --out assets/icon.iconset/icon_256x256.png
-          sips -z 512 512   assets/icon.png --out assets/icon.iconset/icon_256x256@2x.png
-          sips -z 512 512   assets/icon.png --out assets/icon.iconset/icon_512x512.png
-          cp assets/icon.png assets/icon.iconset/icon_512x512@2x.png
-          iconutil -c icns assets/icon.iconset -o assets/icon.icns
-
-      # The .dmg MUST be signed with a Developer ID Application certificate and
-      # notarized by Apple. An unsigned build downloads fine but macOS Gatekeeper
-      # refuses to launch it with "Foldiq is damaged and cannot be opened."
-      - name: Verify signing secrets are present
-        run: |
-          missing=""
-          [ -z "$MAC_CERTIFICATE_P12" ]      && missing="$missing MAC_CERTIFICATE_P12"
-          [ -z "$MAC_CERTIFICATE_PASSWORD" ] && missing="$missing MAC_CERTIFICATE_PASSWORD"
-          [ -z "$APPLE_ID" ]                 && missing="$missing APPLE_ID"
-          [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] && missing="$missing APPLE_APP_SPECIFIC_PASSWORD"
-          if [ -n "$missing" ]; then
-            echo "::error::Missing repository secrets:$missing — refusing to ship an unsigned macOS build."
-            exit 1
-          fi
-        env:
-          MAC_CERTIFICATE_P12: ${{ secrets.MAC_CERTIFICATE_P12 }}
-          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: V6F97AK8AD
-
-      - name: Build, sign & notarize (Vite + Electron macOS)
-        run: npx vite build && npx electron-builder --mac
-        env:
-          # Developer ID Application cert, base64-encoded .p12
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12 }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
-          # Consumed by electron-builder's mac notarization config. The public
-          # Apple team ID is public; the credentials remain encrypted secrets.
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: V6F97AK8AD
-
-      - name: Verify signature & notarization ticket
-        run: |
-          APP="dist-electron/mac-arm64/Foldiq.app"
-          [ -d "$APP" ] || APP="dist-electron/mac/Foldiq.app"
-          echo "Checking $APP"
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          # Fails unless a stapled notarization ticket is present.
-          spctl --assess --type execute --verbose=4 "$APP"
-          xcrun stapler validate "$APP"
-
-      - name: Upload macOS DMG
-        uses: actions/upload-artifact@v7
-        with:
-          name: mac-dmg
-          path: desktop/dist-electron/*.dmg
-
   # ── GitHub Release ─────────────────────────────────────────────────────────
   release:
-    needs: [build-windows, build-mac]
+    needs: [build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -137,16 +52,9 @@ jobs:
           name: windows-installer
           path: artifacts/windows
 
-      - name: Download macOS DMG
-        uses: actions/download-artifact@v8
-        with:
-          name: mac-dmg
-          path: artifacts/mac
-
       - name: Rename for clean URLs
         run: |
           mv artifacts/windows/*.exe artifacts/windows/Foldiq-Setup.exe   2>/dev/null || true
-          mv artifacts/mac/*.dmg      artifacts/mac/Foldiq.dmg             2>/dev/null || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -154,6 +62,5 @@ jobs:
           name: "Foldiq ${{ github.ref_name }}"
           files: |
             artifacts/windows/Foldiq-Setup.exe
-            artifacts/mac/Foldiq.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

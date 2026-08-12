@@ -16,27 +16,40 @@ export default function ScanScreen({ go, folders, setFiles }) {
   const [progress, setProgress] = useState({ current: 0, total: 0, file: '' });
   const [done,     setDone]     = useState(false);
   const [stats,    setStats]    = useState(null);
+  const [warnings, setWarnings] = useState([]);
+  const [error,    setError]    = useState('');
 
   useEffect(() => {
+    let active = true;
     window.foldiq.onScanProgress(p => setProgress(p));
-    window.foldiq.startScan(folders).then(files => {
+    window.foldiq.startScan(folders).then(result => {
+      if (!active) return;
+      const files = Array.isArray(result) ? result : result.files;
       setFiles(files);
       const photoExts = new Set(['.jpg','.jpeg','.png','.heic','.heif','.tiff','.tif','.webp','.cr2','.cr3','.nef','.arw','.dng','.raf','.orf','.rw2']);
       const videoExts = new Set(['.mov','.mp4','.m4v','.avi','.mkv']);
       setStats({
         photos:    files.filter(f => photoExts.has(f.ext)).length,
         videos:    files.filter(f => videoExts.has(f.ext)).length,
-        zips:      0,
+        zips:      Array.isArray(result) ? 0 : result.archivesExtracted,
         dupes:     files.filter(f => f.isDuplicate).length,
         probDupes: 0,
         noDate:    0,
         noMeta:    0,
         total:     files.length,
       });
+      setWarnings(Array.isArray(result) ? [] : result.warnings);
+      setDone(true);
+    }).catch(scanError => {
+      if (!active) return;
+      setError(scanError?.message || 'The scan could not be completed.');
       setDone(true);
     });
-    return () => window.foldiq.removeAllListeners('scan:progress');
-  }, []);
+    return () => {
+      active = false;
+      window.foldiq.removeAllListeners('scan:progress');
+    };
+  }, [folders, setFiles]);
 
   const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
@@ -62,18 +75,34 @@ export default function ScanScreen({ go, folders, setFiles }) {
         )}
 
         {done && stats && (
-          <div className={s.statsGrid}>
-            {STAT_CARDS.map(card => (
-              <div key={card.key} className={s.statCard}>
-                <div className={s.statIcon} style={{ background: card.color }}>
-                  <StatIcon name={card.key} color={card.iconColor} />
-                </div>
-                <div>
-                  <div className={s.statNum}>{stats[card.key].toLocaleString()}</div>
-                  <div className={s.statLabel}>{card.label}</div>
-                </div>
+          <>
+            {warnings.length > 0 && (
+              <div style={{ maxWidth: 760, margin: '0 auto 18px', padding: '12px 16px', borderRadius: 10, background: '#FFF7ED', color: '#9A3412', fontSize: 13 }}>
+                {warnings.map(warning => (
+                  <div key={`${warning.archive}-${warning.message}`}>
+                    {warning.archive.split(/[\\/]/).pop()}: {warning.message}
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+            <div className={s.statsGrid}>
+              {STAT_CARDS.map(card => (
+                <div key={card.key} className={s.statCard}>
+                  <div className={s.statIcon} style={{ background: card.color }}>
+                    <StatIcon name={card.key} color={card.iconColor} />
+                  </div>
+                  <div>
+                    <div className={s.statNum}>{stats[card.key].toLocaleString()}</div>
+                    <div className={s.statLabel}>{card.label}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        {done && error && (
+          <div style={{ maxWidth: 620, margin: '24px auto', padding: 16, borderRadius: 10, background: '#FEF2F2', color: '#991B1B', textAlign: 'center' }}>
+            {error}
           </div>
         )}
       </div>
@@ -81,7 +110,7 @@ export default function ScanScreen({ go, folders, setFiles }) {
       {done && (
         <div className={s.bottomBar}>
           <button className={s.btnSecondary} onClick={() => go('welcome')}>Change Folders</button>
-          <button className={s.btnPrimary} onClick={() => go('settings')}>Configure Organization →</button>
+          <button className={s.btnPrimary} disabled={!stats || stats.total === 0} onClick={() => go('settings')}>Configure Organization →</button>
         </div>
       )}
     </div>

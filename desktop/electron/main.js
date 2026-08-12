@@ -6,6 +6,7 @@ const scanner  = require('./services/scanner');
 const planner  = require('./services/planner');
 const mover    = require('./services/mover');
 const { rowsToCSV } = require('./services/csv');
+const { filterSupportedSources } = require('./services/sources');
 
 let mainWindow;
 
@@ -64,6 +65,22 @@ ipcMain.handle('dialog:selectFolders', async () => {
   return result.canceled ? [] : result.filePaths;
 });
 
+// Pick ZIP archive(s) directly. Windows cannot combine file and directory
+// selection in one native dialog, so folders and ZIPs use separate pickers.
+ipcMain.handle('dialog:selectArchives', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+    title: 'Select ZIP archives to organize',
+    filters: [{ name: 'ZIP archives', extensions: ['zip'] }],
+  });
+  return result.canceled ? [] : filterSupportedSources(result.filePaths);
+});
+
+ipcMain.handle('sources:filterSupported', async (event, { sourcePaths }) => {
+  assertArray(sourcePaths, 'source paths', 100).forEach(sourcePath => assertString(sourcePath, 'source path'));
+  return filterSupportedSources(sourcePaths);
+});
+
 // Pick output folder
 ipcMain.handle('dialog:selectOutput', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -94,7 +111,9 @@ ipcMain.handle('apply:start', async (event, { plan, config }) => {
   if (!config || typeof config !== 'object') throw new Error('Invalid apply configuration');
   assertString(config.outputFolder, 'output folder');
   const onProgress = (p) => mainWindow.webContents.send('apply:progress', p);
-  return await mover.apply(plan, config, onProgress);
+  const result = await mover.apply(plan, config, onProgress);
+  if (result.errors.length === 0) scanner.cleanupTempDirs();
+  return result;
 });
 
 // Undo last operation

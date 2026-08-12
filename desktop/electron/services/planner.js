@@ -62,7 +62,9 @@ function buildPlan(files, config) {
 
     moves.push({
       ...file,
-      action:   config.copyMode ? 'copy' : 'move',
+      // Extracted files are temporary copies. The original remains inside the ZIP,
+      // so they must behave as copies even when the user selected Move.
+      action:   file.archiveSourcePath ? 'copy' : (config.copyMode ? 'copy' : 'move'),
       destPath,
       reason:   null,
     });

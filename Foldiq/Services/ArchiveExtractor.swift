@@ -11,6 +11,9 @@ import Foundation
 private let kLocalFileSig:   UInt32 = 0x04034b50
 private let kCentralDirSig:  UInt32 = 0x02014b50
 private let kEndOfCentralSig: UInt32 = 0x06054b50
+private let kMaxArchiveEntries = 100_000
+private let kMaxArchiveMediaBytes: UInt64 = 500 * 1024 * 1024 * 1024
+private let kDiskReserveBytes: Int64 = 1024 * 1024 * 1024
 
 // MARK: ─── Data helpers ───────────────────────────────────────────────────────
 
@@ -119,11 +122,42 @@ actor ArchiveExtractor {
             let zipData = try Data(contentsOf: url, options: .mappedIfSafe)
             let entries = try parseCentralDirectory(zipData)
 
-            for entry in entries where !entry.isDirectory {
-                let destURL = tempDir.appendingPathComponent(entry.filename)
+            // Validate every entry before writing anything. This prevents a
+            // crafted filename such as ../photo.jpg from escaping the temp dir.
+            for entry in entries {
+                _ = try safeDestinationURL(for: entry.filename, inside: tempDir)
+            }
+
+            let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions)
+            let mediaEntries = entries.filter { entry in
+                guard !entry.isDirectory else { return false }
+                let normalized = entry.filename.replacingOccurrences(of: "\\", with: "/")
+                let ext = URL(fileURLWithPath: normalized).pathExtension.lowercased()
+                return supported.contains(ext)
+            }
+
+            var declaredBytes: UInt64 = 0
+            for entry in mediaEntries {
+                let (next, overflow) = declaredBytes.addingReportingOverflow(UInt64(entry.uncompressedSize))
+                guard !overflow, next <= kMaxArchiveMediaBytes else {
+                    throw ZipError.invalidFormat("media expands beyond the safe extraction limit")
+                }
+                declaredBytes = next
+            }
+
+            if let freeBytes = try? tempDir.resourceValues(
+                forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+            ).volumeAvailableCapacityForImportantUsage,
+               declaredBytes > UInt64(max(0, freeBytes - kDiskReserveBytes)) {
+                throw ZipError.invalidFormat("not enough free disk space to extract safely")
+            }
+
+            // Only media is extracted. Unrelated files stay inside the untouched ZIP.
+            for entry in mediaEntries {
+                let destURL = try safeDestinationURL(for: entry.filename, inside: tempDir)
                 // Create intermediate directories if needed
                 let destDir = destURL.deletingLastPathComponent()
-                try? fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+                try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
 
                 let raw = try compressedData(for: entry, in: zipData)
                 let fileData: Data
@@ -134,8 +168,7 @@ actor ArchiveExtractor {
                 case 8:   // DEFLATE
                     fileData = try deflateDecompress(raw, uncompressedSize: Int(entry.uncompressedSize))
                 default:
-                    // Skip entries with unsupported compression — don't fail the whole archive
-                    continue
+                    throw ZipError.unsupportedCompression(entry.compressionMethod)
                 }
 
                 try fileData.write(to: destURL, options: .atomic)
@@ -150,6 +183,33 @@ actor ArchiveExtractor {
     }
 
     // MARK: - ZIP Parsing
+
+    private func safeDestinationURL(for filename: String, inside root: URL) throws -> URL {
+        guard !filename.isEmpty, !filename.contains("\0") else {
+            throw ZipError.invalidFormat("empty or invalid filename")
+        }
+
+        let normalized = filename.replacingOccurrences(of: "\\", with: "/")
+        guard !normalized.hasPrefix("/"),
+              normalized.range(of: #"^[A-Za-z]:"#, options: .regularExpression) == nil else {
+            throw ZipError.invalidFormat("unsafe absolute path: \(filename)")
+        }
+
+        let components = normalized.split(separator: "/", omittingEmptySubsequences: true)
+        guard !components.isEmpty,
+              !components.contains(where: { $0 == ".." }) else {
+            throw ZipError.invalidFormat("unsafe path: \(filename)")
+        }
+
+        let destination = components.reduce(root) { partial, component in
+            partial.appendingPathComponent(String(component), isDirectory: false)
+        }.standardizedFileURL
+        let rootPath = root.standardizedFileURL.path
+        guard destination.path.hasPrefix(rootPath + "/") else {
+            throw ZipError.invalidFormat("unsafe path: \(filename)")
+        }
+        return destination
+    }
 
     /// Find the End of Central Directory record and parse all central directory entries.
     private func parseCentralDirectory(_ data: Data) throws -> [ZipEntry] {
@@ -175,13 +235,20 @@ actor ArchiveExtractor {
 
         let cdCount  = Int(data.u16LE(at: eocd + 10))   // total entries in central dir
         let cdOffset = Int(data.u32LE(at: eocd + 16))   // offset of central dir
+        guard cdCount <= kMaxArchiveEntries else {
+            throw ZipError.invalidFormat("too many archive entries")
+        }
 
         var entries: [ZipEntry] = []
         var pos = cdOffset
 
         for _ in 0 ..< cdCount {
-            guard pos + 46 <= data.count else { break }
-            guard data.u32LE(at: pos) == kCentralDirSig else { break }
+            guard pos + 46 <= data.count else {
+                throw ZipError.invalidFormat("truncated central directory")
+            }
+            guard data.u32LE(at: pos) == kCentralDirSig else {
+                throw ZipError.invalidFormat("central directory signature missing")
+            }
 
             // Bit 0 of the general purpose bit flag (pos + 8) = encryption.
             // Throw immediately — a password-protected file cannot be extracted.
@@ -198,7 +265,9 @@ actor ArchiveExtractor {
             let commentLen        = Int(data.u16LE(at: pos + 32))
             let localHeaderOffset = data.u32LE(at: pos + 42)
 
-            guard pos + 46 + fileNameLen <= data.count else { break }
+            guard pos + 46 + fileNameLen + extraLen + commentLen <= data.count else {
+                throw ZipError.invalidFormat("central directory entry out of bounds")
+            }
             let nameRange = (pos + 46) ..< (pos + 46 + fileNameLen)
             let filename = String(data: data[nameRange], encoding: .utf8)
                         ?? String(data: data[nameRange], encoding: .isoLatin1)
