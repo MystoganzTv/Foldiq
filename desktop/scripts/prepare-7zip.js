@@ -3,7 +3,6 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const https = require('https');
-const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { path7za } = require('7zip-bin');
@@ -45,7 +44,13 @@ function sha256(filePath) {
 async function main() {
   if (requiredFiles.every(file => fs.existsSync(path.join(outputDirectory, file)))) return;
 
-  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'foldiq-7zip-build-'));
+  // Keep the staging directory on the same volume as the final runtime. GitHub's
+  // Windows runners place the system temp folder on C: and the checkout on D:;
+  // renameSync cannot move a directory across those volumes.
+  fs.mkdirSync(path.dirname(outputDirectory), { recursive: true });
+  const temporaryDirectory = fs.mkdtempSync(
+    path.join(path.dirname(outputDirectory), '.foldiq-7zip-build-')
+  );
   const installerPath = path.join(temporaryDirectory, '7zip-x64.exe');
   const extractedDirectory = path.join(temporaryDirectory, 'extracted');
 
@@ -68,7 +73,7 @@ async function main() {
       }
     }
 
-    fs.mkdirSync(path.dirname(outputDirectory), { recursive: true });
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
     fs.renameSync(extractedDirectory, outputDirectory);
   } finally {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
