@@ -236,6 +236,26 @@ final class OrganizationPlannerTests: XCTestCase {
         XCTAssertTrue(plans[0].destinationAbsPath.contains("/2026/"))
     }
 
+    func testUserSetAsidePhotoAlwaysUsesSafeReviewFolder() async {
+        let similar = makePhoto(
+            path: "/Users/tester/Photos/BURST_2.JPG",
+            filename: "BURST_2.JPG",
+            date: isoDate("2026-01-04")
+        )
+        similar.isUserSetAside = true
+
+        let session = makeSession(rootPath: "/Users/tester/Photos", files: [similar])
+        var config = OrganizationConfig()
+        config.separateDuplicates = false
+
+        let plans = await OrganizationPlanner().buildPlan(session: session, config: config) { _ in }
+
+        XCTAssertEqual(
+            plans[0].destinationAbsPath,
+            "/Users/tester/Photos/Organized Media/Duplicates/To Review/BURST_2.JPG"
+        )
+    }
+
     func testReviewPromptRequiresASuccessfulOrganizationAndOnlyRequestsOnce() {
         let suiteName = "AppReviewPromptPolicyTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

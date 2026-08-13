@@ -120,7 +120,7 @@ test('planner separates exact and probable duplicates into explicit folders', (t
   ], { outputFolder, duplicateHandling: 'separate', copyMode: true });
 
   assert.equal(plan[0].destPath, path.join(outputFolder, 'Duplicates', 'Exact Duplicates', 'exact.jpg'));
-  assert.equal(plan[1].destPath, path.join(outputFolder, 'Duplicates', 'Probable Duplicates', 'probable.jpg'));
+  assert.equal(plan[1].destPath, path.join(outputFolder, 'Duplicates', 'To Review', 'probable.jpg'));
   assert.ok(plan.every(file => file.action === 'copy' && file.included));
 });
 
@@ -450,7 +450,7 @@ test('planner routes missing or implausible dates to Unknown Date', (t) => {
   );
 });
 
-test('planner uses file timestamps only after explicit opt-in', (t) => {
+test('planner never treats file timestamps as capture dates', (t) => {
   const dir = tempDir(t);
   const file = {
     id: 1,
@@ -461,13 +461,26 @@ test('planner uses file timestamps only after explicit opt-in', (t) => {
   };
   const base = { outputFolder: path.join(dir, 'output'), groupByMonth: false, groupByDay: false, copyMode: true };
 
-  const conservative = planner.buildPlan([file], { ...base, useFileDateFallback: false });
-  assert.match(conservative[0].destPath, /Unknown Date/);
+  const planned = planner.buildPlan([file], { ...base, useFileDateFallback: true });
+  assert.match(planned[0].destPath, /Unknown Date/);
+  assert.equal(planned[0].dateSource, undefined);
+  assert.equal(planned[0].dateEstimated, undefined);
+});
 
-  const estimated = planner.buildPlan([file], { ...base, useFileDateFallback: true });
-  assert.match(estimated[0].destPath, /2026/);
-  assert.equal(estimated[0].dateSource, 'file date estimate');
-  assert.equal(estimated[0].dateEstimated, true);
+test('a photo explicitly set aside always goes to the safe review folder', (t) => {
+  const dir = tempDir(t);
+  const outputFolder = path.join(dir, 'output');
+  const [planned] = planner.buildPlan([{
+    id: 1,
+    path: path.join(dir, 'other.jpg'),
+    name: 'other.jpg',
+    date: '2026-08-11T12:00:00.000Z',
+    userSetAside: true,
+    isProbableDuplicate: true,
+  }], { outputFolder, duplicateHandling: 'skip', copyMode: true });
+
+  assert.equal(planned.destPath, path.join(outputFolder, 'Duplicates', 'To Review', 'other.jpg'));
+  assert.equal(planned.included, true);
 });
 
 test('Smart Hybrid and By Location use resolved GPS names', (t) => {

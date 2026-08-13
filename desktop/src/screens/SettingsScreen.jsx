@@ -41,8 +41,6 @@ const MODES = [
 
 export default function SettingsScreen({ go, files, config, setConfig }) {
   const mode = config.organizationMode || 'smart';
-  const missingDates = files.filter(file => !file.date).length;
-  const fileDatesAvailable = files.filter(file => !file.date && file.fileModifiedDate).length;
 
   function selectMode(m) {
     setConfig(c => ({
@@ -120,11 +118,6 @@ export default function SettingsScreen({ go, files, config, setConfig }) {
           <div className={s.sectionTitle}>Options</div>
           {[
             { key: 'copyMode', label: 'Copy instead of Move', sub: 'Keep originals in place (uses more disk space)' },
-            {
-              key: 'useFileDateFallback',
-              label: 'Estimate missing capture dates from file dates',
-              sub: `${fileDatesAvailable.toLocaleString()} of ${missingDates.toLocaleString()} missing dates have a file timestamp. Optional: copied or exported files may have a newer date than the photo.`,
-            },
             ...(['smart', 'location'].includes(mode) ? [{
               key: 'useGPSLocation',
               label: 'Use GPS location in folder names',
@@ -145,7 +138,7 @@ export default function SettingsScreen({ go, files, config, setConfig }) {
             </button>
           )}
           <div className={s.settingSelectRow}>
-            <div><div className={s.toggleLabel}>Duplicate handling</div><div className={s.toggleSub}>Applies to exact copies and strong visual matches. Review-only similar photos are never separated automatically.</div></div>
+            <div><div className={s.toggleLabel}>Duplicate handling</div><div className={s.toggleSub}>You can also choose which photo to keep during comparison. Photos you set aside go to a safe review folder.</div></div>
             <select value={config.duplicateHandling} onChange={event => setConfig(c => ({ ...c, duplicateHandling: event.target.value }))}>
               <option value="separate">Separate into Duplicates folders</option>
               <option value="skip">Leave duplicates untouched</option>

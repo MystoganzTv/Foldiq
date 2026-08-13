@@ -10,7 +10,6 @@ const DEFAULTS = Object.freeze({
   duplicateHandling: 'separate',
   includeVideos: true,
   includeArchives: true,
-  useFileDateFallback: false,
   useGPSLocation: false,
 });
 
@@ -33,7 +32,6 @@ function normalizePreferences(value = {}) {
     duplicateHandling,
     includeVideos: value.includeVideos !== false,
     includeArchives: value.includeArchives !== false,
-    useFileDateFallback: value.useFileDateFallback === true,
     useGPSLocation: value.useGPSLocation === true,
   };
 }

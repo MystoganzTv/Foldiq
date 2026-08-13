@@ -3,10 +3,10 @@ import s from './Screen.module.css';
 
 const FILTERS = [
   ['all', 'All'],
-  ['included', 'Will organize'],
-  ['excluded', 'Left untouched'],
+  ['included', 'Ready'],
+  ['excluded', 'Left alone'],
   ['skipped', 'Duplicates'],
-  ['unknown', 'Unknown Date'],
+  ['unknown', 'Missing date'],
 ];
 
 function formatBytes(bytes = 0) {
@@ -39,7 +39,6 @@ function dateSourceLabel(source) {
     'embedded metadata': 'Embedded creation metadata',
     filename: 'Date encoded in filename',
     manual: 'Corrected by you',
-    'file date estimate': 'Estimated from file timestamp',
   };
   return labels[source] || 'No reliable capture date';
 }
@@ -64,8 +63,8 @@ function friendlyDestination(file, outputFolder) {
   const rootMatches = root.length > 0 && root.every(
     (part, index) => destination[index]?.toLowerCase() === part.toLowerCase(),
   );
-  const relative = rootMatches ? destination.slice(root.length) : destination.slice(-4);
-  return relative.join('  ›  ');
+  const relative = rootMatches ? destination.slice(root.length, -1) : destination.slice(-4, -1);
+  return relative.length > 0 ? relative.join('  ›  ') : 'Organized library';
 }
 
 function sourceFolder(file) {
@@ -145,6 +144,9 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
   const included = useMemo(() => candidates.filter(file => file.included !== false), [candidates]);
   const excluded = useMemo(() => candidates.filter(file => file.included === false), [candidates]);
   const skipped = useMemo(() => plan.filter(file => file.action === 'skip'), [plan]);
+  const duplicates = useMemo(() => plan.filter(file => (
+    file.action === 'skip' && file.reason === 'duplicate'
+  ) || /(?:^|[\\/])Duplicates(?:[\\/]|$)/i.test(file.destPath || '')), [plan]);
   const unknown = useMemo(() => plan.filter(isUnknownDate), [plan]);
   const moves = useMemo(() => included.filter(file => file.action === 'move'), [included]);
   const copies = useMemo(() => included.filter(file => file.action === 'copy'), [included]);
@@ -157,7 +159,7 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
     let result = plan;
     if (filter === 'included') result = included;
     if (filter === 'excluded') result = excluded;
-    if (filter === 'skipped') result = skipped;
+    if (filter === 'skipped') result = duplicates;
     if (filter === 'unknown') result = unknown;
 
     const query = search.trim().toLowerCase();
@@ -183,7 +185,7 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
     all: plan.length,
     included: included.length,
     excluded: excluded.length,
-    skipped: skipped.length,
+    skipped: duplicates.length,
     unknown: unknown.length,
   };
   const actionableVisible = visible.filter(file => file.action !== 'skip');
@@ -233,8 +235,8 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
     <div className={s.screen}>
       <div className={s.previewHeader}>
         <div>
-          <h1 className={s.title}>Review before organizing</h1>
-          <p className={s.sub}>Select a file to inspect it. Nothing has been moved or copied yet.</p>
+          <h1 className={s.title}>Review your photos</h1>
+          <p className={s.sub}>Uncheck anything you want to leave alone. Nothing has changed yet.</p>
         </div>
         {!loading && !error && (
           <div className={s.previewHeaderDestination} title={config.outputFolder}>
@@ -271,12 +273,10 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
           <div className={s.previewContent}>
             <div className={s.previewToolbarTop}>
               <div className={s.previewStatsInline}>
-                <PlanStat icon="✓" value={included.length} label="to organize" tone="green" />
-                <PlanStat icon="−" value={excluded.length} label="untouched" tone="neutral" />
-                {moves.length > 0 && <PlanStat icon="→" value={moves.length} label="moved" tone="blue" />}
-                {copies.length > 0 && <PlanStat icon="⧉" value={copies.length} label="copied" tone="blue" />}
-                {skipped.length > 0 && <PlanStat icon="⊘" value={skipped.length} label="duplicates" tone="orange" />}
-                {unknown.length > 0 && <PlanStat icon="?" value={unknown.length} label="no date" tone="yellow" />}
+                <PlanStat icon="✓" value={included.length} label="ready" tone="green" />
+                <PlanStat icon="−" value={excluded.length} label="left alone" tone="neutral" />
+                {duplicates.length > 0 && <PlanStat icon="⊘" value={duplicates.length} label="set aside" tone="orange" />}
+                {unknown.length > 0 && <PlanStat icon="?" value={unknown.length} label="need dates" tone="yellow" />}
               </div>
               <div className={s.previewTools}>
                 <button className={s.iconToolBtn} onClick={() => setShowTree(true)} title="Preview folder structure" aria-label="Preview folder structure">▦</button>
@@ -284,8 +284,8 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
                   className={s.previewSearch}
                   value={search}
                   onChange={event => setSearch(event.target.value)}
-                  placeholder="Search paths…"
-                  aria-label="Search paths"
+                  placeholder="Search photos…"
+                  aria-label="Search photos"
                 />
               </div>
             </div>
@@ -304,8 +304,8 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
               </div>
               <div className={s.previewBulkActions}>
                 <select value={sort} onChange={event => setSort(event.target.value)} aria-label="Sort preview">
-                  <option value="source">Sort: Current path</option>
-                  <option value="destination">Sort: Destination</option>
+                  <option value="source">Sort: Photo</option>
+                  <option value="destination">Sort: Folder</option>
                   <option value="status">Sort: Status</option>
                 </select>
                 {actionableVisible.length > 0 && (
@@ -325,9 +325,8 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
               <div className={s.previewTablePane}>
                 <div className={s.previewTableHeader}>
                   <span />
-                  <span>Current file</span>
-                  <span>Destination</span>
-                  <span>Operation</span>
+                  <span>Photo</span>
+                  <span>Will go to</span>
                 </div>
                 <div className={s.fileList}>
                   {visible.length === 0 && <div className={s.previewEmpty}>No files match these filters.</div>}
@@ -361,16 +360,12 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
                           <span className={s.fileTypeIcon}>{(file.ext || '').replace('.', '').slice(0, 4).toUpperCase() || 'FILE'}</span>
                           <div>
                             <strong title={file.name}>{file.name}</strong>
-                            <small title={file.path}>{sourceFolder(file)}</small>
+                            <small>{formatBytes(file.size)}{file.date ? ` · ${formatDate(file.date)}` : ' · Date unknown'}</small>
                           </div>
                         </div>
                         <div className={s.fileDestinationCell}>
-                          <strong>{automaticSkip ? skipReason(file) : pathParts(file.destPath).at(-1)}</strong>
-                          <small title={file.destPath || ''}>{friendlyDestination(file, config.outputFolder)}</small>
+                          <strong title={file.destPath || ''}>{automaticSkip ? skipReason(file) : friendlyDestination(file, config.outputFolder)}</strong>
                         </div>
-                        <span className={`${s.operationBadge} ${file.action === 'move' ? s.operationMove : s.operationCopy}`}>
-                          {automaticSkip ? 'Skip' : file.action === 'move' ? 'Move original' : 'Copy only'}
-                        </span>
                       </div>
                     );
                   })}
@@ -394,11 +389,11 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
           <div className={s.bottomBar}>
             <button className={s.btnSecondary} onClick={() => go('settings')}>← Back</button>
             <div className={s.previewFooterSummary}>
-              <strong>{included.length.toLocaleString()} files will be organized</strong>
-              <span>{copies.length.toLocaleString()} copied · {moves.length.toLocaleString()} moved · {(excluded.length + skipped.length).toLocaleString()} left untouched</span>
+              <strong>{included.length.toLocaleString()} photos ready</strong>
+              <span>{(excluded.length + skipped.length).toLocaleString()} left alone</span>
             </div>
             <button className={s.btnPrimary} disabled={included.length === 0} onClick={() => setShowPreflight(true)}>
-              Confirm {included.length.toLocaleString()} Files →
+              Organize {included.length.toLocaleString()} Files →
             </button>
           </div>
 
@@ -490,8 +485,8 @@ function PreviewInspector({ file, outputFolder, onClose, onToggle, onCorrectDate
         {file.durationSeconds > 0 && <MetaRow label="Duration" value={`${Math.round(file.durationSeconds)} seconds`} />}
         {file.latitude != null && file.longitude != null && <MetaRow label="GPS" value={`${Number(file.latitude).toFixed(4)}, ${Number(file.longitude).toFixed(4)}`} />}
         {file.isDuplicate && <MetaRow label="Duplicate" value="Exact content match" warning />}
-        {file.probableDuplicateGroupID && <MetaRow label={file.probableMatchKind === 'same' ? 'Same image' : 'Similar photo'} value={`${file.probableMatchKind === 'burst' ? 'Burst · ' : file.probableMatchKind === 'edited' ? 'Edited version · ' : file.probableMatchKind === 'same' ? '' : 'Visually similar · '}${file.probableMatchKind === 'same' ? (file.isProbableDuplicate ? 'strong copy' : 'best copy') : 'Review only'} · ${file.probableMatchScore}% · ${file.probableMatchPeerFilename || 'matching file'}`} warning />}
-        {file.probableDuplicateGroupID && file.probableMatchReasons && <p className={s.inspectorReason}>{file.probableMatchReasons}</p>}
+        {file.probableDuplicateGroupID && <MetaRow label={file.probableMatchKind === 'same' ? 'Same image' : 'Similar photo'} value={`${file.probableMatchKind === 'burst' ? 'Burst · ' : file.probableMatchKind === 'edited' ? 'Edited version · ' : file.probableMatchKind === 'same' ? '' : 'Visually similar · '}${file.probableMatchKind === 'same' ? (file.isProbableDuplicate ? 'other copy' : 'recommended') : 'you decide'} · ${file.probableMatchScore}%`} warning />}
+        {file.probableDuplicateGroupID && file.probableMatchReasons && <p className={s.inspectorReason}>{file.probableMatchReasons.replace(/\s*·\s*review only/gi, '')}</p>}
         <MetaRow label="Source" value={file.archiveSourcePath ? 'Compressed archive' : 'Folder'} />
         <div className={s.dateCorrection}>
           <div className={s.dateCorrectionHeader}>

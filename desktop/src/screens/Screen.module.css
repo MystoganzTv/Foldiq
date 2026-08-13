@@ -253,7 +253,7 @@
   background: #fff; box-shadow: 0 8px 28px rgba(15,23,42,.055);
 }
 .previewTablePane { min-width: 0; flex: 1; display: flex; flex-direction: column; }
-.previewTableHeader, .fileRow { display: grid; grid-template-columns: 26px minmax(190px, .9fr) minmax(230px, 1.15fr) 96px; align-items: center; column-gap: 10px; }
+.previewTableHeader, .fileRow { display: grid; grid-template-columns: 26px minmax(210px, .9fr) minmax(260px, 1.2fr); align-items: center; column-gap: 10px; }
 .previewTableHeader {
   flex: 0 0 32px; padding: 0 12px; border-bottom: 1px solid var(--slate-200); background: #F8FAFC;
   color: var(--slate-400); font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
@@ -362,6 +362,9 @@
 .comparisonFilename { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--slate-800); font-size: 10px; }
 .comparisonPhotoCard > small { color: var(--slate-500); font-size: 9px; }
 .comparisonPhotoCard > p { min-height: 24px; margin: 0; color: var(--slate-500); font-size: 9px; line-height: 1.35; }
+.comparisonKeepButton { margin-top: auto; padding: 7px 10px; border: 1px solid #93C5FD; border-radius: 8px; background: #EFF6FF; color: #2563EB; font-size: 10px; font-weight: 750; cursor: pointer; }
+.comparisonKeepButtonSelected { border-color: #86EFAC; background: #F0FDF4; color: #15803D; }
+.comparisonGroups .comparisonBulkButton { border-color: #93C5FD; background: #EFF6FF; color: #1D4ED8; font-weight: 750; }
 .comparisonFilmstrip { margin-top: 9px; }
 .comparisonFilmstrip > small { color: var(--slate-500); font-size: 9px; }
 .comparisonFilmstrip > div { display: flex; gap: 7px; margin-top: 5px; padding-bottom: 3px; overflow-x: auto; }
@@ -408,7 +411,7 @@
   .previewHeader { padding-inline: 22px; }
   .previewContent { padding-inline: 14px; }
   .previewStatsInline .planStat:nth-child(n+4) { display: none; }
-  .previewTableHeader, .fileRow { grid-template-columns: 24px minmax(160px,.9fr) minmax(180px,1fr) 82px; }
+  .previewTableHeader, .fileRow { grid-template-columns: 24px minmax(170px,.9fr) minmax(190px,1fr); }
   .previewInspector { flex-basis: 245px; }
   .operationBadge { max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
 }
@@ -418,7 +421,7 @@
   .previewToolbarTop { align-items: flex-start; }
   .previewSearch { width: 170px; }
   .previewToolbar { align-items: flex-start; flex-direction: column; }
-  .previewTableHeader, .fileRow { grid-template-columns: 24px minmax(160px,.85fr) minmax(200px,1.15fr) 85px; }
+  .previewTableHeader, .fileRow { grid-template-columns: 24px minmax(170px,.85fr) minmax(210px,1.15fr); }
 }
 
 /* ── Error list ── */

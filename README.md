@@ -52,7 +52,9 @@ Downloads/Photos/                Downloads/Photos/Organized Media/
 
 Same Image and Similar Photos include a side-by-side comparison workspace with
 large previews, synchronized zoom, metadata, confidence, and group navigation.
-Bursts and edited versions are always review-only and never move automatically.
+The user can keep one photo per group or accept Foldiq's recommendations for all
+groups. Other selected copies move to `Duplicates/To Review` and remain undoable;
+nothing is permanently deleted.
 
 ---
 

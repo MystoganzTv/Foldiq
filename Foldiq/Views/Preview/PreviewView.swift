@@ -56,10 +56,10 @@ struct PreviewView: View {
 
     enum FilterStatus: String, CaseIterable {
         case all = "All"
-        case included = "Included"
-        case excluded = "Excluded"
+        case included = "Ready"
+        case excluded = "Left Alone"
         case duplicate = "Duplicates"
-        case unknownDate = "Unknown Date"
+        case unknownDate = "Missing Date"
     }
 
     enum SortColumn: String { case source, destination, status }
@@ -201,32 +201,25 @@ struct PreviewView: View {
                     PlanStat(
                         icon: "checkmark.circle.fill",
                         value: "\(includedPlans.count)",
-                        label: "included",
+                        label: "ready",
                         color: .green
                     )
                     PlanStat(
                         icon: "minus.circle.fill",
                         value: "\(excludedPlans.count)",
-                        label: "excluded",
+                        label: "left alone",
                         color: .secondary
-                    )
-                    PlanStat(
-                        icon: nav.organizationConfig.fileOperation == .move
-                              ? "arrow.right.circle.fill" : "doc.on.doc.fill",
-                        value: nav.organizationConfig.fileOperation == .move ? "Move" : "Copy",
-                        label: "originals",
-                        color: nav.organizationConfig.fileOperation == .move ? .blue : .green
                     )
                     if duplicatePlanCount > 0 {
                         PlanStat(icon: "square.on.square.fill",
                                  value: "\(duplicatePlanCount)",
-                                 label: "duplicates",
+                                 label: "set aside",
                                  color: .orange)
                     }
                     if unknownDatePlanCount > 0 {
                         PlanStat(icon: "calendar.badge.exclamationmark",
                                  value: "\(unknownDatePlanCount)",
-                                 label: "no date",
+                                 label: "need dates",
                                  color: Color(red: 0.8, green: 0.65, blue: 0.0))
                     }
                 }
@@ -239,7 +232,7 @@ struct PreviewView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 390)
 
-                TextField("Search paths…", text: $searchQuery)
+                TextField("Search photos…", text: $searchQuery)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
                     .padding(.leading, 12)
@@ -294,43 +287,24 @@ struct PreviewView: View {
                         }
                         .width(28)
 
-                        TableColumn("Current Path") { plan in
+                        TableColumn("Photo") { plan in
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(URL(fileURLWithPath: plan.sourceAbsPath).lastPathComponent)
                                     .fontWeight(.medium)
                                     .lineLimit(1)
                                     .foregroundStyle(plan.status == .skipped ? .secondary : .primary)
-                                Text(plan.sourceURL.deletingLastPathComponent().path)
-                                    .font(.caption2).foregroundStyle(.secondary)
-                                    .lineLimit(1).truncationMode(.head)
                             }
                         }
                         .width(min: 180, ideal: 240)
 
-                        TableColumn("→ Destination") { plan in
+                        TableColumn("Will go to") { plan in
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(URL(fileURLWithPath: plan.destinationAbsPath).lastPathComponent)
-                                    .lineLimit(1)
-                                    .foregroundStyle(plan.status == .skipped ? .secondary : .primary)
                                 Text(friendlyDestination(for: plan))
-                                    .font(.caption2).foregroundStyle(.secondary)
+                                    .foregroundStyle(plan.status == .skipped ? .secondary : .primary)
                                     .lineLimit(1).truncationMode(.middle)
                             }
                         }
-                        .width(min: 180, ideal: 260)
-
-                        TableColumn("Operation") { plan in
-                            Text(plan.operation == .move ? "Move original" : "Copy only")
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    (plan.operation == .move ? Color.blue : Color.green).opacity(0.12),
-                                    in: Capsule()
-                                )
-                                .foregroundStyle(plan.operation == .move ? .blue : .green)
-                        }
-                        .width(110)
+                        .width(min: 220, ideal: 340)
 
                         TableColumn("") { plan in
                             if plan.destinationAbsPath.contains("/Duplicates/") {
@@ -405,7 +379,7 @@ struct PreviewView: View {
 
                 Spacer()
 
-                Text("\(includedPlans.count) included · \(excludedPlans.count) excluded")
+                Text("\(includedPlans.count) ready · \(excludedPlans.count) left alone")
                     .font(.caption).foregroundStyle(.secondary)
 
                 Spacer()
@@ -416,7 +390,7 @@ struct PreviewView: View {
                     HStack {
                         Image(systemName: nav.organizationConfig.fileOperation == .move
                               ? "arrow.right.circle.fill" : "doc.on.doc.fill")
-                        Text("Confirm \(includedPlans.count) Files")
+                        Text("Organize \(includedPlans.count) Files")
                             .fontWeight(.semibold)
                     }
                 }
@@ -481,6 +455,7 @@ struct PreviewView: View {
         }
         return String(destination.dropFirst(root.count + 1))
             .split(separator: "/")
+            .dropLast()
             .joined(separator: "  ›  ")
     }
 
@@ -819,28 +794,6 @@ struct FileInspectorPanel: View {
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
 
-                            if let fileDateSuggestion {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Label("File date available", systemImage: "clock.badge.questionmark")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.orange)
-                                    Text(fileDateSuggestion.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.caption)
-                                    Text("This is a file-system timestamp, not confirmed camera metadata. It may be the date the photo was copied or exported.")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                    Button("Use File Date Estimate") {
-                                        assignedDate = fileDateSuggestion
-                                        applyDate(fileDateSuggestion)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .tint(.orange)
-                                }
-                                .padding(10)
-                                .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
-                            }
-
                             DatePicker(
                                 "Date",
                                 selection: $assignedDate,
@@ -894,9 +847,6 @@ struct FileInspectorPanel: View {
         )
         let file = (try? context.fetch(descriptor))?.first
         mediaFile = file
-        if isUnknownDate, let suggestion = fileSystemDateSuggestion(for: file) {
-            assignedDate = suggestion
-        }
 
         // Determine kind: prefer SwiftData value, fall back to file extension.
         let url = plan.sourceURL
@@ -935,18 +885,6 @@ struct FileInspectorPanel: View {
             }
         }.value
         thumbnail = img
-    }
-
-    private var fileDateSuggestion: Date? {
-        fileSystemDateSuggestion(for: mediaFile)
-    }
-
-    private func fileSystemDateSuggestion(for file: MediaFile?) -> Date? {
-        guard let file else { return nil }
-        return [file.dateCreated, file.dateModified]
-            .compactMap { $0 }
-            .filter { $0 <= Date() }
-            .min()
     }
 
     // MARK: - Apply manual date

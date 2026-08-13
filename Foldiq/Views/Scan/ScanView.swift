@@ -291,6 +291,7 @@ struct FileDrillSheet: View {
     let category: ScanResultsPanel.FileCategory
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var searchText = ""
     @State private var previewURL: URL?          // Quick Look target
     @State private var hoveredFileID: UUID?      // for row highlight
@@ -309,7 +310,14 @@ struct FileDrillSheet: View {
         case .photos:             return all.filter { $0.mediaKind == .photo }
         case .videos:             return all.filter { $0.mediaKind == .video }
         case .archives:           return all.filter { $0.archiveSourcePath != nil }
-        case .duplicates:         return all.filter { $0.isDuplicate }
+        case .duplicates:         return all
+                .filter { $0.duplicateGroupID != nil }
+                .sorted {
+                    let g = ($0.duplicateGroupID?.uuidString ?? "") <
+                            ($1.duplicateGroupID?.uuidString ?? "")
+                    return g || ($0.duplicateGroupID == $1.duplicateGroupID
+                                 && $0.isDuplicate && !$1.isDuplicate)
+                }
         case .probableDuplicates: return all
                 .filter { $0.probableMatchKindRaw == "same" }
                 .sorted {
@@ -338,12 +346,12 @@ struct FileDrillSheet: View {
     }
 
     var isComparisonCategory: Bool {
-        category == .probableDuplicates || category == .similarPhotos
+        category == .duplicates || category == .probableDuplicates || category == .similarPhotos
     }
 
     var comparisonGroups: [ComparisonGroup] {
-        let eligible = filtered.filter { $0.probableDuplicateGroupID != nil }
-        return Dictionary(grouping: eligible, by: { $0.probableDuplicateGroupID! })
+        let eligible = filtered.filter { comparisonGroupID(for: $0) != nil }
+        return Dictionary(grouping: eligible, by: { comparisonGroupID(for: $0)! })
             .map { id, files in
                 ComparisonGroup(id: id, files: files.sorted { $0.filename < $1.filename })
             }
@@ -357,6 +365,10 @@ struct FileDrillSheet: View {
 
     var comparisonBaseFile: MediaFile? {
         guard let group = selectedComparisonGroup else { return nil }
+        if category == .duplicates,
+           let original = group.files.first(where: { !$0.isDuplicate }) {
+            return original
+        }
         if category == .probableDuplicates,
            let original = group.files.first(where: { !$0.isProbableDuplicate }) {
             return original
@@ -408,13 +420,13 @@ struct FileDrillSheet: View {
         case .archives:
             return "These photos and videos were extracted from compressed archives. The original ZIP, RAR, or 7z files remain untouched. On undo, Foldiq removes only the organized copies."
         case .missingDate:
-            return "These files have no reliable EXIF, XMP, filename, or video capture date. A file-system date may still appear as an orange estimate, but Foldiq will not treat it as the photo date unless you choose it in Preview."
+            return "Foldiq could not determine when these photos were taken. They will stay in Unknown Date unless you assign the real date in Preview."
         case .duplicates:
-            return "These are exact duplicate copies (identical file contents, verified by SHA-256). One copy per group stays organized; the rest go to Duplicates/Exact Duplicates/."
+            return "These photos are exactly identical. Choose the copy to keep; the others go to a safe review folder and can be restored with Undo."
         case .probableDuplicates:
-            return "These are strong content matches: the same image after renaming, rotation, metadata changes, or re-encoding. The best copy stays organized; other copies follow your Duplicate handling setting."
+            return "These are the same photo after renaming, rotation, metadata changes, or re-encoding. Choose the copy to keep; the others go to Duplicates/To Review."
         case .similarPhotos:
-            return "Bursts, edited versions, and visually similar photos. These suggestions are always Review only: Foldiq never separates or moves them automatically."
+            return "Bursts, edited versions, and visually similar photos. Choose the best photo only when you are sure; the others will be set aside safely for review."
         default:
             return ""
         }
@@ -430,7 +442,9 @@ struct FileDrillSheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(category.rawValue)
                         .font(.title2).fontWeight(.bold)
-                    Text("\(files.count) file\(files.count == 1 ? "" : "s")")
+                    Text(isComparisonCategory
+                         ? "\(comparisonGroups.count) group\(comparisonGroups.count == 1 ? "" : "s") · \(files.count) photos"
+                         : "\(files.count) file\(files.count == 1 ? "" : "s")")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -504,7 +518,7 @@ struct FileDrillSheet: View {
                                 .foregroundStyle(category == .similarPhotos ? .indigo : .yellow)
                                 .font(.caption)
                                 .frame(width: 16)
-                                .help(category == .similarPhotos ? "Review only — never moved automatically" : (file.isProbableDuplicate ? "Same image — follows Duplicate handling" : "Best copy — stays organized"))
+                                .help(category == .similarPhotos ? "Compare and choose the photo to keep" : (file.isProbableDuplicate ? "Other copy" : "Recommended copy"))
                         } else {
                             Image(systemName: {
                                 switch file.mediaKind {
@@ -541,13 +555,7 @@ struct FileDrillSheet: View {
                                     Text("·")
                                     Text(date, style: .date)
                                 } else {
-                                    Text("·  No date").foregroundStyle(.orange)
-                                    if category == .missingDate, let fileDate = file.dateModified {
-                                        Text("·  File date")
-                                            .foregroundStyle(.orange)
-                                        Text(fileDate, style: .date)
-                                            .foregroundStyle(.orange)
-                                    }
+                                    Text("·  Date unknown").foregroundStyle(.orange)
                                 }
                                 if file.isDuplicate {
                                     Text("·  Exact dup").foregroundStyle(.orange)
@@ -568,7 +576,7 @@ struct FileDrillSheet: View {
                                         .lineLimit(1)
                                 }
                                 if category == .similarPhotos {
-                                    Text("\(similarKindLabel(file)) — Review only")
+                                    Text("\(similarKindLabel(file)) — you decide")
                                         .font(.caption2).foregroundStyle(.indigo.opacity(0.8))
                                 } else if !file.isProbableDuplicate {
                                     Text("Best copy — stays in organized structure")
@@ -650,6 +658,13 @@ struct FileDrillSheet: View {
             HStack(spacing: 0) {
                 ScrollView {
                     LazyVStack(spacing: 7) {
+                        Button("Keep recommended in all groups") {
+                            keepRecommendedInAllGroups()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .padding(.bottom, 4)
+
                         ForEach(comparisonGroups) { group in
                             let selected = selectedComparisonGroup?.id == group.id
                             Button {
@@ -687,8 +702,8 @@ struct FileDrillSheet: View {
 
                 VStack(spacing: 12) {
                     HStack {
-                        Label(category == .similarPhotos ? "Review only" : "Content comparison",
-                              systemImage: category == .similarPhotos ? "eye.fill" : "checkmark.shield.fill")
+                        Label(category == .duplicates ? "Exact copies" : (category == .similarPhotos ? "You decide" : "Same image"),
+                              systemImage: category == .similarPhotos ? "hand.tap.fill" : "checkmark.shield.fill")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(category == .similarPhotos ? .orange : .green)
                         Spacer()
@@ -705,16 +720,20 @@ struct FileDrillSheet: View {
                         HStack(spacing: 12) {
                             ComparisonPhotoCard(
                                 file: base,
-                                title: category == .probableDuplicates ? "Best copy" : "Reference",
+                                title: "Recommended",
                                 tint: .green,
                                 zoom: comparisonZoom,
+                                isKept: keptPhotoID(in: selectedComparisonGroup) == base.id,
+                                onKeep: { keep(base, in: selectedComparisonGroup) },
                                 onOpen: { previewURL = base.url }
                             )
                             ComparisonPhotoCard(
                                 file: candidate,
-                                title: category == .similarPhotos ? similarKindLabel(candidate) : "Matching copy",
+                                title: category == .similarPhotos ? similarKindLabel(candidate) : "Other copy",
                                 tint: category == .similarPhotos ? .orange : .yellow,
                                 zoom: comparisonZoom,
+                                isKept: keptPhotoID(in: selectedComparisonGroup) == candidate.id,
+                                onKeep: { keep(candidate, in: selectedComparisonGroup) },
                                 onOpen: { previewURL = candidate.url }
                             )
                         }
@@ -743,12 +762,10 @@ struct FileDrillSheet: View {
                         }
                     }
 
-                    if category == .similarPhotos {
-                        Text("Foldiq will not move or separate anything shown here. Similar Photos is always review-only.")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.orange)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    Text("One photo stays in your organized library. The others go to Duplicates/To Review. Nothing is permanently deleted.")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(14)
             }
@@ -763,12 +780,64 @@ struct FileDrillSheet: View {
 
     private func comparisonCandidate(in group: ComparisonGroup) -> MediaFile? {
         let base: MediaFile?
-        if category == .probableDuplicates {
+        if category == .duplicates {
+            base = group.files.first(where: { !$0.isDuplicate }) ?? group.files.first
+        } else if category == .probableDuplicates {
             base = group.files.first(where: { !$0.isProbableDuplicate }) ?? group.files.first
         } else {
             base = group.files.first
         }
         return group.files.first { $0.id != base?.id }
+    }
+
+    private func comparisonGroupID(for file: MediaFile) -> UUID? {
+        category == .duplicates ? file.duplicateGroupID : file.probableDuplicateGroupID
+    }
+
+    private func keptPhotoID(in group: ComparisonGroup?) -> UUID? {
+        guard let group else { return nil }
+        if group.files.contains(where: { $0.isUserSetAside }) {
+            return group.files.first(where: { !$0.isUserSetAside })?.id
+        }
+        if category == .duplicates {
+            return group.files.first(where: { !$0.isDuplicate })?.id
+        }
+        if category == .probableDuplicates {
+            return group.files.first(where: { !$0.isProbableDuplicate })?.id
+        }
+        return nil
+    }
+
+    private func keep(_ chosen: MediaFile, in group: ComparisonGroup?) {
+        guard let group else { return }
+        for file in group.files {
+            let setAside = file.id != chosen.id
+            file.isUserSetAside = setAside
+            if category == .duplicates {
+                file.isDuplicate = setAside
+            } else {
+                file.isProbableDuplicate = setAside
+            }
+        }
+        try? modelContext.save()
+    }
+
+    private func keepRecommendedInAllGroups() {
+        for group in comparisonGroups {
+            let recommended: MediaFile?
+            if category == .duplicates {
+                recommended = group.files.first(where: { !$0.isDuplicate }) ?? group.files.first
+            } else if category == .probableDuplicates {
+                recommended = group.files.first(where: { !$0.isProbableDuplicate }) ?? group.files.first
+            } else {
+                recommended = group.files.max {
+                    let lhsPixels = ($0.pixelWidth ?? 0) * ($0.pixelHeight ?? 0)
+                    let rhsPixels = ($1.pixelWidth ?? 0) * ($1.pixelHeight ?? 0)
+                    return lhsPixels == rhsPixels ? $0.fileSize < $1.fileSize : lhsPixels < rhsPixels
+                }
+            }
+            if let recommended { keep(recommended, in: group) }
+        }
     }
 
     private func selectInitialComparisonIfNeeded() {
@@ -802,6 +871,8 @@ private struct ComparisonPhotoCard: View {
     let title: String
     let tint: Color
     let zoom: Double
+    let isKept: Bool
+    let onKeep: () -> Void
     let onOpen: () -> Void
 
     var body: some View {
@@ -846,11 +917,15 @@ private struct ComparisonPhotoCard: View {
             .font(.caption2)
             .foregroundStyle(.secondary)
             if let reasons = file.probableMatchReasons {
-                Text(reasons)
+                Text(reasons.replacingOccurrences(of: " · review only", with: ""))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
+            Button(isKept ? "Keeping this photo" : "Keep this photo", action: onKeep)
+                .buttonStyle(.borderedProminent)
+                .tint(isKept ? .green : .accentColor)
+                .frame(maxWidth: .infinity)
         }
         .padding(11)
         .background(PlatformColors.windowBackground.opacity(0.55),

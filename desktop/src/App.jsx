@@ -22,7 +22,6 @@ export default function App() {
     duplicateHandling: 'separate',
     includeVideos: true,
     includeArchives: true,
-    useFileDateFallback: false,
     useGPSLocation: false,
   });
   const [result, setResult] = useState(null);

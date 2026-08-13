@@ -143,6 +143,7 @@ function markExactDuplicates(files) {
   for (const file of files) {
     file.isDuplicate = false;
     file.duplicateOf = null;
+    file.duplicateGroupID = null;
   }
   const byHash = new Map();
   for (const file of files) {
@@ -155,7 +156,9 @@ function markExactDuplicates(files) {
     if (group.length < 2) continue;
     groups++;
     const original = electOriginal(group);
+    const groupID = `exact-${groups}`;
     for (const file of group) {
+      file.duplicateGroupID = groupID;
       if (file === original) continue;
       file.isDuplicate = true;
       file.duplicateOf = original.id;

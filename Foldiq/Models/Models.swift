@@ -93,11 +93,12 @@ final class MediaFile {
 
     // ── Probable duplicate detection ──────────────────────────────────────────
     // Set by ProbableDuplicateDetector after exact SHA-256 detection.
-    // isProbableDuplicate == true  →  file is routed to Duplicates/Probable Duplicates/
+    // isProbableDuplicate == true  →  file is routed to Duplicates/To Review/
     // probableDuplicateGroupID set on BOTH sides of a probable pair (original + duplicate).
     // Exact SHA-256 duplicates (isDuplicate) are never also marked isProbableDuplicate.
-    var isProbableDuplicate: Bool       // routed to Probable Duplicates/ folder
+    var isProbableDuplicate: Bool       // routed to the To Review folder
     var probableDuplicateGroupID: UUID? // shared by both sides of the probable pair
+    var isUserSetAside: Bool = false    // explicitly set aside after visual review
     var probableMatchScore: Int         // confidence 0–100
     var probableMatchReasons: String?   // e.g. "Same filename · Size ±0.4% · Timestamp Δ3m"
     var probableMatchPeerFilename: String? // other file's filename for display
@@ -117,6 +118,7 @@ final class MediaFile {
         self.isDuplicate = false
         self.isOrganized = false
         self.isProbableDuplicate = false
+        self.isUserSetAside = false
         self.probableMatchScore = 0
     }
 

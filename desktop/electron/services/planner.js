@@ -40,11 +40,14 @@ function locationDaySuffix(file) {
 }
 
 function buildDestPath(file, config) {
+  if (file.userSetAside) {
+    return path.join(config.outputFolder, 'Duplicates', 'To Review', file.name);
+  }
   if (config.duplicateHandling === 'separate' && file.isDuplicate) {
     return path.join(config.outputFolder, 'Duplicates', 'Exact Duplicates', file.name);
   }
   if (config.duplicateHandling === 'separate' && file.isProbableDuplicate) {
-    return path.join(config.outputFolder, 'Duplicates', 'Probable Duplicates', file.name);
+    return path.join(config.outputFolder, 'Duplicates', 'To Review', file.name);
   }
   const date = new Date(file.date);
   const latest = Date.now() + 24 * 60 * 60 * 1000;
@@ -122,7 +125,7 @@ function buildPlan(files, config) {
   for (const file of files) {
     // The user may leave duplicate extras untouched. Originals always remain in
     // the normal organized structure.
-    if (config.duplicateHandling === 'skip' && (file.isDuplicate || file.isProbableDuplicate)) {
+    if (!file.userSetAside && config.duplicateHandling === 'skip' && (file.isDuplicate || file.isProbableDuplicate)) {
       moves.push({
         ...file,
         action: 'skip',
@@ -133,19 +136,11 @@ function buildPlan(files, config) {
       continue;
     }
 
-    const estimatedDate = !file.date && config.useFileDateFallback ? file.fileModifiedDate : null;
-    const plannedFile = estimatedDate ? {
-      ...file,
-      date: estimatedDate,
-      dateSource: 'file date estimate',
-      dateTag: 'FileModifyDate',
-      dateEstimated: true,
-    } : file;
-    const rawDest = buildDestPath(plannedFile, config);
+    const rawDest = buildDestPath(file, config);
     const destPath = resolveCollision(rawDest, usedPaths);
 
     moves.push({
-      ...plannedFile,
+      ...file,
       // Extracted files are temporary copies. The original remains inside the archive,
       // so they must behave as copies even when the user selected Move.
       action:   file.archiveSourcePath ? 'copy' : (config.copyMode ? 'copy' : 'move'),

@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-13 02:25 America/New_York
+Updated: 2026-08-13 02:47 America/New_York
 
 ## Read this first
 
@@ -207,24 +207,23 @@ capture dates`, the metadata stage was redesigned again:
 - Smart Matches form connected groups of two or more files instead of consuming
   only one pair and silently dropping a third copy.
 - Strong visual matches may follow the user's duplicate-handling choice. Weaker
-  similarities and metadata-only matches are explicitly `Review only` and are
-  never separated automatically.
+  similarities remain untouched until the user explicitly chooses one photo to
+  keep.
 - Scan results now separate `Same Image` from `Similar Photos`. Similar Photos
-  labels bursts, edited/exported versions, and other visual similarities; every
-  one of these classifications is permanently review-only and remains in the
-  normal organization flow.
+  labels bursts, edited/exported versions, and other visual similarities.
 - macOS and Windows now open Same Image and Similar Photos in a side-by-side
   comparison workspace with large previews, metadata, confidence, group
-  navigation, a multi-photo filmstrip, and synchronized 1x–3x zoom. The orange
-  review-only warning remains visible in Similar Photos.
+  navigation, a multi-photo filmstrip, synchronized 1x–3x zoom, per-photo
+  `Keep this photo`, and `Keep recommended in all groups`. Photos not kept go to
+  `Duplicates/To Review`, remain covered by Undo, and are never deleted outright.
 - The macOS comparison UI was exercised against the real 73-photo Desktop test
   folder: 3 Same Image groups and 3 Similar Photos groups rendered correctly.
 - Seven JPEGs left in the real `Unknown Date` output were audited with every
   ExifTool time group. None contains EXIF, XMP, IPTC, or filename capture dates.
   Four retain filesystem dates from 2024 and three contain only 2026 copy dates.
-  Foldiq now displays these as orange `File date` evidence, without treating them
-  as capture dates automatically; macOS Preview offers an explicit per-file
-  `Use File Date Estimate` action with a warning.
+  File-system dates are no longer shown as capture-date evidence or offered as
+  an estimate. These files remain `Date unknown` until the user assigns the real
+  capture date in Preview.
 - Windows supports JPG, PNG, HEIC/HEIF, and TIFF visual decoding. HEIC/TIFF run
   in a worker thread with concurrency 1, a 60 MP/256 MB safety cap, live
   progress, and cancellation so the scan UI remains responsive.
@@ -232,11 +231,14 @@ capture dates`, the metadata stage was redesigned again:
   ImageIO when the system provides a decoder.
 - Windows ships HEIC support outside `app.asar` with third-party license notices
   for LGPL compliance.
-- Current validation: Windows 56 tests passed (1 platform-gated RAR test skipped),
-  macOS 29 tests passed, the macOS Release build reports 1.0.18 (117), Windows
+- Current validation: Windows 57 tests passed (1 platform-gated RAR test skipped),
+  macOS 30 tests passed, the macOS Release build reports 1.0.18 (117), Windows
   installer packaging passed, and a real renamed HEIC with changed metadata was
   detected end-to-end as a 100% visual match in 2.9 seconds. The 1.0.18 installers
   have not been distributed or uploaded yet.
+- Fresh local test builds with the selectable Keep/To Review workflow are at
+  `/Users/enrique/Desktop/Foldiq 1.0.18 Test.app` and
+  `/Users/enrique/Desktop/Foldiq Setup 1.0.18.exe`.
 
 Major macOS/Windows parity work included in the same build:
 

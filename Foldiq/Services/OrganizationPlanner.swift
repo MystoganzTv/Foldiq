@@ -87,6 +87,14 @@ actor OrganizationPlanner {
         config: OrganizationConfig,
         outputRoot: URL
     ) async -> URL {
+        // A choice made in the photo comparison screen always wins over the
+        // automatic duplicate preference. It remains reversible through Undo.
+        if file.isUserSetAside {
+            return outputRoot
+                .appendingPathComponent("Duplicates")
+                .appendingPathComponent("To Review")
+        }
+
         if config.mode == .byLocation {
             return await locationModeFolder(for: file, config: config, outputRoot: outputRoot)
         }
@@ -108,12 +116,12 @@ actor OrganizationPlanner {
                 .appendingPathComponent("Exact Duplicates")
         }
 
-        // Probable duplicates → Duplicates/Probable Duplicates/
+        // Probable duplicates → Duplicates/To Review/
         // (only the file elected as "duplicate" side has isProbableDuplicate == true)
         if file.isProbableDuplicate && config.separateDuplicates {
             return outputRoot
                 .appendingPathComponent("Duplicates")
-                .appendingPathComponent("Probable Duplicates")
+                .appendingPathComponent("To Review")
         }
 
         // No date → Unknown Date/
@@ -151,6 +159,12 @@ actor OrganizationPlanner {
         config: OrganizationConfig,
         outputRoot: URL
     ) async -> URL {
+        if file.isUserSetAside {
+            return outputRoot
+                .appendingPathComponent("Duplicates")
+                .appendingPathComponent("To Review")
+        }
+
         // Duplicates still stay in dedicated review buckets regardless of mode.
         if file.isDuplicate && config.separateDuplicates {
             return outputRoot
@@ -161,7 +175,7 @@ actor OrganizationPlanner {
         if file.isProbableDuplicate && config.separateDuplicates {
             return outputRoot
                 .appendingPathComponent("Duplicates")
-                .appendingPathComponent("Probable Duplicates")
+                .appendingPathComponent("To Review")
         }
 
         var base = await locationFolderAllowingUnknownDate(for: file, outputRoot: outputRoot)

@@ -49,7 +49,6 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
         probDupes: files.filter(f => f.probableMatchKind === 'same').length,
         similar:   files.filter(f => f.probableDuplicateGroupID && f.probableMatchKind !== 'same').length,
         noDate:    files.filter(f => !f.date).length,
-        fileDate:  files.filter(f => !f.date && f.fileModifiedDate).length,
         embeddedDates: files.filter(f => f.date && f.dateSource !== 'filename').length,
         filenameDates: files.filter(f => f.date && f.dateSource === 'filename').length,
         total:     files.length,
@@ -180,7 +179,6 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
               <span>{stats.embeddedDates.toLocaleString()} embedded</span>
               <span>{stats.filenameDates.toLocaleString()} from filenames</span>
               <span>{stats.noDate.toLocaleString()} missing</span>
-              {stats.fileDate > 0 && <small>{stats.fileDate.toLocaleString()} missing dates have an optional file-timestamp estimate available in Organization Settings.</small>}
             </div>
           </>
         )}
@@ -203,6 +201,22 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
         <CategoryModal
           card={selectedCategory}
           files={filesForCategory(selectedCategory.key, scannedFiles)}
+          onKeepPhotos={decisions => {
+            const updated = scannedFiles.map(file => {
+              const decision = decisions.find(item => item.exact
+                ? file.duplicateGroupID === item.groupID
+                : file.probableDuplicateGroupID === item.groupID);
+              if (!decision) return file;
+              const setAside = file.path !== decision.keepPath;
+              return {
+                ...file,
+                userSetAside: setAside,
+                ...(decision.exact ? { isDuplicate: setAside } : { isProbableDuplicate: setAside }),
+              };
+            });
+            setScannedFiles(updated);
+            setFiles(updated);
+          }}
           onClose={() => setSelectedCategory(null)}
         />
       )}
@@ -237,31 +251,31 @@ function filesForCategory(key, files) {
   const videos = new Set(['.mov','.mp4','.m4v','.avi','.mkv']);
   if (key === 'photos') return files.filter(file => photos.has(file.ext));
   if (key === 'videos') return files.filter(file => videos.has(file.ext));
-  if (key === 'dupes') return files.filter(file => file.isDuplicate);
+  if (key === 'dupes') return files.filter(file => file.duplicateGroupID);
   if (key === 'probDupes') return files.filter(file => file.probableMatchKind === 'same');
   if (key === 'similar') return files.filter(file => file.probableDuplicateGroupID && file.probableMatchKind !== 'same');
   if (key === 'noDate') return files.filter(file => !file.date);
-  if (key === 'fileDate') return files.filter(file => !file.date && file.fileModifiedDate);
   if (key === 'zips') return files.filter(file => file.archiveSourcePath);
   return files;
 }
 
-function CategoryModal({ card, files, onClose }) {
-  const comparisonMode = card.key === 'probDupes' || card.key === 'similar';
+function CategoryModal({ card, files, onClose, onKeepPhotos }) {
+  const comparisonMode = card.key === 'dupes' || card.key === 'probDupes' || card.key === 'similar';
   const groups = useMemo(() => {
     if (!comparisonMode) return [];
     const grouped = new Map();
     for (const file of files) {
-      if (!file.probableDuplicateGroupID) continue;
-      if (!grouped.has(file.probableDuplicateGroupID)) grouped.set(file.probableDuplicateGroupID, []);
-      grouped.get(file.probableDuplicateGroupID).push(file);
+      const groupID = card.key === 'dupes' ? file.duplicateGroupID : file.probableDuplicateGroupID;
+      if (!groupID) continue;
+      if (!grouped.has(groupID)) grouped.set(groupID, []);
+      grouped.get(groupID).push(file);
     }
     return Array.from(grouped, ([id, groupFiles]) => ({
       id,
       files: groupFiles.sort((left, right) => left.name.localeCompare(right.name)),
     })).filter(group => group.files.length > 1)
       .sort((left, right) => left.files[0].name.localeCompare(right.files[0].name));
-  }, [comparisonMode, files]);
+  }, [card.key, comparisonMode, files]);
   const [selectedGroupID, setSelectedGroupID] = useState(null);
   const [selectedFilePath, setSelectedFilePath] = useState(null);
   const [zoom, setZoom] = useState(1);
@@ -271,9 +285,13 @@ function CategoryModal({ card, files, onClose }) {
     const rightDate = new Date(right.date || right.fileModifiedDate || 8640000000000000).getTime();
     return leftDate - rightDate || left.name.localeCompare(right.name);
   }) : [];
-  const reference = card.key === 'probDupes'
-    ? selectedGroup?.files.find(file => !file.isProbableDuplicate) || selectedGroup?.files[0]
-    : sortedReferenceFiles[0];
+  const reference = card.key === 'dupes'
+    ? selectedGroup?.files.find(file => !file.isDuplicate) || selectedGroup?.files[0]
+    : card.key === 'probDupes'
+      ? selectedGroup?.files.find(file => !file.isProbableDuplicate) || selectedGroup?.files[0]
+      : selectedGroup?.files.some(file => file.userSetAside)
+        ? selectedGroup.files.find(file => !file.userSetAside) || sortedReferenceFiles[0]
+        : sortedReferenceFiles[0];
   const candidates = selectedGroup?.files.filter(file => file.path !== reference?.path) || [];
   const candidate = candidates.find(file => file.path === selectedFilePath) || candidates[0];
 
@@ -287,32 +305,64 @@ function CategoryModal({ card, files, onClose }) {
     setZoom(1);
   }
 
+  function keepPhoto(file) {
+    if (!selectedGroup) return;
+    onKeepPhotos([{ groupID: selectedGroup.id, keepPath: file.path, exact: card.key === 'dupes' }]);
+  }
+
+  function isKept(file) {
+    if (!selectedGroup) return false;
+    if (selectedGroup.files.some(item => item.userSetAside)) return !file.userSetAside;
+    if (card.key === 'dupes') return !file.isDuplicate;
+    if (card.key === 'probDupes') return !file.isProbableDuplicate;
+    return false;
+  }
+
+  function keepRecommendedInAllGroups() {
+    const decisions = groups.map(group => {
+      const recommended = card.key === 'dupes'
+        ? group.files.find(file => !file.isDuplicate) || group.files[0]
+        : card.key === 'probDupes'
+          ? group.files.find(file => !file.isProbableDuplicate) || group.files[0]
+          : [...group.files].sort((left, right) => (right.pixelWidth || 0) * (right.pixelHeight || 0) - (left.pixelWidth || 0) * (left.pixelHeight || 0) || (right.size || 0) - (left.size || 0))[0];
+      return { groupID: group.id, keepPath: recommended.path, exact: card.key === 'dupes' };
+    });
+    onKeepPhotos(decisions);
+  }
+
   return (
     <div className={s.modalBackdrop} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
       <section className={`${s.modalCard} ${comparisonMode ? s.comparisonModalCard : ''}`} role="dialog" aria-modal="true" aria-label={card.label}>
-        <div className={s.modalHeader}><h2>{card.label} — {files.length.toLocaleString()}</h2><button onClick={onClose}>×</button></div>
+        <div className={s.modalHeader}><h2>{card.label} — {comparisonMode ? `${groups.length.toLocaleString()} groups · ${files.length.toLocaleString()} photos` : files.length.toLocaleString()}</h2><button onClick={onClose}>×</button></div>
         <div className={s.modalBody}>
           {card.key === 'probDupes' && (
             <div className={s.diagnosticPrivacyNotice}>
               <p><strong>Same Image compares photo content locally.</strong></p>
-              <p>The best copy stays organized; other strong copies follow your Duplicate handling setting.</p>
+              <p>Choose the photo to keep. The others go to Duplicates / To Review, where Undo can restore them.</p>
+            </div>
+          )}
+          {card.key === 'dupes' && (
+            <div className={s.diagnosticPrivacyNotice}>
+              <p><strong>These copies are exactly identical.</strong></p>
+              <p>Choose one to keep. The others go to a safe review folder; nothing is permanently deleted.</p>
             </div>
           )}
           {card.key === 'similar' && (
             <div className={s.diagnosticPrivacyNotice}>
               <p><strong>Bursts, edited versions, and visually similar photos.</strong></p>
-              <p>These suggestions are always Review only. Foldiq never separates or moves them automatically.</p>
+              <p>Choose the best photo when you are sure. The others will be set aside safely for review.</p>
             </div>
           )}
           {card.key === 'noDate' && (
             <div className={s.diagnosticPrivacyNotice}>
-              <p><strong>No reliable embedded or filename capture date was found.</strong></p>
-              <p>A file timestamp may appear below as an orange estimate, but Foldiq does not treat it as the photo date unless you enable that option in Organization Settings.</p>
+              <p><strong>Foldiq could not determine when these photos were taken.</strong></p>
+              <p>They will stay in Unknown Date unless you assign the real date in Preview.</p>
             </div>
           )}
           {comparisonMode ? (
             <div className={s.comparisonWorkspace}>
               <aside className={s.comparisonGroups}>
+                <button className={s.comparisonBulkButton} onClick={keepRecommendedInAllGroups}>Keep recommended in all groups</button>
                 {groups.map(group => (
                   <button key={group.id} className={selectedGroup?.id === group.id ? s.comparisonGroupSelected : ''} onClick={() => chooseGroup(group)}>
                     <strong>{group.files[0].name}</strong>
@@ -323,7 +373,7 @@ function CategoryModal({ card, files, onClose }) {
               <div className={s.comparisonMain}>
                 <div className={s.comparisonToolbar}>
                   <strong className={card.key === 'similar' ? s.reviewOnlyText : s.verifiedText}>
-                    {card.key === 'similar' ? '● Review only' : '● Content comparison'}
+                    {card.key === 'dupes' ? '● Exact copies' : card.key === 'similar' ? '● You decide' : '● Same image'}
                   </strong>
                   <label>Synchronized zoom</label>
                   <input type="range" min="1" max="3" step="0.25" value={zoom} onChange={event => setZoom(Number(event.target.value))} />
@@ -332,8 +382,8 @@ function CategoryModal({ card, files, onClose }) {
                 {reference && candidate ? (
                   <>
                     <div className={s.comparisonStage}>
-                      <ComparisonPhotoCard file={reference} title={card.key === 'probDupes' ? 'Best copy' : 'Reference'} tone="green" zoom={zoom} />
-                      <ComparisonPhotoCard file={candidate} title={card.key === 'similar' ? matchKindLabel(candidate).replace(' · Review only', '') : 'Matching copy'} tone={card.key === 'similar' ? 'orange' : 'yellow'} zoom={zoom} />
+                      <ComparisonPhotoCard file={reference} title="Recommended" tone="green" zoom={zoom} kept={isKept(reference)} onKeep={() => keepPhoto(reference)} />
+                      <ComparisonPhotoCard file={candidate} title={card.key === 'similar' ? matchKindLabel(candidate) : 'Other copy'} tone={card.key === 'similar' ? 'orange' : 'yellow'} zoom={zoom} kept={isKept(candidate)} onKeep={() => keepPhoto(candidate)} />
                     </div>
                     {candidates.length > 1 && (
                       <div className={s.comparisonFilmstrip}>
@@ -343,7 +393,7 @@ function CategoryModal({ card, files, onClose }) {
                         ))}</div>
                       </div>
                     )}
-                    {card.key === 'similar' && <p className={s.comparisonSafety}>Foldiq will not move or separate anything shown here. Similar Photos is always review-only.</p>}
+                    <p className={s.comparisonSafety}>One photo stays in your organized library. The others go to Duplicates / To Review. Nothing is permanently deleted.</p>
                   </>
                 ) : <p className={s.comparisonEmpty}>No comparison group is available.</p>}
               </div>
@@ -354,9 +404,9 @@ function CategoryModal({ card, files, onClose }) {
               {files.slice(0, 500).map(file => (
                 <button key={file.path} onClick={() => window.foldiq.revealFile(file.archiveSourcePath || file.path)}>
                   <strong>{file.name}</strong>
-                  <span className={card.key === 'noDate' && file.fileModifiedDate ? s.fileDateEstimate : ''}>
-                    {card.key === 'noDate' && file.fileModifiedDate
-                      ? `No embedded date · File date estimate ${new Date(file.fileModifiedDate).toLocaleString()}`
+                  <span className={card.key === 'noDate' ? s.fileDateEstimate : ''}>
+                    {card.key === 'noDate'
+                      ? 'Date unknown'
                       : file.path}
                   </span>
                 </button>
@@ -371,7 +421,7 @@ function CategoryModal({ card, files, onClose }) {
   );
 }
 
-function ComparisonPhotoCard({ file, title, tone, zoom }) {
+function ComparisonPhotoCard({ file, title, tone, zoom, kept, onKeep }) {
   const [thumbnail, setThumbnail] = useState(undefined);
   useEffect(() => {
     let active = true;
@@ -389,7 +439,10 @@ function ComparisonPhotoCard({ file, title, tone, zoom }) {
       </button>
       <strong className={s.comparisonFilename}>{file.name}</strong>
       <small>{formatComparisonMetadata(file)}</small>
-      {file.probableMatchReasons && <p>{file.probableMatchReasons}</p>}
+      {file.probableMatchReasons && <p>{file.probableMatchReasons.replace(/\s*·\s*review only/gi, '')}</p>}
+      <button className={`${s.comparisonKeepButton} ${kept ? s.comparisonKeepButtonSelected : ''}`} onClick={onKeep}>
+        {kept ? '✓ Keeping this photo' : 'Keep this photo'}
+      </button>
     </section>
   );
 }
@@ -447,7 +500,7 @@ function StatIcon({ name, color }) {
 
 function matchKindLabel(file) {
   if (file.probableMatchKind === 'same') return file.isProbableDuplicate ? 'Same image' : 'Best copy';
-  if (file.probableMatchKind === 'burst') return 'Burst · Review only';
-  if (file.probableMatchKind === 'edited') return 'Edited version · Review only';
-  return 'Visually similar · Review only';
+  if (file.probableMatchKind === 'burst') return 'Burst';
+  if (file.probableMatchKind === 'edited') return 'Edited version';
+  return 'Visually similar';
 }

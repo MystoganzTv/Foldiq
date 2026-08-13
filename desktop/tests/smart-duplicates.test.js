@@ -149,4 +149,6 @@ test('exact duplicate election prefers metadata-rich non-archive file', () => {
   assert.equal(files[1].isDuplicate, false);
   assert.equal(files[0].duplicateOf, 2);
   assert.equal(files[2].duplicateOf, 2);
+  assert.equal(new Set(files.map(file => file.duplicateGroupID)).size, 1);
+  assert.ok(files.every(file => file.duplicateGroupID));
 });
