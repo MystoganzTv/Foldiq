@@ -245,21 +245,15 @@ struct PreviewView: View {
                 .help("Preview folder structure")
                 .padding(.leading, 8)
 
-                Button {
-                    exportCSV()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .help("Export CSV report")
-                .padding(.leading, 6)
-
                 Menu {
                     Button("Include Shown") { setDisplayedIncluded(true) }
                     Button("Exclude Shown") { setDisplayedIncluded(false) }
+                    Divider()
+                    Button("Save Detailed Report (.CSV)") { exportCSV() }
                 } label: {
                     Image(systemName: "checklist")
                 }
-                .help("Change which shown files will be processed")
+                .help("More actions")
                 .padding(.leading, 6)
 
             }

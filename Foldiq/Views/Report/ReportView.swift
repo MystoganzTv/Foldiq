@@ -118,18 +118,23 @@ struct ReportView: View {
                     Spacer()
                     VStack(spacing: 8) {
                         Button {
-                            exportCSV()
-                        } label: {
-                            Label("Export CSV", systemImage: "square.and.arrow.up")
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button {
                             openOrganizedFolder()
                         } label: {
                             Label("Open in Finder", systemImage: "folder")
                         }
                         .buttonStyle(.bordered)
+
+                        Menu {
+                            Button {
+                                exportCSV()
+                            } label: {
+                                Label("Save Detailed Report (.CSV)", systemImage: "tablecells")
+                            }
+                        } label: {
+                            Label("More", systemImage: "ellipsis.circle")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .help("Optional detailed file report; most users do not need this")
                     }
                 }
 

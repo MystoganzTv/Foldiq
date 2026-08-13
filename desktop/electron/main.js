@@ -61,8 +61,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Undo is session-only. Clear leftovers from interrupted/previous sessions.
-  mover.cleanupManifests(undoDirectory());
   scanner.configureDiagnostics(diagnosticsPath());
   createWindow();
 });
@@ -70,7 +68,6 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 app.on('before-quit', () => {
   scanner.end();
-  mover.cleanupManifests(undoDirectory());
 });
 
 function assertString(value, label) {
@@ -237,7 +234,9 @@ ipcMain.handle('apply:retry', async (event, { plan, config }) => {
 // Undo last operation
 ipcMain.handle('apply:undo', async (event, { manifestPath }) => {
   assertString(manifestPath, 'manifest path');
-  const result = await mover.undo(manifestPath, undoDirectory());
+  const result = await mover.undo(manifestPath, undoDirectory(), progress => {
+    mainWindow.webContents.send('undo:progress', progress);
+  });
   if (!result.manifestPath) activeManifestPaths = activeManifestPaths.filter(item => item !== manifestPath);
   return result;
 });
@@ -248,7 +247,9 @@ ipcMain.handle('apply:undoMany', async (event, { manifestPaths }) => {
   const errors = [];
   const remaining = [...manifestPaths];
   for (const manifestPath of [...manifestPaths].reverse()) {
-    const result = await mover.undo(manifestPath, undoDirectory());
+    const result = await mover.undo(manifestPath, undoDirectory(), progress => {
+      mainWindow.webContents.send('undo:progress', progress);
+    });
     restored += result.restored;
     if (result.errors.length > 0) {
       errors.push(...result.errors);
@@ -258,6 +259,12 @@ ipcMain.handle('apply:undoMany', async (event, { manifestPaths }) => {
     activeManifestPaths = activeManifestPaths.filter(item => item !== manifestPath);
   }
   return { restored, errors, manifestPaths: remaining };
+});
+
+ipcMain.handle('recovery:listUndo', async () => {
+  const manifests = await mover.listManifests(undoDirectory());
+  activeManifestPaths = manifests.map(item => item.path);
+  return manifests;
 });
 
 ipcMain.handle('apply:discardUndo', async (event, { manifestPath }) => {

@@ -236,6 +236,41 @@ test('Undo removes an unchanged copy and deletes its completed manifest', async 
   assert.equal(fs.existsSync(applied.manifestPath), false);
 });
 
+test('Undo reports progress and can resume an interrupted completed entry', async (t) => {
+  const dir = tempDir(t);
+  const source = path.join(dir, 'source.jpg');
+  const destination = path.join(dir, 'output', 'source.jpg');
+  fs.writeFileSync(source, 'original');
+  const applied = await mover.apply([
+    { name: 'source.jpg', path: source, destPath: destination, action: 'copy' },
+  ], applyConfig(dir), () => {});
+  fs.unlinkSync(destination);
+  const progress = [];
+
+  const undone = await mover.undo(applied.manifestPath, null, update => progress.push(update));
+
+  assert.equal(undone.restored, 1);
+  assert.deepEqual(progress.map(update => update.current), [0, 1]);
+  assert.equal(progress.at(-1).total, 1);
+  assert.equal(fs.existsSync(applied.manifestPath), false);
+});
+
+test('pending Undo manifests survive restart discovery', async (t) => {
+  const dir = tempDir(t);
+  const source = path.join(dir, 'source.jpg');
+  const destination = path.join(dir, 'output', 'source.jpg');
+  fs.writeFileSync(source, 'original');
+  const applied = await mover.apply([
+    { name: 'source.jpg', path: source, destPath: destination, action: 'copy' },
+  ], applyConfig(dir), () => {});
+
+  const pending = await mover.listManifests(path.dirname(applied.manifestPath));
+
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].path, applied.manifestPath);
+  assert.equal(pending[0].files, 1);
+});
+
 test('Undo refuses to delete a file changed after organization', async (t) => {
   const dir = tempDir(t);
   const source = path.join(dir, 'source.jpg');

@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-13 11:35 America/New_York
+Updated: 2026-08-13 14:10 America/New_York
 
 ## Read this first
 
@@ -38,6 +38,21 @@ could drag vertically but horizontal movement was clamped to zero because the
 limit used the contained pixel width while CSS scaled the full image element.
 The current build clamps both axes against the actual transformed frame, matching
 the existing macOS behavior and allowing four-direction panning at zoom > 1.
+
+A real Windows NAS Undo then made the Electron window appear frozen. Root cause:
+Undo performed path checks, directory creation, rename, and deletion with
+synchronous filesystem calls in Electron's main process, and the renderer had
+no Undo progress events. The current build uses asynchronous filesystem I/O for
+Undo, streams per-file verification/restoration progress, preserves internal
+Undo manifests across app restarts, and offers `Resume Safe Undo` on the Welcome
+screen. Resume recognizes already-completed entries after an interruption and
+continues without overwriting files. The internal manifest is removed only after
+every entry finishes safely; `Start Over` still explicitly discards it.
+
+CSV remains available for photographers, audits, or support, but is no longer a
+prominent normal-user action. Windows labels it `Save Detailed Report (.CSV)`
+under an optional disclosure explaining that most users do not need it. macOS
+moves the same export into a secondary `More` menu. The macOS build passes.
 
 Windows 1.0.17 is pushed, tagged, and released at
 `https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.17-windows`. The release
@@ -423,7 +438,7 @@ dates to `Unknown Date` items. No macOS date-code change was made in this turn.
 
 From `/Users/enrique/Developer/Foldiq/desktop`:
 
-- `npm test`: 60 passed, 0 failed, 1 skipped. The skipped case is the real
+- `npm test`: 62 passed, 0 failed, 1 skipped. The skipped case is the real
   bundled Windows RAR-engine execution, which is platform-gated on macOS.
 - `npx vite build`: passed.
 - `node --check` for modified Electron services: passed.
@@ -441,14 +456,14 @@ Latest local installer:
 `/Users/enrique/Developer/Foldiq/desktop/dist-electron/Foldiq Setup 1.0.18.exe`
 
 - Size: approximately 120 MB
-- SHA-256: `5307d74a2f87d613c3d3ef9e6eac848644452fcd9a0522a0e7bab7e16cc893f6`
+- SHA-256: `35455ef18abe0bba795dc9c2b9114a2b2449625ed6bf1dc1eff71b3c6a73bac8`
 - Desktop copy: `/Users/enrique/Desktop/Foldiq Setup 1.0.18.exe`
 - This 1.0.18 installer is a local test build and is not yet a GitHub Release.
 - The package verifier passed, `utif2` resolved the packaged `pako`, and the
   packaged `visual-hash.js` dependency chain loaded successfully.
 - The latest local build also contains the large-library visual-scan
-  optimization and four-direction comparison panning described above. It has
-  not yet completed its real Windows gate.
+  optimization, four-direction comparison panning, and recoverable responsive
+  Undo described above. It has not yet completed its real Windows gate.
 
 ## Important product/safety notes
 

@@ -5,6 +5,10 @@ export default function WelcomeScreen({ go, folders, setFolders, config, setConf
   const [dragging, setDragging] = useState(false);
   const [showHow, setShowHow] = useState(false);
   const [appInfo, setAppInfo] = useState(null);
+  const [pendingUndo, setPendingUndo] = useState([]);
+  const [resumingUndo, setResumingUndo] = useState(false);
+  const [undoProgress, setUndoProgress] = useState({ current: 0, total: 0, file: '' });
+  const [recoveryMessage, setRecoveryMessage] = useState('');
   const listRef = useRef(null);
 
   useEffect(() => {
@@ -13,7 +17,31 @@ export default function WelcomeScreen({ go, folders, setFolders, config, setConf
       return;
     }
     window.foldiq.getAppInfo().then(setAppInfo).catch(() => {});
+    window.foldiq.getPendingUndo().then(setPendingUndo).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!resumingUndo) return undefined;
+    window.foldiq.onUndoProgress(progress => setUndoProgress(progress));
+    return () => window.foldiq.removeAllListeners('undo:progress');
+  }, [resumingUndo]);
+
+  async function resumeUndo() {
+    setResumingUndo(true);
+    setRecoveryMessage('');
+    try {
+      const result = await window.foldiq.undoAll(pendingUndo.map(item => item.path));
+      const remaining = await window.foldiq.getPendingUndo();
+      setPendingUndo(remaining);
+      setRecoveryMessage(result.errors.length > 0
+        ? `Foldiq restored ${result.restored.toLocaleString()} files. One or more files need attention before Undo can finish.`
+        : `Safe Undo complete — ${result.restored.toLocaleString()} files restored.`);
+    } catch (error) {
+      setRecoveryMessage(error?.message || 'Safe Undo could not continue. Your recovery record was preserved.');
+    } finally {
+      setResumingUndo(false);
+    }
+  }
 
   function addSources(selected) {
     if (selected.length) {
@@ -44,6 +72,16 @@ export default function WelcomeScreen({ go, folders, setFolders, config, setConf
   return (
     <div className={s.screen}>
       <div className={`${s.scrollArea} ${s.welcomeContent} ${hasFolders ? s.welcomeWithSources : s.welcomeEmpty}`}>
+        {(pendingUndo.length > 0 || recoveryMessage) && (
+          <div className={s.recoveryCard} role="status" aria-live="polite">
+            <div>
+              <strong>{pendingUndo.length > 0 ? 'An organization Undo needs attention' : 'Recovery complete'}</strong>
+              <p>{recoveryMessage || `Foldiq found a preserved recovery record for ${pendingUndo.reduce((sum, item) => sum + item.files, 0).toLocaleString()} files. Resume it before starting another organization.`}</p>
+              {resumingUndo && <small>{undoProgress.total > 0 ? `${undoProgress.current.toLocaleString()} of ${undoProgress.total.toLocaleString()} · ` : ''}{undoProgress.file || 'Preparing safe Undo…'}</small>}
+            </div>
+            {pendingUndo.length > 0 && <button className={s.btnDanger} onClick={resumeUndo} disabled={resumingUndo}>{resumingUndo ? 'Restoring…' : 'Resume Safe Undo'}</button>}
+          </div>
+        )}
         {/* Hero — compact when folders selected */}
         <div className={`${s.welcomeHero} ${hasFolders ? s.welcomeHeroSelected : ''}`}>
           <svg className={s.welcomeLogo} width={hasFolders ? 52 : 80} height={hasFolders ? 52 : 80} viewBox="0 0 80 80" fill="none">

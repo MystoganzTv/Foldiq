@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('foldiq', {
   onApplyProgress:(cb)         => ipcRenderer.on('apply:progress', (_, p) => cb(p)),
   undoApply:      (manifest)   => ipcRenderer.invoke('apply:undo', { manifestPath: manifest }),
   undoAll:        (manifests)  => ipcRenderer.invoke('apply:undoMany', { manifestPaths: manifests }),
+  onUndoProgress: (cb)         => ipcRenderer.on('undo:progress', (_, p) => cb(p)),
+  getPendingUndo:()            => ipcRenderer.invoke('recovery:listUndo'),
   discardUndo:    (manifest)   => ipcRenderer.invoke('apply:discardUndo', { manifestPath: manifest }),
   discardUndoAll: (manifests)  => ipcRenderer.invoke('apply:discardUndoMany', { manifestPaths: manifests }),
   countEmptyFolders: ()        => ipcRenderer.invoke('cleanup:countEmpty'),

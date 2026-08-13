@@ -41,6 +41,26 @@ function cleanupManifests(manifestDirectory) {
   }
 }
 
+async function listManifests(manifestDirectory) {
+  let entries = [];
+  try { entries = await fs.promises.readdir(manifestDirectory, { withFileTypes: true }); } catch { return []; }
+  const manifests = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !/^foldiq-undo-[A-Za-z0-9.-]+\.json$/.test(entry.name)) continue;
+    const filePath = path.join(manifestDirectory, entry.name);
+    try {
+      const manifest = JSON.parse(await fs.promises.readFile(filePath, 'utf8'));
+      if (!Array.isArray(manifest.moves)) continue;
+      manifests.push({
+        path: filePath,
+        files: manifest.moves.length,
+        createdAt: manifest.createdAt || null,
+      });
+    } catch {}
+  }
+  return manifests.sort((left, right) => String(left.createdAt || '').localeCompare(String(right.createdAt || '')));
+}
+
 function hashFile(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
@@ -149,22 +169,73 @@ async function apply(plan, config, onProgress) {
   };
 }
 
-async function undo(mPath, manifestDirectory = null) {
+async function undo(mPath, manifestDirectory = null, onProgress = () => {}) {
   if (manifestDirectory) assertInternalManifest(mPath, manifestDirectory);
   if (!fs.existsSync(mPath)) throw new Error('Manifest not found: ' + mPath);
 
-  const manifest = JSON.parse(fs.readFileSync(mPath, 'utf-8'));
+  const manifest = JSON.parse(await fs.promises.readFile(mPath, 'utf-8'));
   const errors = [];
+  async function exists(filePath) {
+    try {
+      await fs.promises.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function moveBackWithoutBlocking(src, dest) {
+    if (await exists(dest)) {
+      throw new Error(`Original path is occupied; Foldiq will not overwrite it: ${dest}`);
+    }
+    await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+    try {
+      await fs.promises.rename(src, dest);
+      return;
+    } catch (error) {
+      if (error.code !== 'EXDEV') throw error;
+    }
+    await fs.promises.copyFile(src, dest, fs.constants.COPYFILE_EXCL);
+    try {
+      const [sourceHash, destinationHash] = await Promise.all([hashFile(src), hashFile(dest)]);
+      if (sourceHash !== destinationHash) {
+        throw new Error(`Cross-volume copy verification failed for ${path.basename(src)}`);
+      }
+      await fs.promises.unlink(src);
+    } catch (error) {
+      try { await fs.promises.rm(dest, { force: true }); } catch {}
+      throw error;
+    }
+  }
 
   let restored = 0;
-  for (const entry of [...manifest.moves].reverse()) {
+  const entries = [...manifest.moves].reverse();
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index];
+    onProgress({ current: index, total: entries.length, file: path.basename(entry.dest), phase: 'verifying' });
     try {
-      if (!fs.existsSync(entry.dest)) {
-        throw new Error(`Organized file is missing; nothing was removed: ${entry.dest}`);
-      }
-
       if (!entry.sha256) {
         throw new Error('This manifest predates safe Undo verification; automatic Undo was refused');
+      }
+
+      if (!(await exists(entry.dest))) {
+        // Undo may have been interrupted after completing this entry. Treat an
+        // already-restored move, or an already-removed copy, as completed so a
+        // retry can safely continue from its manifest.
+        if (entry.action === 'copy') {
+          restored++;
+          onProgress({ current: index + 1, total: entries.length, file: path.basename(entry.dest), phase: 'restored' });
+          continue;
+        }
+        if (await exists(entry.src)) {
+          const restoredHash = await hashFile(entry.src);
+          if (restoredHash === entry.sha256) {
+            restored++;
+            onProgress({ current: index + 1, total: entries.length, file: path.basename(entry.src), phase: 'restored' });
+            continue;
+          }
+        }
+        throw new Error(`Organized file is missing and the original could not be verified: ${entry.dest}`);
       }
 
       const currentHash = await hashFile(entry.dest);
@@ -173,21 +244,29 @@ async function undo(mPath, manifestDirectory = null) {
       }
 
       if (entry.action === 'copy') {
-        fs.unlinkSync(entry.dest);
+        await fs.promises.unlink(entry.dest);
       } else {
-        if (fs.existsSync(entry.src)) {
-          throw new Error(`Original path is occupied; Foldiq will not overwrite it: ${entry.src}`);
+        if (await exists(entry.src)) {
+          const restoredHash = await hashFile(entry.src);
+          if (restoredHash === entry.sha256) {
+            // A cross-volume Undo may have been interrupted after its verified
+            // copy completed but before the organized file was removed.
+            await fs.promises.unlink(entry.dest);
+            restored++;
+            onProgress({ current: index + 1, total: entries.length, file: path.basename(entry.src), phase: 'restored' });
+            continue;
+          }
         }
-        fs.mkdirSync(path.dirname(entry.src), { recursive: true });
-        await moveWithoutOverwrite(entry.dest, entry.src);
+        await moveBackWithoutBlocking(entry.dest, entry.src);
       }
       restored++;
     } catch (err) {
       errors.push({ file: entry.src, error: err.message });
     }
+    onProgress({ current: index + 1, total: entries.length, file: path.basename(entry.dest), phase: 'restored' });
   }
 
-  if (errors.length === 0) fs.rmSync(mPath, { force: true });
+  if (errors.length === 0) await fs.promises.rm(mPath, { force: true });
   return { restored, errors, manifestPath: errors.length ? mPath : null };
 }
 
@@ -245,6 +324,7 @@ module.exports = {
   assertDestinationAvailable,
   discardManifest,
   cleanupManifests,
+  listManifests,
   assertInternalManifest,
   findEmptyFolders,
   removeEmptyFolders,

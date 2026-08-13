@@ -8,6 +8,7 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
   const [retrying, setRetrying] = useState(false);
   const [retryProgress, setRetryProgress] = useState({ current: 0, total: 0 });
   const [undoError, setUndoError] = useState('');
+  const [undoProgress, setUndoProgress] = useState({ current: 0, total: 0, file: '' });
   const [emptyFolderCount, setEmptyFolderCount] = useState(0);
   const [cleaning, setCleaning] = useState(false);
   const [foldersRemoved, setFoldersRemoved] = useState(null);
@@ -25,6 +26,12 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
     window.foldiq.onApplyProgress(progress => setRetryProgress(progress));
     return () => window.foldiq.removeAllListeners('apply:progress');
   }, [retrying]);
+
+  useEffect(() => {
+    if (!undoing) return undefined;
+    window.foldiq.onUndoProgress(progress => setUndoProgress(progress));
+    return () => window.foldiq.removeAllListeners('undo:progress');
+  }, [undoing]);
 
   async function exportReport() {
     const completedPaths = new Set(completed.map(file => `${file.path}\n${file.destPath}`));
@@ -53,6 +60,7 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
 
   async function handleUndo() {
     setUndoing(true);
+    setUndoProgress({ current: 0, total: 0, file: 'Preparing safe Undo…' });
     setUndoError('');
     try {
       const manifests = result.manifestPaths || [result.manifestPath].filter(Boolean);
@@ -187,8 +195,24 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
           <span><strong>{copied.toLocaleString()}</strong> copied</span>
           <span><strong>{moved.toLocaleString()}</strong> moved</span>
           <span><strong>{result.skipped.toLocaleString()}</strong> untouched</span>
-          <button className={s.btnOutline} onClick={exportReport}>Export CSV</button>
         </div>
+
+        <details className={s.detailedReportDisclosure}>
+          <summary>Need a detailed file report?</summary>
+          <p>Optional: save a spreadsheet-compatible list of every source, destination, operation, and error. Most users do not need this.</p>
+          <button className={s.btnOutline} onClick={exportReport}>Save Detailed Report (.CSV)</button>
+        </details>
+
+        {undoing && (
+          <div className={s.undoProgressCard} role="status" aria-live="polite">
+            <div><strong>Undoing organization safely…</strong><span>{undoProgress.total > 0 ? `${undoProgress.current.toLocaleString()} of ${undoProgress.total.toLocaleString()}` : 'Preparing…'}</span></div>
+            <div className={s.progressBar}>
+              <div className={s.progressFill} style={{ width: `${undoProgress.total > 0 ? Math.round((undoProgress.current / undoProgress.total) * 100) : 0}%` }} />
+            </div>
+            <p>{undoProgress.phase === 'verifying' ? 'Verifying before restoring' : 'Restored'} · {undoProgress.file || 'Please wait…'}</p>
+            <small>Large files or network drives can take longer. Foldiq remains responsive while it verifies that files were not changed.</small>
+          </div>
+        )}
 
         {result.errors.length > 0 && (
           <div className={s.errorList}>
