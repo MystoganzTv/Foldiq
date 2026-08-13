@@ -2,6 +2,17 @@
 
 Updated: 2026-08-13 15:05 America/New_York
 
+App Store upload preparation update 2026-08-13 15:50: App Store Connect already
+contains macOS 1.0.18 builds through build 150 (uploaded at 1:59 PM and Ready to
+Submit). Those builds predate the final Apply/Undo safety hardening in commit
+`95c8555`, so the correct next build is 151, not the old local baseline 117.
+`version.config` and both macOS target configurations now use build 151. All 34
+macOS tests pass at this number. Xcode is signed in to the correct Admin team
+`V6F97AK8AD`, but Apple Distribution certificates are shown as `Not in
+Keychain`; a new Apple Distribution certificate/private key must be created in
+Xcode before the archive can be signed and uploaded. This is pending the
+required user confirmation for creating a persistent signing credential.
+
 ## Read this first
 
 The repository is `/Users/enrique/Developer/Foldiq`. The active branch is `main`.
