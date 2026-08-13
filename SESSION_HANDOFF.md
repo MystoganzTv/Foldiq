@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-13 11:20 America/New_York
+Updated: 2026-08-13 11:35 America/New_York
 
 ## Read this first
 
@@ -32,6 +32,12 @@ limits time-based visual candidates to two minutes, and uses two independent
 HEIC/TIFF decoder workers. Bursts, same-name conversions, edited copies, and
 small same-dimension groups remain supported. Regression tests cover both the
 large-library exclusion and preserved useful candidates.
+
+Windows comparison panning also had an axis-specific UI bug: portrait photos
+could drag vertically but horizontal movement was clamped to zero because the
+limit used the contained pixel width while CSS scaled the full image element.
+The current build clamps both axes against the actual transformed frame, matching
+the existing macOS behavior and allowing four-direction panning at zoom > 1.
 
 Windows 1.0.17 is pushed, tagged, and released at
 `https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.17-windows`. The release
@@ -435,13 +441,14 @@ Latest local installer:
 `/Users/enrique/Developer/Foldiq/desktop/dist-electron/Foldiq Setup 1.0.18.exe`
 
 - Size: approximately 120 MB
-- SHA-256: `7387b1a727897b0334b98faae1b4904341605ba478eec1d985ec20102e2ad71c`
+- SHA-256: `5307d74a2f87d613c3d3ef9e6eac848644452fcd9a0522a0e7bab7e16cc893f6`
 - Desktop copy: `/Users/enrique/Desktop/Foldiq Setup 1.0.18.exe`
 - This 1.0.18 installer is a local test build and is not yet a GitHub Release.
 - The package verifier passed, `utif2` resolved the packaged `pako`, and the
   packaged `visual-hash.js` dependency chain loaded successfully.
 - The latest local build also contains the large-library visual-scan
-  optimization described above. It has not yet completed its real Windows gate.
+  optimization and four-direction comparison panning described above. It has
+  not yet completed its real Windows gate.
 
 ## Important product/safety notes
 

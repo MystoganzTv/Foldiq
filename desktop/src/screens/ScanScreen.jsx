@@ -483,21 +483,20 @@ function ComparisonPhotoCard({ file, title, tone, zoom, kept, onKeep }) {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const frameRef = useRef(null);
-  const imageRef = useRef(null);
   const dragRef = useRef(null);
   const suppressClickRef = useRef(false);
 
   function clampPan(next) {
     const frame = frameRef.current;
-    const image = imageRef.current;
-    if (!frame || !image || zoom <= 1) return { x: 0, y: 0 };
+    if (!frame || zoom <= 1) return { x: 0, y: 0 };
     const rect = frame.getBoundingClientRect();
-    const imageRatio = image.naturalWidth / Math.max(image.naturalHeight, 1);
-    const frameRatio = rect.width / Math.max(rect.height, 1);
-    const renderedWidth = imageRatio > frameRatio ? rect.width : rect.height * imageRatio;
-    const renderedHeight = imageRatio > frameRatio ? rect.width / imageRatio : rect.height;
-    const maxX = Math.max(0, (renderedWidth * zoom - rect.width) / 2);
-    const maxY = Math.max(0, (renderedHeight * zoom - rect.height) / 2);
+    // The CSS transform scales the complete image element, whose box fills the
+    // comparison frame. Clamp against that same box. Calculating from the
+    // contained pixels made portrait photos report maxX=0, so Windows silently
+    // discarded every horizontal drag even though the zoomed element could pan.
+    const extraScale = Math.max(zoom - 1, 0);
+    const maxX = rect.width * extraScale / 2;
+    const maxY = rect.height * extraScale / 2;
     return {
       x: Math.min(Math.max(next.x, -maxX), maxX),
       y: Math.min(Math.max(next.y, -maxY), maxY),
@@ -560,7 +559,7 @@ function ComparisonPhotoCard({ file, title, tone, zoom, kept, onKeep }) {
         title={zoom > 1 ? 'Drag to move around the zoomed photo' : 'Show original file'}
       >
         {thumbnail === undefined && <i className={s.comparisonLoader} />}
-        {thumbnail && <img ref={imageRef} src={thumbnail} alt={file.name} draggable="false" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }} />}
+        {thumbnail && <img src={thumbnail} alt={file.name} draggable="false" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }} />}
         {thumbnail === null && <span>Preview unavailable</span>}
       </button>
       <strong className={s.comparisonFilename}>{file.name}</strong>
