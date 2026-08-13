@@ -207,9 +207,21 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
                 ? file.duplicateGroupID === item.groupID
                 : file.probableDuplicateGroupID === item.groupID);
               if (!decision) return file;
+              if (decision.mode === 'untouched') {
+                return { ...file, userExcluded: true, userSetAside: false };
+              }
+              if (decision.mode === 'all') {
+                return {
+                  ...file,
+                  userExcluded: false,
+                  userSetAside: false,
+                  ...(decision.exact ? { isDuplicate: false } : { isProbableDuplicate: false }),
+                };
+              }
               const setAside = file.path !== decision.keepPath;
               return {
                 ...file,
+                userExcluded: false,
                 userSetAside: setAside,
                 ...(decision.exact ? { isDuplicate: setAside } : { isProbableDuplicate: setAside }),
               };
@@ -307,11 +319,12 @@ function CategoryModal({ card, files, onClose, onKeepPhotos }) {
 
   function keepPhoto(file) {
     if (!selectedGroup) return;
-    onKeepPhotos([{ groupID: selectedGroup.id, keepPath: file.path, exact: card.key === 'dupes' }]);
+    onKeepPhotos([{ mode: 'one', groupID: selectedGroup.id, keepPath: file.path, exact: card.key === 'dupes' }]);
   }
 
   function isKept(file) {
     if (!selectedGroup) return false;
+    if (selectedGroup.files.every(item => item.userExcluded)) return false;
     if (selectedGroup.files.some(item => item.userSetAside)) return !file.userSetAside;
     if (card.key === 'dupes') return !file.isDuplicate;
     if (card.key === 'probDupes') return !file.isProbableDuplicate;
@@ -325,10 +338,30 @@ function CategoryModal({ card, files, onClose, onKeepPhotos }) {
         : card.key === 'probDupes'
           ? group.files.find(file => !file.isProbableDuplicate) || group.files[0]
           : [...group.files].sort((left, right) => (right.pixelWidth || 0) * (right.pixelHeight || 0) - (left.pixelWidth || 0) * (left.pixelHeight || 0) || (right.size || 0) - (left.size || 0))[0];
-      return { groupID: group.id, keepPath: recommended.path, exact: card.key === 'dupes' };
+      return { mode: 'one', groupID: group.id, keepPath: recommended.path, exact: card.key === 'dupes' };
     });
     onKeepPhotos(decisions);
   }
+
+  function keepAll() {
+    if (!selectedGroup) return;
+    onKeepPhotos([{ mode: 'all', groupID: selectedGroup.id, exact: card.key === 'dupes' }]);
+  }
+
+  function leaveGroupUntouched() {
+    if (!selectedGroup) return;
+    onKeepPhotos([{ mode: 'untouched', groupID: selectedGroup.id, exact: card.key === 'dupes' }]);
+  }
+
+  const groupUntouched = selectedGroup?.files.every(file => file.userExcluded) || false;
+  const allKept = selectedGroup?.files.every(file => !file.userExcluded && !file.userSetAside && (
+    card.key === 'dupes' ? !file.isDuplicate : !file.isProbableDuplicate
+  )) || false;
+  const decisionSummary = groupUntouched
+    ? 'This group will stay exactly where it is.'
+    : allKept
+      ? 'All photos in this group will be organized.'
+      : 'Unwanted copies go to Duplicates / To Review. Nothing is deleted.';
 
   return (
     <div className={s.modalBackdrop} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
@@ -350,7 +383,7 @@ function CategoryModal({ card, files, onClose, onKeepPhotos }) {
           {card.key === 'similar' && (
             <div className={s.diagnosticPrivacyNotice}>
               <p><strong>Bursts, edited versions, and visually similar photos.</strong></p>
-              <p>Choose the best photo when you are sure. The others will be set aside safely for review.</p>
+              <p>Keep one, keep all, or leave this group completely untouched.</p>
             </div>
           )}
           {card.key === 'noDate' && (
@@ -362,7 +395,7 @@ function CategoryModal({ card, files, onClose, onKeepPhotos }) {
           {comparisonMode ? (
             <div className={s.comparisonWorkspace}>
               <aside className={s.comparisonGroups}>
-                <button className={s.comparisonBulkButton} onClick={keepRecommendedInAllGroups}>Keep recommended in all groups</button>
+                <button className={s.comparisonBulkButton} onClick={keepRecommendedInAllGroups}>Use all recommendations</button>
                 {groups.map(group => (
                   <button key={group.id} className={selectedGroup?.id === group.id ? s.comparisonGroupSelected : ''} onClick={() => chooseGroup(group)}>
                     <strong>{group.files[0].name}</strong>
@@ -375,7 +408,7 @@ function CategoryModal({ card, files, onClose, onKeepPhotos }) {
                   <strong className={card.key === 'similar' ? s.reviewOnlyText : s.verifiedText}>
                     {card.key === 'dupes' ? '● Exact copies' : card.key === 'similar' ? '● You decide' : '● Same image'}
                   </strong>
-                  <label>{zoom > 1 ? 'Drag either photo to inspect details' : 'Synchronized zoom'}</label>
+                  <label>{zoom > 1 ? 'Drag photos to inspect' : 'Synchronized zoom'}</label>
                   <input type="range" min="1" max="3" step="0.25" value={zoom} onChange={event => setZoom(Number(event.target.value))} />
                   <span>{zoom.toFixed(2)}×</span>
                 </div>
@@ -393,7 +426,13 @@ function CategoryModal({ card, files, onClose, onKeepPhotos }) {
                         ))}</div>
                       </div>
                     )}
-                    <p className={s.comparisonSafety}>One photo stays in your organized library. The others go to Duplicates / To Review. Nothing is permanently deleted.</p>
+                    <div className={s.comparisonDecisionActions}>
+                      <button className={allKept ? s.comparisonDecisionSelected : ''} onClick={keepAll}>
+                        {selectedGroup.files.length === 2 ? 'Keep both' : 'Keep all'}
+                      </button>
+                      <button className={groupUntouched ? s.comparisonDecisionSelected : ''} onClick={leaveGroupUntouched}>Leave group untouched</button>
+                    </div>
+                    <p className={s.comparisonSafety}>{decisionSummary}</p>
                   </>
                 ) : <p className={s.comparisonEmpty}>No comparison group is available.</p>}
               </div>
@@ -508,7 +547,6 @@ function ComparisonPhotoCard({ file, title, tone, zoom, kept, onKeep }) {
       </button>
       <strong className={s.comparisonFilename}>{file.name}</strong>
       <small>{formatComparisonMetadata(file)}</small>
-      {file.probableMatchReasons && <p>{file.probableMatchReasons.replace(/\s*·\s*review only/gi, '')}</p>}
       <button className={`${s.comparisonKeepButton} ${kept ? s.comparisonKeepButtonSelected : ''}`} onClick={onKeep}>
         {kept ? '✓ Keeping this photo' : 'Keep this photo'}
       </button>

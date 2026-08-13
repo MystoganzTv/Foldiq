@@ -74,6 +74,9 @@ actor OrganizationPlanner {
                 op: config.fileOperation
             )
             plan.archiveSourcePath = file.archiveSourcePath
+            if file.isUserExcluded {
+                plan.status = .skipped
+            }
             plans.append(plan)
         }
 

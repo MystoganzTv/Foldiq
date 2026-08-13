@@ -73,6 +73,7 @@ function sourceFolder(file) {
 }
 
 function skipReason(file) {
+  if (file.reason === 'user-choice') return 'Left alone by your choice';
   if (file.reason === 'duplicate') return 'Exact duplicate';
   return 'Skipped automatically';
 }
@@ -142,7 +143,7 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
 
   const candidates = useMemo(() => plan.filter(file => file.action !== 'skip'), [plan]);
   const included = useMemo(() => candidates.filter(file => file.included !== false), [candidates]);
-  const excluded = useMemo(() => candidates.filter(file => file.included === false), [candidates]);
+  const excluded = useMemo(() => plan.filter(file => file.action === 'skip' || file.included === false), [plan]);
   const skipped = useMemo(() => plan.filter(file => file.action === 'skip'), [plan]);
   const duplicates = useMemo(() => plan.filter(file => (
     file.action === 'skip' && file.reason === 'duplicate'
@@ -390,7 +391,7 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
             <button className={s.btnSecondary} onClick={() => go('settings')}>← Back</button>
             <div className={s.previewFooterSummary}>
               <strong>{included.length.toLocaleString()} photos ready</strong>
-              <span>{(excluded.length + skipped.length).toLocaleString()} left alone</span>
+              <span>{excluded.length.toLocaleString()} left alone</span>
             </div>
             <button className={s.btnPrimary} disabled={included.length === 0} onClick={() => setShowPreflight(true)}>
               Organize {included.length.toLocaleString()} Files →
@@ -414,7 +415,7 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
                 <PlanStat icon="✓" value={included.length} label="files" tone="green" />
                 {copies.length > 0 && <PlanStat icon="⧉" value={copies.length} label="copied" tone="blue" />}
                 {moves.length > 0 && <PlanStat icon="→" value={moves.length} label="moved" tone="blue" />}
-                <PlanStat icon="−" value={excluded.length + skipped.length} label="untouched" tone="neutral" />
+                <PlanStat icon="−" value={excluded.length} label="untouched" tone="neutral" />
                 {unknown.length > 0 && <PlanStat icon="?" value={unknown.length} label="no date" tone="yellow" />}
               </div>
               <p className={s.preflightText}>

@@ -99,6 +99,7 @@ final class MediaFile {
     var isProbableDuplicate: Bool       // routed to the To Review folder
     var probableDuplicateGroupID: UUID? // shared by both sides of the probable pair
     var isUserSetAside: Bool = false    // explicitly set aside after visual review
+    var isUserExcluded: Bool = false    // explicitly left untouched after visual review
     var probableMatchScore: Int         // confidence 0–100
     var probableMatchReasons: String?   // e.g. "Same filename · Size ±0.4% · Timestamp Δ3m"
     var probableMatchPeerFilename: String? // other file's filename for display
@@ -119,6 +120,7 @@ final class MediaFile {
         self.isOrganized = false
         self.isProbableDuplicate = false
         self.isUserSetAside = false
+        self.isUserExcluded = false
         self.probableMatchScore = 0
     }
 

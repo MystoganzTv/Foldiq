@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-13 02:53 America/New_York
+Updated: 2026-08-13 03:10 America/New_York
 
 ## Read this first
 
@@ -219,6 +219,10 @@ capture dates`, the metadata stage was redesigned again:
 - At zoom levels above 1x, each side-by-side photo can be dragged independently
   with the mouse to inspect details; panning is constrained to the zoomed view
   bounds and resets when zoom returns to 1x.
+- Every comparison group now offers three explicit outcomes: keep one photo and
+  set the rest aside, keep both/all in the organized library, or leave the entire
+  group untouched. The latter creates skipped preview items and performs no file
+  operation. Comparison cards and copy were compacted to fit smaller displays.
 - The macOS comparison UI was exercised against the real 73-photo Desktop test
   folder: 3 Same Image groups and 3 Similar Photos groups rendered correctly.
 - Seven JPEGs left in the real `Unknown Date` output were audited with every
@@ -234,8 +238,8 @@ capture dates`, the metadata stage was redesigned again:
   ImageIO when the system provides a decoder.
 - Windows ships HEIC support outside `app.asar` with third-party license notices
   for LGPL compliance.
-- Current validation: Windows 57 tests passed (1 platform-gated RAR test skipped),
-  macOS 30 tests passed, the macOS Release build reports 1.0.18 (117), Windows
+- Current validation: Windows 58 tests passed (1 platform-gated RAR test skipped),
+  macOS 31 tests passed, the macOS Release build reports 1.0.18 (117), Windows
   installer packaging passed, and a real renamed HEIC with changed metadata was
   detected end-to-end as a 100% visual match in 2.9 seconds. The 1.0.18 installers
   have not been distributed or uploaded yet.

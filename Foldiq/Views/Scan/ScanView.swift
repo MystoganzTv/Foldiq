@@ -426,7 +426,7 @@ struct FileDrillSheet: View {
         case .probableDuplicates:
             return "These are the same photo after renaming, rotation, metadata changes, or re-encoding. Choose the copy to keep; the others go to Duplicates/To Review."
         case .similarPhotos:
-            return "Bursts, edited versions, and visually similar photos. Choose the best photo only when you are sure; the others will be set aside safely for review."
+            return "Compare the photos, then keep one, keep all, or leave this group completely untouched."
         default:
             return ""
         }
@@ -639,8 +639,10 @@ struct FileDrillSheet: View {
             }
             .padding(16)
         }
-        .frame(minWidth: isComparisonCategory ? 980 : 560,
-               minHeight: isComparisonCategory ? 680 : 480)
+        .frame(minWidth: isComparisonCategory ? 900 : 560,
+               idealWidth: isComparisonCategory ? 1060 : 620,
+               minHeight: isComparisonCategory ? 600 : 480,
+               idealHeight: isComparisonCategory ? 700 : 540)
         .onAppear { selectInitialComparisonIfNeeded() }
         .onChange(of: comparisonGroups.map(\.id)) { _, _ in selectInitialComparisonIfNeeded() }
     }
@@ -658,7 +660,7 @@ struct FileDrillSheet: View {
             HStack(spacing: 0) {
                 ScrollView {
                     LazyVStack(spacing: 7) {
-                        Button("Keep recommended in all groups") {
+                        Button("Use all recommendations") {
                             keepRecommendedInAllGroups()
                         }
                         .buttonStyle(.borderedProminent)
@@ -707,7 +709,7 @@ struct FileDrillSheet: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(category == .similarPhotos ? .orange : .green)
                         Spacer()
-                        Text(comparisonZoom > 1 ? "Drag either photo to inspect details" : "Synchronized zoom")
+                        Text(comparisonZoom > 1 ? "Drag photos to inspect" : "Synchronized zoom")
                             .font(.caption2).foregroundStyle(.secondary)
                         Slider(value: $comparisonZoom, in: 1...3, step: 0.25)
                             .frame(width: 130)
@@ -760,11 +762,25 @@ struct FileDrillSheet: View {
                                 }
                             }
                         }
+
+                        HStack(spacing: 10) {
+                            Button(selectedComparisonGroup?.files.count == 2 ? "Keep both" : "Keep all") {
+                                keepAll(in: selectedComparisonGroup)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(allPhotosKept(in: selectedComparisonGroup) ? Color.green : Color.accentColor)
+
+                            Button("Leave group untouched") {
+                                leaveUntouched(selectedComparisonGroup)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(groupIsUntouched(selectedComparisonGroup) ? Color.orange : Color.secondary)
+                        }
                     }
 
-                    Text("One photo stays in your organized library. The others go to Duplicates/To Review. Nothing is permanently deleted.")
+                    Text(groupDecisionSummary)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(groupIsUntouched(selectedComparisonGroup) ? Color.secondary : Color.orange)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(14)
@@ -796,6 +812,7 @@ struct FileDrillSheet: View {
 
     private func keptPhotoID(in group: ComparisonGroup?) -> UUID? {
         guard let group else { return nil }
+        if group.files.allSatisfy(\.isUserExcluded) { return nil }
         if group.files.contains(where: { $0.isUserSetAside }) {
             return group.files.first(where: { !$0.isUserSetAside })?.id
         }
@@ -812,6 +829,7 @@ struct FileDrillSheet: View {
         guard let group else { return }
         for file in group.files {
             let setAside = file.id != chosen.id
+            file.isUserExcluded = false
             file.isUserSetAside = setAside
             if category == .duplicates {
                 file.isDuplicate = setAside
@@ -820,6 +838,52 @@ struct FileDrillSheet: View {
             }
         }
         try? modelContext.save()
+    }
+
+    private func keepAll(in group: ComparisonGroup?) {
+        guard let group else { return }
+        for file in group.files {
+            file.isUserExcluded = false
+            file.isUserSetAside = false
+            if category == .duplicates {
+                file.isDuplicate = false
+            } else {
+                file.isProbableDuplicate = false
+            }
+        }
+        try? modelContext.save()
+    }
+
+    private func leaveUntouched(_ group: ComparisonGroup?) {
+        guard let group else { return }
+        for file in group.files {
+            file.isUserExcluded = true
+            file.isUserSetAside = false
+        }
+        try? modelContext.save()
+    }
+
+    private func allPhotosKept(in group: ComparisonGroup?) -> Bool {
+        guard let group else { return false }
+        return group.files.allSatisfy { file in
+            !file.isUserExcluded && !file.isUserSetAside &&
+            (category == .duplicates ? !file.isDuplicate : !file.isProbableDuplicate)
+        }
+    }
+
+    private func groupIsUntouched(_ group: ComparisonGroup?) -> Bool {
+        guard let group else { return false }
+        return group.files.allSatisfy(\.isUserExcluded)
+    }
+
+    private var groupDecisionSummary: String {
+        if groupIsUntouched(selectedComparisonGroup) {
+            return "This group will stay exactly where it is."
+        }
+        if allPhotosKept(in: selectedComparisonGroup) {
+            return "All photos in this group will be organized."
+        }
+        return "Unwanted copies go to Duplicates/To Review. Nothing is deleted."
     }
 
     private func keepRecommendedInAllGroups() {
@@ -891,7 +955,7 @@ private struct ComparisonPhotoCard: View {
             }
 
             LocalPhotoThumbnail(file: file, zoom: zoom)
-                .frame(maxWidth: .infinity, minHeight: 300, maxHeight: 360)
+                .frame(maxWidth: .infinity, minHeight: 220, idealHeight: 260, maxHeight: 300)
                 .background(Color.black.opacity(0.92), in: RoundedRectangle(cornerRadius: 10))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .contentShape(Rectangle())
@@ -916,12 +980,6 @@ private struct ComparisonPhotoCard: View {
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
-            if let reasons = file.probableMatchReasons {
-                Text(reasons.replacingOccurrences(of: " · review only", with: ""))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
             Button(isKept ? "Keeping this photo" : "Keep this photo", action: onKeep)
                 .buttonStyle(.borderedProminent)
                 .tint(isKept ? .green : .accentColor)

@@ -256,6 +256,24 @@ final class OrganizationPlannerTests: XCTestCase {
         )
     }
 
+    func testUserExcludedComparisonGroupStaysUntouched() async {
+        let photo = makePhoto(
+            path: "/Users/tester/Photos/KEEP_HERE.JPG",
+            filename: "KEEP_HERE.JPG",
+            date: isoDate("2026-01-04")
+        )
+        photo.isUserExcluded = true
+
+        let session = makeSession(rootPath: "/Users/tester/Photos", files: [photo])
+        let plans = await OrganizationPlanner().buildPlan(
+            session: session,
+            config: OrganizationConfig()
+        ) { _ in }
+
+        XCTAssertEqual(plans.count, 1)
+        XCTAssertEqual(plans[0].status, .skipped)
+    }
+
     func testReviewPromptRequiresASuccessfulOrganizationAndOnlyRequestsOnce() {
         let suiteName = "AppReviewPromptPolicyTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

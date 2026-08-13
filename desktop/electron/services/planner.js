@@ -123,6 +123,17 @@ function buildPlan(files, config) {
   const moves = [];
 
   for (const file of files) {
+    if (file.userExcluded) {
+      moves.push({
+        ...file,
+        action: 'skip',
+        included: false,
+        reason: 'user-choice',
+        destPath: null,
+      });
+      continue;
+    }
+
     // The user may leave duplicate extras untouched. Originals always remain in
     // the normal organized structure.
     if (!file.userSetAside && config.duplicateHandling === 'skip' && (file.isDuplicate || file.isProbableDuplicate)) {

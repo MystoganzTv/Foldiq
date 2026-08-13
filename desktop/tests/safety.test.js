@@ -483,6 +483,22 @@ test('a photo explicitly set aside always goes to the safe review folder', (t) =
   assert.equal(planned.included, true);
 });
 
+test('a comparison group left untouched is excluded from the plan', (t) => {
+  const dir = tempDir(t);
+  const [planned] = planner.buildPlan([{
+    id: 1,
+    path: path.join(dir, 'stay.jpg'),
+    name: 'stay.jpg',
+    date: '2026-08-11T12:00:00.000Z',
+    userExcluded: true,
+  }], { outputFolder: path.join(dir, 'output'), duplicateHandling: 'separate', copyMode: false });
+
+  assert.equal(planned.action, 'skip');
+  assert.equal(planned.included, false);
+  assert.equal(planned.reason, 'user-choice');
+  assert.equal(planned.destPath, null);
+});
+
 test('Smart Hybrid and By Location use resolved GPS names', (t) => {
   const dir = tempDir(t);
   const outputFolder = path.join(dir, 'output');
