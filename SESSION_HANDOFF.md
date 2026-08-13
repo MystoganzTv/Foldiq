@@ -44,6 +44,11 @@ deleting `rbtgenius.com` would break the existing Foldiq support sender. The
 owner must explicitly choose Pro or authorize replacing the existing domain;
 do not purchase or delete a domain without that decision. `foldiq.app` uses
 Vercel DNS and currently has no Resend MX/DKIM records.
+The corrected webhook was deployed to Vercel production as deployment
+`dpl_rWsGv5MgnRYBEw7neYZHXQExbkwy` and `https://foldiq.app` is Ready. A live
+unsigned webhook request reached the new function and was correctly rejected
+with HTTP 400 for the missing Stripe signature. Actual delivery from
+`receipts@foldiq.app` remains blocked only by the Resend domain-slot decision.
 
 Smart Duplicates 1.0.18 is implemented for macOS and Windows in the current
 source and has a newly rebuilt, locally verified Windows installer, but it is not yet a GitHub
