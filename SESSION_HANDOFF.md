@@ -1,6 +1,13 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-13 16:00 America/New_York
+Updated: 2026-08-13 16:07 America/New_York
+
+App Review submission completed 2026-08-13: the macOS 1.0.18 version record was
+created, Xcode Cloud build 157 was selected, customer-facing What's New text and
+current reviewer testing notes were added, and the version was submitted to
+Apple. App Store Connect confirms `1 Item Submitted`; macOS 1.0.18 is now
+`Waiting for Review`. Release is set to manual, so approval alone will not make
+the update public. App Store Connect says review may take up to 48 hours.
 
 App Store Connect upload completed 2026-08-13: pushing commit `9fd31c3`
 triggered the configured Xcode Cloud workflow. Cloud build 157 archived the
@@ -9,8 +16,8 @@ Connect reports the upload as `Complete` and the build as `Ready to Submit`.
 Build 157 contains the final Apply/Undo safety hardening and all 34 macOS tests
 pass. The repository baseline remains build 151; Xcode Cloud assigned 157 from
 its own monotonically increasing build sequence. No local Apple Distribution
-certificate was created or revoked. Build 157 has not been submitted for App
-Review or published; either action still requires an explicit release decision.
+certificate was created or revoked. Build 157 is now Waiting for Review but is
+not published; its manual release still requires an explicit release decision.
 
 ## Read this first
 
@@ -81,10 +88,10 @@ Vercel production deployment `H7MLmN4SK3brp5ymLNEhWAHom4EM` became Ready.
 Smart Duplicates 1.0.18 is implemented for macOS and Windows in the current
 source and has a newly rebuilt, locally verified Windows installer, but it is
 not yet a GitHub Release. macOS build 157 has been uploaded successfully to App
-Store Connect and is Ready to Submit, but has not been submitted for review or
-published. Publishing remains a separate release decision. The currently
-supported customer release remains Windows 1.0.17 and macOS 1.0.8 until 1.0.18
-is explicitly released.
+Store Connect and submitted to App Review; it is Waiting for Review and remains
+configured for manual release. Publishing remains a separate release decision.
+The currently supported customer release remains Windows 1.0.17 and macOS
+1.0.8 until 1.0.18 is explicitly released.
 
 The first Windows 1.0.18 test package exposed a concrete packaging error while
 scanning TIFF/HEIC visual hashes: `utif2` was unpacked but its runtime dependency
