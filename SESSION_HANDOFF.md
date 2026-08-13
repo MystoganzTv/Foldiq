@@ -51,6 +51,11 @@ through `https://foldiq.app/api/support` were accepted by production and marked
 `delivered` in the new Resend account. A private authenticated email-health
 endpoint exists solely to verify the exact `receipts@foldiq.app` sender without
 requiring a paid Stripe purchase; its secret and recipient live only in Vercel.
+During that exact check, Resend 3.x exposed a real incompatibility: passing
+`headers` as the request-options argument replaced the SDK's Authorization
+header and returned `Missing API Key`. The web app now uses Resend 6.19.0 and
+its supported `idempotencyKey` option. This preserves authentication and still
+prevents duplicate receipt sends when Stripe retries a webhook.
 The corrected webhook was deployed to Vercel production as deployment
 `dpl_rWsGv5MgnRYBEw7neYZHXQExbkwy` and `https://foldiq.app` is Ready. A live
 unsigned webhook request reached the new function and was correctly rejected

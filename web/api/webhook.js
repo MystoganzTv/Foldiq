@@ -268,7 +268,7 @@ export default async function handler(req, res) {
       subject: 'Your Foldiq order — download inside',
       html,
     }, {
-      headers: { 'Idempotency-Key': `foldiq-order-${session.id}` },
+      idempotencyKey: `foldiq-order-${session.id}`,
     });
     assertEmailSent(customerResult, 'Customer order email failed');
 
@@ -286,7 +286,7 @@ export default async function handler(req, res) {
                  country: ${escapeHTML(session.customer_details?.address?.country || '—')}
                </p>${html}`,
       }, {
-        headers: { 'Idempotency-Key': `foldiq-owner-sale-${session.id}` },
+        idempotencyKey: `foldiq-owner-sale-${session.id}`,
       });
       assertEmailSent(ownerResult, 'Owner sale notification failed');
     } catch (ownerError) {

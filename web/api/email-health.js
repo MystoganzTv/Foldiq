@@ -21,7 +21,7 @@ export function createEmailHealthHandler({ resendClient } = {}) {
       subject: 'Foldiq receipt delivery check',
       html: '<p>The production sender <strong>receipts@foldiq.app</strong> is working.</p>',
     }, {
-      headers: { 'Idempotency-Key': 'foldiq-receipt-health-v1' },
+      idempotencyKey: 'foldiq-receipt-health-v2',
     });
 
     if (result?.error) return res.status(502).json({ error: result.error.message || 'Delivery failed' });

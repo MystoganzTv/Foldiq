@@ -30,5 +30,5 @@ test('receipt health check is private and sends from receipts@foldiq.app', async
   assert.equal(accepted.statusCode, 200);
   assert.equal(deliveries[0][0].from, 'Foldiq <receipts@foldiq.app>');
   assert.equal(deliveries[0][0].to, 'owner@example.com');
-  assert.match(deliveries[0][1].headers['Idempotency-Key'], /foldiq-receipt-health/);
+  assert.match(deliveries[0][1].idempotencyKey, /foldiq-receipt-health/);
 });
