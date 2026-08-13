@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-13 14:10 America/New_York
+Updated: 2026-08-13 15:05 America/New_York
 
 ## Read this first
 
@@ -9,6 +9,41 @@ The repository is `/Users/enrique/Developer/Foldiq`. The active branch is `main`
 older 1.0.15 test build: it fixes the metadata runtime/hang, closes the major
 macOS parity gaps, adds real opt-in location organization, retry/cleanup/report
 controls, and persists Windows preferences. Do not discard these changes.
+
+The current working tree completes the safety/performance hardening for 1.0.18.
+Windows discovery no longer recursively blocks Electron, Apply/Undo use async
+filesystem operations, and a durable intent journal is checkpointed before and
+after every file operation so an interrupted move/copy can be safely recovered.
+macOS now uses the same intent-first recovery model, streaming SHA-256 checks,
+collision/change refusal during Undo, and never removes hidden user files while
+pruning empty folders. Both Welcome screens prevent a new scan while an
+interrupted recovery is pending. Windows tests pass 63/63 (one platform-only RAR
+test skipped on macOS), web tests pass 19/19, and all 34 macOS tests pass.
+
+Final local 1.0.18 builds (not named Test) were created and verified on
+2026-08-13:
+
+- `/Users/enrique/Desktop/Foldiq 1.0.18.dmg` — macOS build 117, 5.4 MB,
+  SHA-256 `87f664aa72ad39fcef5f87be33eb324fd609060a7b216898df0093ae02ee3401`.
+  The DMG checksum, mounted bundle version, and ad-hoc code signature passed.
+- `/Users/enrique/Desktop/Foldiq Setup 1.0.18.exe` — Windows x64, 120 MB,
+  SHA-256 `c178371276257753e56d97778ffa14c5700f9ec96702c1ea5641469ab0686ba4`.
+  The mandatory packaged-runtime/Smart-Duplicates verifier passed.
+
+The two older Desktop artifacts containing `Test` in their names were removed
+to prevent accidental use. These local builds are not the public GitHub/App
+Store releases until explicitly published.
+
+Purchase-receipt code now centralizes the Resend sender as
+`Foldiq <receipts@foldiq.app>`, sets a reply-to address, and uses Stripe session
+IDs as Resend idempotency keys so webhook retries cannot duplicate customer or
+owner emails. This source-side correction is tested, but Resend cannot activate
+the address yet: the free account has its single domain slot occupied by
+`rbtgenius.com`. Adding `foldiq.app` opens Resend's Pro upgrade ($20/month), and
+deleting `rbtgenius.com` would break the existing Foldiq support sender. The
+owner must explicitly choose Pro or authorize replacing the existing domain;
+do not purchase or delete a domain without that decision. `foldiq.app` uses
+Vercel DNS and currently has no Resend MX/DKIM records.
 
 Smart Duplicates 1.0.18 is implemented for macOS and Windows in the current
 source and has a newly rebuilt, locally verified Windows installer, but it is not yet a GitHub

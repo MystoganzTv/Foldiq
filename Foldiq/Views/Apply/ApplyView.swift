@@ -208,20 +208,48 @@ struct ApplyView: View {
         let m = UndoManifest(
             sessionID: sessionID,
             rootPath: session.rootPath,
-            operation: nav.organizationConfig.fileOperation
+            operation: nav.organizationConfig.fileOperation,
+            outputRootPath: outputRoot.path
+        )
+        m.securityBookmarksJSON = Self.securityBookmarksJSON(
+            for: nav.selectedFolderURLs + [outputRoot.deletingLastPathComponent()]
         )
         context.insert(m)
         manifest = m
 
+        do {
+            // Make the empty journal durable before the first file operation.
+            try context.save()
+        } catch {
+            progress = .init(
+                done: 0,
+                total: plans.count,
+                currentFile: "",
+                errors: ["Foldiq could not create its safety record: \(error.localizedDescription)"]
+            )
+            manifest = nil
+            isComplete = true
+            return
+        }
+
         let tempDirs = nav.archiveTempDirs
         Task {
-            await mover.apply(plans: plans, manifest: m) { p in
+            await mover.apply(plans: plans, manifest: m, checkpoint: {
+                try context.save()
+            }) { p in
                 self.progress = p
             }
+            // Keep an interrupted/ambiguous operation recoverable. Ordinary per-file
+            // failures that never reached the filesystem do not leave pending entries.
+            m.stateRaw = m.entries.contains(where: { !$0.wasCompleted })
+                ? "needsAttention"
+                : "complete"
             try? context.save()
             // Delete temp extraction dirs now that the files have been moved/copied.
-            await mover.cleanupTempDirs(tempDirs)
-            nav.archiveTempDirs = []
+            if progress.errors.isEmpty {
+                await mover.cleanupTempDirs(tempDirs)
+                nav.archiveTempDirs = []
+            }
             let completedWithoutErrors = progress.errors.isEmpty && m.entries.count == plans.count
             if completedWithoutErrors && nav.organizationConfig.fileOperation == .move {
                 reviewShelvedFiles = await mover.shelveResidualFilesForReview(
@@ -247,5 +275,19 @@ struct ApplyView: View {
                 requestReview()
             }
         }
+    }
+
+    private static func securityBookmarksJSON(for urls: [URL]) -> String {
+        let encoded = urls.compactMap { url -> [String: String]? in
+            guard let data = try? url.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            ) else { return nil }
+            return ["path": url.path, "bookmark": data.base64EncodedString()]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: encoded),
+              let json = String(data: data, encoding: .utf8) else { return "[]" }
+        return json
     }
 }

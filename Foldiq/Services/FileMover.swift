@@ -27,12 +27,18 @@ final class FileMover {
         var errors: [String]
     }
 
+    struct UndoResult {
+        var restored: Int
+        var errors: [String]
+    }
+
     // MARK: - Apply
 
     /// Execute all plans in `plans`. Updates plan statuses and appends UndoEntries.
     func apply(
         plans: [OrganizationPlan],
         manifest: UndoManifest,
+        checkpoint: @MainActor @escaping () throws -> Void = {},
         onProgress: @MainActor @escaping (ApplyProgress) -> Void
     ) async {
         let total = plans.count
@@ -84,20 +90,13 @@ final class FileMover {
                 let hash = await Task.detached(priority: .utility) {
                     srcURL.sha256() ?? ""
                 }.value
+                guard !hash.isEmpty else {
+                    throw CocoaError(.fileReadUnknown)
+                }
 
-                // 2. Move or copy
-                try await Task.detached(priority: .utility) {
-                    switch op {
-                    case .move: try FileManager.default.moveItem(at: srcURL, to: destURL)
-                    case .copy: try FileManager.default.copyItem(at: srcURL, to: destURL)
-                    }
-                }.value
-
-                // Back on @MainActor: safe to touch SwiftData models
-                Self.preserveDates(source: srcURL, destination: destURL, operation: op)
-                plan.status    = .done
-                plan.appliedAt = Date()
-
+                // Persist Undo intent before touching either path. This makes a
+                // crash between the file operation and the next UI update safe:
+                // Undo can inspect both locations and resume idempotently.
                 let entry = UndoEntry(
                     originalPath: srcPath,
                     newPath: destPath,
@@ -106,12 +105,47 @@ final class FileMover {
                     isFromArchive: plan.archiveSourcePath != nil
                 )
                 manifest.entries.append(entry)
+                do {
+                    try checkpoint()
+                } catch {
+                    manifest.entries.removeAll { $0.id == entry.id }
+                    throw error
+                }
+
+                // 2. Move or copy
+                try await Task.detached(priority: .utility) {
+                    try Self.performVerifiedOperation(
+                        source: srcURL,
+                        destination: destURL,
+                        operation: op,
+                        expectedHash: hash
+                    )
+                }.value
+                entry.wasCompleted = true
+
+                // Back on @MainActor: safe to touch SwiftData models
+                Self.preserveDates(source: srcURL, destination: destURL, operation: op)
+                plan.status    = .done
+                plan.appliedAt = Date()
+
+                try checkpoint()
 
             } catch {
                 let human = Self.humanizeError(error)
                 plan.status       = .error
                 plan.errorMessage = human
                 errors.append(srcURL.lastPathComponent + ": " + human)
+                // Remove a journal entry only when no destination exists and
+                // the original is still present. Every ambiguous state remains
+                // recorded for safe recovery.
+                if FileManager.default.fileExists(atPath: srcPath),
+                   !FileManager.default.fileExists(atPath: destPath),
+                   let last = manifest.entries.last,
+                   last.originalPath == srcPath,
+                   last.newPath == destPath {
+                    manifest.entries.removeLast()
+                    try? checkpoint()
+                }
             }
         }
 
@@ -153,11 +187,19 @@ final class FileMover {
 
     // MARK: - Undo
 
-    /// Reverse every entry in the manifest.
-    func undo(manifest: UndoManifest, onProgress: @MainActor @escaping (ApplyProgress) -> Void) async {
+    /// Reverse every entry in the manifest without overwriting or deleting a
+    /// file whose contents no longer match the Apply journal.
+    func undo(
+        manifest: UndoManifest,
+        outputRoot: URL,
+        checkpoint: @MainActor @escaping () throws -> Void = {},
+        onProgress: @MainActor @escaping (ApplyProgress) -> Void
+    ) async -> UndoResult {
         let entries = manifest.entries.reversed() as [UndoEntry]
         let total   = entries.count
         var done    = 0
+        var restored = 0
+        var errors: [String] = []
 
         for entry in entries {
             done += 1
@@ -174,62 +216,138 @@ final class FileMover {
             let op            = entry.operation
             let fromArchive   = entry.isFromArchive
 
-            await Task.detached(priority: .utility) {
-                if fromArchive {
-                    // The file was extracted from an archive that was never touched.
-                    // "Undo" means removing the organized copy — the original
-                    // content remains safely inside the untouched archive.
-                    try? FileManager.default.removeItem(at: newURL)
-                    Self.pruneEmptyAncestorChain(startingAt: newURL.deletingLastPathComponent())
-                } else {
-                    let origDir = originalURL.deletingLastPathComponent()
-                    try? FileManager.default.createDirectory(at: origDir, withIntermediateDirectories: true)
-                    switch op {
-                    case .move:
-                        try? FileManager.default.moveItem(at: newURL, to: originalURL)
-                        Self.pruneEmptyAncestorChain(startingAt: newURL.deletingLastPathComponent())
-                    case .copy:
-                        try? FileManager.default.removeItem(at: newURL)
-                        Self.pruneEmptyAncestorChain(startingAt: newURL.deletingLastPathComponent())
-                    }
-                }
-            }.value
+            let expectedHash = entry.contentHash
+            do {
+                try await Task.detached(priority: .utility) {
+                    try Self.undoEntry(
+                        organizedURL: newURL,
+                        originalURL: originalURL,
+                        operation: op,
+                        isFromArchive: fromArchive,
+                        expectedHash: expectedHash,
+                        outputRoot: outputRoot
+                    )
+                }.value
+                restored += 1
+                manifest.entries.removeAll { $0.id == entry.id }
+                try checkpoint()
+            } catch {
+                errors.append("\(newURL.lastPathComponent): \(Self.humanizeError(error))")
+            }
         }
 
-        // @MainActor: safe SwiftData write
-        manifest.wasUndone = true
+        manifest.wasUndone = errors.isEmpty && manifest.entries.isEmpty
+        try? checkpoint()
+        onProgress(ApplyProgress(
+            done: done,
+            total: total,
+            currentFile: entries.last.map { URL(fileURLWithPath: $0.newPath).lastPathComponent } ?? "",
+            errors: errors
+        ))
+        return UndoResult(restored: restored, errors: errors)
     }
 
-    private nonisolated static func pruneEmptyAncestorChain(startingAt url: URL) {
+    private nonisolated static func pruneEmptyAncestorChain(startingAt url: URL, stopAt outputRoot: URL) {
         let fm = FileManager.default
         var current = url
+        let stopPath = outputRoot.standardizedFileURL.path
+        let startPath = current.standardizedFileURL.path
+        guard startPath == stopPath || startPath.hasPrefix(stopPath + "/") else { return }
 
-        while true {
+        while current.standardizedFileURL.path != stopPath {
             let remainingItems = (try? fm.contentsOfDirectory(
                 at: current,
-                includingPropertiesForKeys: [.isHiddenKey],
+                includingPropertiesForKeys: nil,
                 options: []
             )) ?? []
-            let visibleItems = remainingItems.filter { item in
-                let values = try? item.resourceValues(forKeys: [.isHiddenKey])
-                return values?.isHidden != true
-            }
+            guard remainingItems.isEmpty else { break }
 
-            guard visibleItems.isEmpty else { break }
-
-            for hiddenItem in remainingItems {
-                let values = try? hiddenItem.resourceValues(forKeys: [.isHiddenKey])
-                if values?.isHidden == true {
-                    try? fm.removeItem(at: hiddenItem)
-                }
-            }
-
-            guard (try? fm.removeItem(at: current)) != nil else { break }
+            do { try fm.removeItem(at: current) } catch { break }
 
             let parent = current.deletingLastPathComponent()
             guard parent.path != current.path, !parent.path.isEmpty, parent.path != "/" else { break }
             current = parent
         }
+    }
+
+    nonisolated static func performVerifiedOperation(
+        source: URL,
+        destination: URL,
+        operation: FileOperation,
+        expectedHash: String
+    ) throws {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: destination.path) else {
+            throw CocoaError(.fileWriteFileExists)
+        }
+
+        switch operation {
+        case .copy:
+            try fm.copyItem(at: source, to: destination)
+        case .move:
+            do {
+                try fm.moveItem(at: source, to: destination)
+            } catch {
+                let nsError = error as NSError
+                guard nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(EXDEV) else { throw error }
+                try fm.copyItem(at: source, to: destination)
+                guard destination.sha256() == expectedHash else {
+                    try? fm.removeItem(at: destination)
+                    throw CocoaError(.fileWriteUnknown)
+                }
+                try fm.removeItem(at: source)
+            }
+        }
+
+        guard destination.sha256() == expectedHash else {
+            if fm.fileExists(atPath: source.path) { try? fm.removeItem(at: destination) }
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    nonisolated static func undoEntry(
+        organizedURL: URL,
+        originalURL: URL,
+        operation: FileOperation,
+        isFromArchive: Bool,
+        expectedHash: String,
+        outputRoot: URL
+    ) throws {
+        guard !expectedHash.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
+        let fm = FileManager.default
+        let organizedExists = fm.fileExists(atPath: organizedURL.path)
+        let originalExists = fm.fileExists(atPath: originalURL.path)
+
+        // An Apply intent can survive even when the process stopped before the
+        // operation began. In that state there is nothing to reverse.
+        if !organizedExists, originalExists, operation != .copy, originalURL.sha256() == expectedHash {
+            return
+        }
+
+        if !organizedExists {
+            if operation == .copy || isFromArchive { return }
+            guard originalExists, originalURL.sha256() == expectedHash else {
+                throw NSError(domain: "Foldiq.Undo", code: 1, userInfo: [NSLocalizedDescriptionKey: "The organized file is missing and the original could not be verified."])
+            }
+            return
+        }
+
+        guard organizedURL.sha256() == expectedHash else {
+            throw NSError(domain: "Foldiq.Undo", code: 2, userInfo: [NSLocalizedDescriptionKey: "The organized file changed after organization; Undo was refused."])
+        }
+
+        if operation == .copy || isFromArchive {
+            try fm.removeItem(at: organizedURL)
+        } else if originalExists {
+            guard originalURL.sha256() == expectedHash else {
+                throw NSError(domain: "Foldiq.Undo", code: 3, userInfo: [NSLocalizedDescriptionKey: "The original path is occupied; Foldiq will not overwrite it."])
+            }
+            try fm.removeItem(at: organizedURL)
+        } else {
+            try fm.createDirectory(at: originalURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try performVerifiedOperation(source: organizedURL, destination: originalURL, operation: .move, expectedHash: expectedHash)
+        }
+        pruneEmptyAncestorChain(startingAt: organizedURL.deletingLastPathComponent(), stopAt: outputRoot)
     }
 
     // MARK: - Archive temp directory cleanup
@@ -314,21 +432,7 @@ final class FileMover {
                 includingPropertiesForKeys: [.isHiddenKey],
                 options: []
             )) ?? []
-            let visibleItems = remainingItems.filter { item in
-                let values = try? item.resourceValues(forKeys: [.isHiddenKey])
-                return values?.isHidden != true
-            }
-
-            if visibleItems.isEmpty {
-                if !dryRun {
-                    for hiddenItem in remainingItems {
-                        let values = try? hiddenItem.resourceValues(forKeys: [.isHiddenKey])
-                        if values?.isHidden == true {
-                            try? fm.removeItem(at: hiddenItem)
-                        }
-                    }
-                }
-
+            if remainingItems.isEmpty {
                 if !dryRun { try? fm.removeItem(at: url) }
                 count += 1
             }
@@ -418,8 +522,18 @@ extension URL {
 
     /// Compute SHA-256 of file contents. Returns nil if file is unreadable.
     func sha256() -> String? {
-        guard let data = try? Data(contentsOf: self, options: .mappedIfSafe) else { return nil }
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02x", $0) }.joined()
+        guard let stream = InputStream(url: self) else { return nil }
+        stream.open()
+        defer { stream.close() }
+
+        var hasher = SHA256()
+        var buffer = [UInt8](repeating: 0, count: 1_048_576)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count < 0 { return nil }
+            if count == 0 { break }
+            hasher.update(data: Data(buffer[0..<count]))
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }

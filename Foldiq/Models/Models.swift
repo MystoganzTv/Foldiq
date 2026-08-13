@@ -237,17 +237,31 @@ final class UndoManifest {
     var rootPath: String
     var operation: String   // "move" | "copy"
     var wasUndone: Bool
+    /// applying | complete | undoing | needsAttention | undone
+    var stateRaw: String = "complete"
+    /// Exact boundary used when pruning empty folders during recovery.
+    var outputRootPath: String?
+    /// JSON array of security-scoped bookmarks required for crash recovery.
+    var securityBookmarksJSON: String = "[]"
 
     @Relationship(deleteRule: .cascade, inverse: \UndoEntry.manifest)
     var entries: [UndoEntry]
 
-    init(sessionID: UUID, rootPath: String, operation: FileOperation) {
+    init(
+        sessionID: UUID,
+        rootPath: String,
+        operation: FileOperation,
+        outputRootPath: String? = nil
+    ) {
         self.id = UUID()
         self.sessionID = sessionID
         self.createdAt = Date()
         self.rootPath = rootPath
         self.operation = operation.rawValue
         self.wasUndone = false
+        self.stateRaw = "applying"
+        self.outputRootPath = outputRootPath
+        self.securityBookmarksJSON = "[]"
         self.entries = []
     }
 }
@@ -265,6 +279,8 @@ final class UndoEntry {
     /// Undo for these entries deletes the organized copy instead of moving it back,
     /// because the original content is still safely inside the untouched archive.
     var isFromArchive: Bool
+    /// False while the entry is a durable pre-operation intent record.
+    var wasCompleted: Bool = false
 
     @Relationship(deleteRule: .nullify)
     var manifest: UndoManifest?
@@ -276,6 +292,7 @@ final class UndoEntry {
         self.contentHash = hash
         self.operationRaw = operation.rawValue
         self.isFromArchive = isFromArchive
+        self.wasCompleted = false
         self.timestamp = Date()
     }
 

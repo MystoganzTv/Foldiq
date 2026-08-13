@@ -79,3 +79,10 @@ test('email template escapes Stripe-controlled customer fields', () => {
   assert.match(html, /Foldiq for Windows/);
   assert.match(html, /\/api\/download\?session_id=cs_test_paid123/);
 });
+
+test('purchase email source is configurable and defaults to the verified Foldiq mailbox', async () => {
+  const source = await import('node:fs').then(fs => fs.readFileSync(new URL('../api/webhook.js', import.meta.url), 'utf8'));
+  assert.match(source, /RECEIPTS_FROM_EMAIL.*receipts@foldiq\.app/);
+  assert.match(source, /Idempotency-Key.*foldiq-order-/);
+  assert.match(source, /replyTo:/);
+});

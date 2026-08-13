@@ -75,11 +75,11 @@ export default function WelcomeScreen({ go, folders, setFolders, config, setConf
         {(pendingUndo.length > 0 || recoveryMessage) && (
           <div className={s.recoveryCard} role="status" aria-live="polite">
             <div>
-              <strong>{pendingUndo.length > 0 ? 'An organization Undo needs attention' : 'Recovery complete'}</strong>
-              <p>{recoveryMessage || `Foldiq found a preserved recovery record for ${pendingUndo.reduce((sum, item) => sum + item.files, 0).toLocaleString()} files. Resume it before starting another organization.`}</p>
+              <strong>{pendingUndo.length > 0 ? 'An interrupted organization needs attention' : 'Recovery complete'}</strong>
+              <p>{recoveryMessage || `Foldiq safely recorded ${pendingUndo.reduce((sum, item) => sum + item.files, 0).toLocaleString()} planned files before the interruption. Restore completed files before starting another organization.`}</p>
               {resumingUndo && <small>{undoProgress.total > 0 ? `${undoProgress.current.toLocaleString()} of ${undoProgress.total.toLocaleString()} · ` : ''}{undoProgress.file || 'Preparing safe Undo…'}</small>}
             </div>
-            {pendingUndo.length > 0 && <button className={s.btnDanger} onClick={resumeUndo} disabled={resumingUndo}>{resumingUndo ? 'Restoring…' : 'Resume Safe Undo'}</button>}
+            {pendingUndo.length > 0 && <button className={s.btnDanger} onClick={resumeUndo} disabled={resumingUndo}>{resumingUndo ? 'Restoring…' : 'Restore Files Safely'}</button>}
           </div>
         )}
         {/* Hero — compact when folders selected */}
@@ -189,7 +189,7 @@ export default function WelcomeScreen({ go, folders, setFolders, config, setConf
           <button className={s.btnSecondary} onClick={pickArchives}>+ Add Archives</button>
           <button
             className={s.btnPrimary}
-            disabled={folders.length === 0}
+            disabled={folders.length === 0 || pendingUndo.length > 0 || resumingUndo}
             onClick={() => go('scan')}
           >
             Scan Items →

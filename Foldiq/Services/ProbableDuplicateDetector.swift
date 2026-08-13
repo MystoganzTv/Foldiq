@@ -22,6 +22,8 @@ final class ProbableDuplicateDetector {
     static let burstImageDistance = 14
     private static let tenMinutes: TimeInterval = 10 * 60
     private static let fifteenSeconds: TimeInterval = 15
+    private static let visualCandidateWindow: TimeInterval = 2 * 60
+    private static let maxDimensionOnlyGroup = 40
 
     private struct FileSnapshot: Sendable {
         let id: UUID
@@ -123,21 +125,30 @@ final class ProbableDuplicateDetector {
         var visualHashes: [Int: [UInt64]] = [:]
         visualHashes.reserveCapacity(visualIndexes.count)
 
-        for (position, index) in visualIndexes.enumerated() {
-            if Task.isCancelled { return 0 }
-            onProgress(Progress(
-                processed: position,
-                total: visualIndexes.count,
-                currentFile: snapshots[index].filename
-            ))
-            if let hashes = await Self.computeVisualHashes(url: snapshots[index].url) {
-                visualHashes[index] = hashes
+        var nextPosition = 0
+        var completed = 0
+        let workerCount = min(2, visualIndexes.count)
+        await withTaskGroup(of: (Int, [UInt64]?).self) { group in
+            func enqueueNext() {
+                guard nextPosition < visualIndexes.count else { return }
+                let index = visualIndexes[nextPosition]
+                nextPosition += 1
+                group.addTask {
+                    (index, await Self.computeVisualHashes(url: snapshots[index].url))
+                }
             }
-            onProgress(Progress(
-                processed: position + 1,
-                total: visualIndexes.count,
-                currentFile: snapshots[index].filename
-            ))
+            for _ in 0..<workerCount { enqueueNext() }
+            while let (index, hashes) = await group.next() {
+                if Task.isCancelled { group.cancelAll(); return }
+                if let hashes { visualHashes[index] = hashes }
+                completed += 1
+                onProgress(Progress(
+                    processed: completed,
+                    total: visualIndexes.count,
+                    currentFile: snapshots[index].filename
+                ))
+                enqueueNext()
+            }
         }
 
         var allGroups = UnionFind(count: snapshots.count)
@@ -240,7 +251,7 @@ final class ProbableDuplicateDetector {
         for left in dated.indices {
             var right = left + 1
             while right < min(dated.count, left + 100)
-                    && dated[right].1.timeIntervalSince(dated[left].1) <= tenMinutes {
+                    && dated[right].1.timeIntervalSince(dated[left].1) <= visualCandidateWindow {
                 if orientationAwareAspectDifference(dated[left].2, dated[right].2) <= 0.08 {
                     result.insert(Pair(dated[left].0, dated[right].0))
                 }
@@ -254,6 +265,7 @@ final class ProbableDuplicateDetector {
             byDimensions["\(min(width, height))x\(max(width, height))", default: []].append(index)
         }
         for var group in byDimensions.values {
+            if group.count > maxDimensionOnlyGroup { continue }
             group.sort { files[$0].fileSize < files[$1].fileSize }
             for left in group.indices {
                 let upper = min(group.count, left + 7)

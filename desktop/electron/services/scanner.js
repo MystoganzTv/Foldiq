@@ -89,29 +89,33 @@ function hashFile(filePath) {
 
 const tempDirectories = new Set();
 
-function walkDir(dir, mediaPaths, archivePaths) {
-  let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
-  catch { return; }
+async function walkDir(root, mediaPaths, archivePaths, signal, onDirectory = () => {}) {
+  const pending = [root];
+  while (pending.length > 0) {
+    throwIfAborted(signal);
+    const dir = pending.pop();
+    let entries;
+    try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); }
+    catch { continue; }
+    onDirectory(dir);
 
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      walkDir(full, mediaPaths, archivePaths);
-    } else if (entry.isFile() && isMedia(full)) {
-      mediaPaths.add(full);
-    } else if (entry.isFile() && isArchive(full)) {
-      archivePaths.add(full);
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) pending.push(full);
+      else if (entry.isFile() && isMedia(full)) mediaPaths.add(full);
+      else if (entry.isFile() && isArchive(full)) archivePaths.add(full);
     }
+    // Yield between folders so Electron can paint progress and process Cancel.
+    await new Promise(resolve => setImmediate(resolve));
   }
 }
 
-function collectSource(sourcePath, mediaPaths, archivePaths) {
+async function collectSource(sourcePath, mediaPaths, archivePaths, signal, onDirectory) {
   let stat;
-  try { stat = fs.statSync(sourcePath); } catch { return; }
+  try { stat = await fs.promises.stat(sourcePath); } catch { return; }
 
   if (stat.isDirectory()) {
-    walkDir(sourcePath, mediaPaths, archivePaths);
+    await walkDir(sourcePath, mediaPaths, archivePaths, signal, onDirectory);
   } else if (stat.isFile() && isMedia(sourcePath)) {
     mediaPaths.add(sourcePath);
   } else if (stat.isFile() && isArchive(sourcePath)) {
@@ -389,7 +393,11 @@ async function scan(folders, onProgress, options = {}) {
   await cleanupTempDirs();
   const mediaPaths = new Set();
   const archivePaths = new Set();
-  for (const folder of folders) collectSource(folder, mediaPaths, archivePaths);
+  for (const folder of folders) {
+    await collectSource(folder, mediaPaths, archivePaths, signal, directory => {
+      progress({ phase: 'discovering', current: mediaPaths.size, total: 0, file: `Looking in ${path.basename(directory)}…` });
+    });
+  }
   if (!includeArchives) archivePaths.clear();
   if (!includeVideos) {
     for (const filePath of mediaPaths) {

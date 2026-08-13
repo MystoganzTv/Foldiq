@@ -41,7 +41,7 @@ export default function ApplyScreen({ go, plan, config, setResult }) {
 
   const completedWithErrors = errors.length > 0;
   const title = fatalError
-    ? 'Nothing Was Organized'
+    ? 'Organization Was Interrupted'
     : completedWithErrors
       ? 'Finished with Errors'
       : result
@@ -49,7 +49,7 @@ export default function ApplyScreen({ go, plan, config, setResult }) {
         : `${config.copyMode ? 'Copying' : 'Moving'} Files…`;
 
   const subtitle = fatalError
-    ? 'Your files were left untouched. Review the message below and try again.'
+    ? 'Foldiq preserved a recovery record. Reopen the app to restore any files that were already organized.'
     : completedWithErrors
       ? `${result.moved.toLocaleString()} files were organized, but ${errors.length.toLocaleString()} need attention.`
       : result

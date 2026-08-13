@@ -3,8 +3,8 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-function ensureDir(dir) {
-  fs.mkdirSync(dir, { recursive: true });
+async function ensureDir(dir) {
+  await fs.promises.mkdir(dir, { recursive: true });
 }
 
 function manifestPath(manifestDirectory) {
@@ -41,7 +41,7 @@ function cleanupManifests(manifestDirectory) {
   }
 }
 
-async function listManifests(manifestDirectory) {
+async function listManifests(manifestDirectory, { includeCompleted = false } = {}) {
   let entries = [];
   try { entries = await fs.promises.readdir(manifestDirectory, { withFileTypes: true }); } catch { return []; }
   const manifests = [];
@@ -51,10 +51,13 @@ async function listManifests(manifestDirectory) {
     try {
       const manifest = JSON.parse(await fs.promises.readFile(filePath, 'utf8'));
       if (!Array.isArray(manifest.moves)) continue;
+      const state = manifest.state || 'complete';
+      if (!includeCompleted && !['applying', 'undoing', 'needs_attention'].includes(state)) continue;
       manifests.push({
         path: filePath,
-        files: manifest.moves.length,
+        files: Math.max(manifest.moves.length, manifest.operations?.length || 0),
         createdAt: manifest.createdAt || null,
+        state,
       });
     } catch {}
   }
@@ -71,64 +74,111 @@ function hashFile(filePath) {
   });
 }
 
-function assertDestinationAvailable(destPath) {
-  if (fs.existsSync(destPath)) {
+async function exists(filePath) {
+  try {
+    await fs.promises.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function assertDestinationAvailable(destPath) {
+  if (await exists(destPath)) {
     throw new Error(`Destination already exists; Foldiq will not overwrite it: ${destPath}`);
   }
 }
 
 async function moveWithoutOverwrite(src, dest) {
-  assertDestinationAvailable(dest);
+  await assertDestinationAvailable(dest);
 
   try {
-    fs.renameSync(src, dest);
+    await fs.promises.rename(src, dest);
     return;
   } catch (error) {
     if (error.code !== 'EXDEV') throw error;
   }
 
-  fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL);
+  await fs.promises.copyFile(src, dest, fs.constants.COPYFILE_EXCL);
   try {
     const [sourceHash, destinationHash] = await Promise.all([hashFile(src), hashFile(dest)]);
     if (sourceHash !== destinationHash) {
       throw new Error(`Cross-volume copy verification failed for ${path.basename(src)}`);
     }
-    fs.unlinkSync(src);
+    await fs.promises.unlink(src);
   } catch (error) {
-    try { fs.rmSync(dest, { force: true }); } catch {}
+    try { await fs.promises.rm(dest, { force: true }); } catch {}
     throw error;
   }
 }
 
-function writeManifestAtomic(mPath, manifest) {
+async function writeManifestAtomic(mPath, manifest) {
   const tempPath = `${mPath}.${process.pid}.tmp`;
-  fs.writeFileSync(tempPath, JSON.stringify(manifest, null, 2), {
-    encoding: 'utf-8',
-    flag: 'wx',
-  });
-  fs.renameSync(tempPath, mPath);
+  const handle = await fs.promises.open(tempPath, 'wx');
+  try {
+    await handle.writeFile(JSON.stringify(manifest, null, 2), 'utf-8');
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await fs.promises.rename(tempPath, mPath);
+  } catch (error) {
+    try { await fs.promises.rm(tempPath, { force: true }); } catch {}
+    throw error;
+  }
 }
 
-async function apply(plan, config, onProgress) {
+async function apply(plan, config, onProgress, hooks = {}) {
   if (!config.manifestDirectory) throw new Error('Internal Undo storage is not configured');
   const moves   = plan.filter(f => f.action !== 'skip' && f.included !== false);
   const skipped = plan.filter(f => f.action === 'skip' || f.included === false);
-  const manifest = { moves: [], skipped, createdAt: new Date().toISOString() };
+  const manifest = {
+    version: 2,
+    state: 'applying',
+    moves: [],
+    operations: moves.map(item => ({
+      src: item.path,
+      dest: item.destPath,
+      action: item.action,
+      name: item.name,
+      status: 'pending',
+    })),
+    skipped,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
   const errors = [];
   const mPath  = manifestPath(config.manifestDirectory);
 
+  await ensureDir(path.dirname(mPath));
+  await writeManifestAtomic(mPath, manifest);
+
   for (let i = 0; i < moves.length; i++) {
     const item = moves[i];
+    const operation = manifest.operations[i];
     onProgress({ current: i + 1, total: moves.length, file: item.name });
 
     try {
-      ensureDir(path.dirname(item.destPath));
-      assertDestinationAvailable(item.destPath);
+      await ensureDir(path.dirname(item.destPath));
+      await assertDestinationAvailable(item.destPath);
       const sourceHash = await hashFile(item.path);
-      const sourceSize = fs.statSync(item.path).size;
+      const sourceSize = (await fs.promises.stat(item.path)).size;
+
+      // Persist intent before touching the source. If the process stops after
+      // the file operation but before the completion checkpoint, recovery can
+      // still identify the file by this hash and safely reverse it.
+      Object.assign(operation, { sha256: sourceHash, size: sourceSize, status: 'ready' });
+      manifest.updatedAt = new Date().toISOString();
+      await writeManifestAtomic(mPath, manifest);
 
       if (item.action === 'copy') {
-        fs.copyFileSync(item.path, item.destPath, fs.constants.COPYFILE_EXCL);
+        await fs.promises.copyFile(item.path, item.destPath, fs.constants.COPYFILE_EXCL);
+        const copiedHash = await hashFile(item.destPath);
+        if (copiedHash !== sourceHash) {
+          await fs.promises.rm(item.destPath, { force: true });
+          throw new Error(`Copy verification failed for ${item.name}`);
+        }
       } else {
         await moveWithoutOverwrite(item.path, item.destPath);
       }
@@ -140,7 +190,12 @@ async function apply(plan, config, onProgress) {
         sha256: sourceHash,
         size: sourceSize,
       });
+      operation.status = 'complete';
+      manifest.updatedAt = new Date().toISOString();
+      await writeManifestAtomic(mPath, manifest);
     } catch (err) {
+      operation.status = operation.status === 'ready' ? 'ready' : 'error';
+      operation.error = err.message;
       errors.push({
         file: item.name,
         path: item.path,
@@ -148,12 +203,17 @@ async function apply(plan, config, onProgress) {
         action: item.action,
         error: err.message,
       });
+      manifest.updatedAt = new Date().toISOString();
+      await writeManifestAtomic(mPath, manifest);
+    }
+    if (operation.status === 'complete') {
+      await hooks.afterCommit?.({ index: i, item, manifestPath: mPath });
     }
   }
 
-  // Write manifest for undo
-  ensureDir(path.dirname(mPath));
-  writeManifestAtomic(mPath, manifest);
+  manifest.state = 'complete';
+  manifest.updatedAt = new Date().toISOString();
+  await writeManifestAtomic(mPath, manifest);
 
   return {
     moved:        manifest.moves.length,
@@ -175,14 +235,9 @@ async function undo(mPath, manifestDirectory = null, onProgress = () => {}) {
 
   const manifest = JSON.parse(await fs.promises.readFile(mPath, 'utf-8'));
   const errors = [];
-  async function exists(filePath) {
-    try {
-      await fs.promises.access(filePath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
+  manifest.state = 'undoing';
+  manifest.updatedAt = new Date().toISOString();
+  await writeManifestAtomic(mPath, manifest);
 
   async function moveBackWithoutBlocking(src, dest) {
     if (await exists(dest)) {
@@ -209,7 +264,13 @@ async function undo(mPath, manifestDirectory = null, onProgress = () => {}) {
   }
 
   let restored = 0;
-  const entries = [...manifest.moves].reverse();
+  const recorded = new Map(manifest.moves.map(entry => [`${entry.src}\n${entry.dest}`, entry]));
+  for (const operation of manifest.operations || []) {
+    if (!operation.sha256 || !['ready', 'complete'].includes(operation.status)) continue;
+    const key = `${operation.src}\n${operation.dest}`;
+    if (!recorded.has(key)) recorded.set(key, operation);
+  }
+  const entries = [...recorded.values()].reverse();
   for (let index = 0; index < entries.length; index++) {
     const entry = entries[index];
     onProgress({ current: index, total: entries.length, file: path.basename(entry.dest), phase: 'verifying' });
@@ -260,12 +321,19 @@ async function undo(mPath, manifestDirectory = null, onProgress = () => {}) {
         await moveBackWithoutBlocking(entry.dest, entry.src);
       }
       restored++;
+      const operation = manifest.operations?.find(item => item.src === entry.src && item.dest === entry.dest);
+      if (operation) operation.status = 'undone';
+      manifest.updatedAt = new Date().toISOString();
+      await writeManifestAtomic(mPath, manifest);
     } catch (err) {
       errors.push({ file: entry.src, error: err.message });
     }
     onProgress({ current: index + 1, total: entries.length, file: path.basename(entry.dest), phase: 'restored' });
   }
 
+  manifest.state = errors.length === 0 ? 'undone' : 'needs_attention';
+  manifest.updatedAt = new Date().toISOString();
+  await writeManifestAtomic(mPath, manifest);
   if (errors.length === 0) await fs.promises.rm(mPath, { force: true });
   return { restored, errors, manifestPath: errors.length ? mPath : null };
 }
@@ -275,20 +343,20 @@ function isSameOrInside(candidate, parent) {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-function findEmptyFolders(roots, skipPaths = []) {
+async function findEmptyFolders(roots, skipPaths = []) {
   const empty = [];
   const resolvedSkips = skipPaths.filter(Boolean).map(item => path.resolve(item));
 
-  function visit(directory, preserveRoot) {
+  async function visit(directory, preserveRoot) {
     if (resolvedSkips.some(skip => isSameOrInside(directory, skip))) return false;
     let entries;
-    try { entries = fs.readdirSync(directory, { withFileTypes: true }); } catch { return false; }
+    try { entries = await fs.promises.readdir(directory, { withFileTypes: true }); } catch { return false; }
     let hasContent = false;
     for (const entry of entries) {
       const child = path.join(directory, entry.name);
       if (!entry.isDirectory()) {
         hasContent = true;
-      } else if (!visit(child, false)) {
+      } else if (!(await visit(child, false))) {
         hasContent = true;
       }
     }
@@ -298,18 +366,18 @@ function findEmptyFolders(roots, skipPaths = []) {
 
   for (const root of roots) {
     try {
-      if (fs.statSync(root).isDirectory()) visit(root, true);
+      if ((await fs.promises.stat(root)).isDirectory()) await visit(root, true);
     } catch {}
   }
   return empty.sort((left, right) => right.length - left.length);
 }
 
-function removeEmptyFolders(roots, skipPaths = []) {
-  const folders = findEmptyFolders(roots, skipPaths);
+async function removeEmptyFolders(roots, skipPaths = []) {
+  const folders = await findEmptyFolders(roots, skipPaths);
   let removed = 0;
   for (const folder of folders) {
     try {
-      fs.rmdirSync(folder);
+      await fs.promises.rmdir(folder);
       removed++;
     } catch {}
   }

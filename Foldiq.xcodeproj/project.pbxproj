@@ -39,6 +39,7 @@
 		AA100001 /* OrganizationPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100001 /* OrganizationPlannerTests.swift */; };
 		AA100002 /* ProbableDuplicateDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100002 /* ProbableDuplicateDetectorTests.swift */; };
 		AA100003 /* ArchiveExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100003 /* ArchiveExtractorTests.swift */; };
+		AA100006 /* FileMoverSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100006 /* FileMoverSafetyTests.swift */; };
 		AA100004 /* archive-media.7z in Resources */ = {isa = PBXBuildFile; fileRef = BB100004 /* archive-media.7z */; };
 		AA100005 /* archive-media.rar in Resources */ = {isa = PBXBuildFile; fileRef = BB100005 /* archive-media.rar */; };
 		AA200001 /* FoldiqApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000001 /* FoldiqApp.swift */; };
@@ -122,6 +123,7 @@
 		BB100003 /* ArchiveExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveExtractorTests.swift; sourceTree = "<group>"; };
 		BB100004 /* archive-media.7z */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fixtures/archive-media.7z"; sourceTree = "<group>"; };
 		BB100005 /* archive-media.rar */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fixtures/archive-media.rar"; sourceTree = "<group>"; };
+		BB100006 /* FileMoverSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileMoverSafetyTests.swift; sourceTree = "<group>"; };
 		CC000001 /* Foldiq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foldiq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC100001 /* FoldiqTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FoldiqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC200001 /* Foldiq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foldiq.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -194,6 +196,7 @@
 				BB100001 /* OrganizationPlannerTests.swift */,
 				BB100002 /* ProbableDuplicateDetectorTests.swift */,
 				BB100003 /* ArchiveExtractorTests.swift */,
+				BB100006 /* FileMoverSafetyTests.swift */,
 				BB100004 /* archive-media.7z */,
 				BB100005 /* archive-media.rar */,
 			);
@@ -516,6 +519,7 @@
 				AA100001 /* OrganizationPlannerTests.swift in Sources */,
 				AA100002 /* ProbableDuplicateDetectorTests.swift in Sources */,
 				AA100003 /* ArchiveExtractorTests.swift in Sources */,
+				AA100006 /* FileMoverSafetyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

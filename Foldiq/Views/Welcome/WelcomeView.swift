@@ -16,6 +16,11 @@ struct WelcomeView: View {
     @State private var isHoveringButton = false
     @State private var isDragTargeted = false
     @State private var showingItemImporter = false
+    @State private var interruptedManifests: [UndoManifest] = []
+    @State private var isRecovering = false
+    @State private var recoveryMessage: String?
+    @State private var recoveryProgress = FileMover.ApplyProgress(done: 0, total: 1, currentFile: "", errors: [])
+    private let recoveryMover = FileMover()
 
     // Undo toast (shown after returning from a successful undo)
     @State private var showUndoToast = false
@@ -28,6 +33,12 @@ struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
+
+            if !interruptedManifests.isEmpty || recoveryMessage != nil {
+                recoveryCard
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 16)
+            }
 
             // ── Logo & headline ─────────────────────────────────────────────
             VStack(spacing: 16) {
@@ -186,6 +197,7 @@ struct WelcomeView: View {
             // nav.scanSession is nil. All persisted sessions are stale —
             // delete them now to prevent SwiftData conflicts and memory growth.
             purgeStaleSwiftData()
+            loadInterruptedManifests()
 
             // ── Undo toast ───────────────────────────────────────────────────
             if let count = nav.lastUndoRestoredCount {
@@ -197,6 +209,95 @@ struct WelcomeView: View {
                     withAnimation(.easeOut) { showUndoToast = false }
                 }
             }
+        }
+    }
+
+    private var recoveryCard: some View {
+        HStack(spacing: 14) {
+            Image(systemName: interruptedManifests.isEmpty ? "checkmark.shield.fill" : "exclamationmark.arrow.triangle.2.circlepath")
+                .font(.title2)
+                .foregroundStyle(interruptedManifests.isEmpty ? .green : .orange)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(interruptedManifests.isEmpty ? "Recovery Complete" : "An interrupted organization needs attention")
+                    .font(.headline)
+                Text(recoveryMessage ?? "Foldiq preserved a safety record. Restore completed files before starting another organization.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if isRecovering {
+                    ProgressView(value: Double(recoveryProgress.done), total: Double(max(recoveryProgress.total, 1)))
+                    Text(recoveryProgress.currentFile)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            if !interruptedManifests.isEmpty {
+                Button(isRecovering ? "Restoring…" : "Restore Files Safely") {
+                    recoverInterruptedManifests()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .disabled(isRecovering)
+            }
+        }
+        .padding(14)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func loadInterruptedManifests() {
+        let states = ["applying", "undoing", "needsAttention"]
+        interruptedManifests = ((try? context.fetch(FetchDescriptor<UndoManifest>())) ?? [])
+            .filter { states.contains($0.stateRaw) && !$0.wasUndone }
+    }
+
+    private func recoverInterruptedManifests() {
+        isRecovering = true
+        recoveryMessage = nil
+        Task {
+            var restored = 0
+            var errors: [String] = []
+            for manifest in interruptedManifests.reversed() {
+                let accessURLs = Self.restoreSecurityScope(from: manifest.securityBookmarksJSON)
+                guard let outputPath = manifest.outputRootPath else {
+                    errors.append("The recovery destination is missing from the safety record.")
+                    accessURLs.forEach { $0.stopAccessingSecurityScopedResource() }
+                    continue
+                }
+                manifest.stateRaw = "undoing"
+                try? context.save()
+                let result = await recoveryMover.undo(
+                    manifest: manifest,
+                    outputRoot: URL(fileURLWithPath: outputPath),
+                    checkpoint: { try context.save() }
+                ) { recoveryProgress = $0 }
+                restored += result.restored
+                errors.append(contentsOf: result.errors)
+                manifest.stateRaw = result.errors.isEmpty ? "undone" : "needsAttention"
+                try? context.save()
+                accessURLs.forEach { $0.stopAccessingSecurityScopedResource() }
+            }
+            isRecovering = false
+            loadInterruptedManifests()
+            recoveryMessage = errors.isEmpty
+                ? "Safe recovery complete — \(restored) file\(restored == 1 ? "" : "s") restored."
+                : "Foldiq restored \(restored) files. \(errors[0])"
+        }
+    }
+
+    private static func restoreSecurityScope(from json: String) -> [URL] {
+        guard let data = json.data(using: .utf8),
+              let records = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] else { return [] }
+        return records.compactMap { record in
+            guard let encoded = record["bookmark"], let bookmark = Data(base64Encoded: encoded) else { return nil }
+            var stale = false
+            guard let url = try? URL(
+                resolvingBookmarkData: bookmark,
+                options: [.withSecurityScope, .withoutUI],
+                relativeTo: nil,
+                bookmarkDataIsStale: &stale
+            ), url.startAccessingSecurityScopedResource() else { return nil }
+            return url
         }
     }
 
@@ -241,6 +342,8 @@ struct WelcomeView: View {
                 .foregroundStyle(.white)
             }
             .buttonStyle(.plain)
+            .disabled(!interruptedManifests.isEmpty || isRecovering)
+            .opacity(interruptedManifests.isEmpty && !isRecovering ? 1 : 0.45)
             .transition(.scale.combined(with: .opacity))
         }
     }
@@ -255,9 +358,13 @@ struct WelcomeView: View {
             let plans = try context.fetch(FetchDescriptor<OrganizationPlan>())
             plans.forEach { context.delete($0) }
 
-            // Delete all UndoManifests and their cascaded UndoEntries
+            // Keep interrupted Apply/Undo journals across relaunches. Completed
+            // sessions can be discarded here; an in-progress safety record may
+            // be the only reliable way to recover moved files after a crash.
             let manifests = try context.fetch(FetchDescriptor<UndoManifest>())
-            manifests.forEach { context.delete($0) }
+            manifests
+                .filter { !["applying", "undoing", "needsAttention"].contains($0.stateRaw) }
+                .forEach { context.delete($0) }
 
             // Delete all ScanSessions (cascades to their MediaFiles)
             let sessions = try context.fetch(FetchDescriptor<ScanSession>())

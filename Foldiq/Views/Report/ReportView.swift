@@ -533,16 +533,32 @@ struct ReportView: View {
 
     private func performUndo() {
         guard let manifest = manifests.first else { return }
-        let restoredCount = done.count
+        guard let session = nav.scanSession else { return }
+        let outputRoot = nav.organizationConfig.outputRoot(forSelectedRoot: session.rootURL)
+        manifest.stateRaw = "undoing"
+        try? context.save()
         isUndoing = true
         Task {
-            await mover.undo(manifest: manifest) { p in
+            let result = await mover.undo(
+                manifest: manifest,
+                outputRoot: outputRoot,
+                checkpoint: { try context.save() }
+            ) { p in
                 self.undoProgress = p
             }
             try? context.save()
+            manifest.stateRaw = result.errors.isEmpty ? "undone" : "needsAttention"
+            try? context.save()
             isUndoing    = false
-            undoRestoredCount = restoredCount
-            undoComplete = true
+            undoRestoredCount = result.restored
+            undoComplete = result.errors.isEmpty
+            if let firstError = result.errors.first {
+                exportFeedback = FeedbackMessage(
+                    title: "Undo Needs Attention",
+                    message: firstError + " Your remaining Undo record was preserved.",
+                    revealURL: nil
+                )
+            }
         }
     }
 

@@ -26,6 +26,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 const SITE = 'https://foldiq.app';
 const OWNER_EMAIL = 'enrique.padron853@gmail.com';
+const RECEIPTS_FROM_EMAIL = process.env.RECEIPTS_FROM_EMAIL || 'Foldiq <receipts@foldiq.app>';
 
 // Windows is served by a payment-verified endpoint backed by a private GitHub
 // release. Mac ships from the App Store and is not sold here.
@@ -261,10 +262,13 @@ export default async function handler(req, res) {
 
   try {
     const customerResult = await resend.emails.send({
-      from: 'Foldiq <receipts@foldiq.app>',
+      from: RECEIPTS_FROM_EMAIL,
       to: customerEmail,
+      replyTo: process.env.SUPPORT_REPLY_TO || OWNER_EMAIL,
       subject: 'Your Foldiq order — download inside',
       html,
+    }, {
+      headers: { 'Idempotency-Key': `foldiq-order-${session.id}` },
     });
     assertEmailSent(customerResult, 'Customer order email failed');
 
@@ -272,7 +276,7 @@ export default async function handler(req, res) {
     // internal owner notification fails.
     try {
       const ownerResult = await resend.emails.send({
-        from: 'Foldiq <receipts@foldiq.app>',
+        from: RECEIPTS_FROM_EMAIL,
         to: OWNER_EMAIL,
         subject: `[New Sale] Foldiq ${platform} ${amount} — ${customerEmail.replace(/[\r\n]/g, ' ')}`,
         html: `<p style="font-family:monospace;font-size:13px;color:#475569;">
@@ -281,6 +285,8 @@ export default async function handler(req, res) {
                  checkout_session: ${escapeHTML(session.id)}<br/>
                  country: ${escapeHTML(session.customer_details?.address?.country || '—')}
                </p>${html}`,
+      }, {
+        headers: { 'Idempotency-Key': `foldiq-owner-sale-${session.id}` },
       });
       assertEmailSent(ownerResult, 'Owner sale notification failed');
     } catch (ownerError) {

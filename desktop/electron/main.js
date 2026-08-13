@@ -284,7 +284,7 @@ ipcMain.handle('apply:discardUndoMany', async (event, { manifestPaths }) => {
 });
 
 ipcMain.handle('cleanup:countEmpty', async () => (
-  mover.findEmptyFolders(allowedSourceRoots, [activeOutputFolder].filter(Boolean)).length
+  (await mover.findEmptyFolders(allowedSourceRoots, [activeOutputFolder].filter(Boolean))).length
 ));
 
 ipcMain.handle('cleanup:removeEmpty', async () => (

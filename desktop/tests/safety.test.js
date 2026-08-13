@@ -255,7 +255,7 @@ test('Undo reports progress and can resume an interrupted completed entry', asyn
   assert.equal(fs.existsSync(applied.manifestPath), false);
 });
 
-test('pending Undo manifests survive restart discovery', async (t) => {
+test('completed Undo manifests remain available without triggering recovery', async (t) => {
   const dir = tempDir(t);
   const source = path.join(dir, 'source.jpg');
   const destination = path.join(dir, 'output', 'source.jpg');
@@ -265,10 +265,41 @@ test('pending Undo manifests survive restart discovery', async (t) => {
   ], applyConfig(dir), () => {});
 
   const pending = await mover.listManifests(path.dirname(applied.manifestPath));
+  const all = await mover.listManifests(path.dirname(applied.manifestPath), { includeCompleted: true });
 
+  assert.equal(pending.length, 0);
+  assert.equal(all.length, 1);
+  assert.equal(all[0].path, applied.manifestPath);
+  assert.equal(all[0].files, 1);
+  assert.equal(all[0].state, 'complete');
+});
+
+test('Apply journals intent before moving and interrupted work is recoverable', async (t) => {
+  const dir = tempDir(t);
+  const source = path.join(dir, 'source.jpg');
+  const destination = path.join(dir, 'output', 'source.jpg');
+  fs.writeFileSync(source, 'original');
+
+  await assert.rejects(
+    mover.apply([
+      { name: 'source.jpg', path: source, destPath: destination, action: 'move' },
+    ], applyConfig(dir, { copyMode: false }), () => {}, {
+      afterCommit: async () => { throw new Error('simulated process interruption'); },
+    }),
+    /simulated process interruption/
+  );
+
+  const pending = await mover.listManifests(path.join(dir, 'internal', 'undo'));
   assert.equal(pending.length, 1);
-  assert.equal(pending[0].path, applied.manifestPath);
-  assert.equal(pending[0].files, 1);
+  assert.equal(pending[0].state, 'applying');
+  assert.equal(fs.existsSync(source), false);
+  assert.equal(fs.readFileSync(destination, 'utf8'), 'original');
+
+  const restored = await mover.undo(pending[0].path, path.join(dir, 'internal', 'undo'));
+  assert.equal(restored.restored, 1);
+  assert.deepEqual(restored.errors, []);
+  assert.equal(fs.readFileSync(source, 'utf8'), 'original');
+  assert.equal(fs.existsSync(destination), false);
 });
 
 test('Undo refuses to delete a file changed after organization', async (t) => {
@@ -309,13 +340,13 @@ test('moving files keeps empty folders until the user confirms cleanup', async (
   assert.equal(applied.errors.length, 0);
   assert.equal(fs.existsSync(sourceRoot), true);
   assert.equal(fs.existsSync(path.join(sourceRoot, 'nested')), true);
-  assert.equal(mover.findEmptyFolders([sourceRoot]).length, 1);
-  assert.equal(mover.removeEmptyFolders([sourceRoot]), 1);
+  assert.equal((await mover.findEmptyFolders([sourceRoot])).length, 1);
+  assert.equal(await mover.removeEmptyFolders([sourceRoot]), 1);
   assert.equal(fs.existsSync(path.join(sourceRoot, 'nested')), false);
   assert.equal(fs.existsSync(sourceRoot), true);
 });
 
-test('empty-folder cleanup never enters the organized output folder', (t) => {
+test('empty-folder cleanup never enters the organized output folder', async (t) => {
   const dir = tempDir(t);
   const sourceRoot = path.join(dir, 'source');
   const emptySourceFolder = path.join(sourceRoot, 'old-empty');
@@ -324,8 +355,8 @@ test('empty-folder cleanup never enters the organized output folder', (t) => {
   fs.mkdirSync(emptySourceFolder, { recursive: true });
   fs.mkdirSync(emptyOutputFolder, { recursive: true });
 
-  assert.deepEqual(mover.findEmptyFolders([sourceRoot], [outputFolder]), [emptySourceFolder]);
-  assert.equal(mover.removeEmptyFolders([sourceRoot], [outputFolder]), 1);
+  assert.deepEqual(await mover.findEmptyFolders([sourceRoot], [outputFolder]), [emptySourceFolder]);
+  assert.equal(await mover.removeEmptyFolders([sourceRoot], [outputFolder]), 1);
   assert.equal(fs.existsSync(emptyOutputFolder), true);
 });
 
