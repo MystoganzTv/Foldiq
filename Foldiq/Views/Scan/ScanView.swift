@@ -4,6 +4,7 @@
 
 import SwiftUI
 import SwiftData
+import ImageIO
 #if os(macOS)
 import AppKit
 import QuickLookUI
@@ -293,6 +294,14 @@ struct FileDrillSheet: View {
     @State private var searchText = ""
     @State private var previewURL: URL?          // Quick Look target
     @State private var hoveredFileID: UUID?      // for row highlight
+    @State private var selectedComparisonGroupID: UUID?
+    @State private var selectedComparisonFileID: UUID?
+    @State private var comparisonZoom = 1.0
+
+    struct ComparisonGroup: Identifiable {
+        let id: UUID
+        let files: [MediaFile]
+    }
 
     var files: [MediaFile] {
         let all = session.files
@@ -328,6 +337,46 @@ struct FileDrillSheet: View {
         return files.filter { $0.filename.lowercased().contains(q) || $0.filePath.lowercased().contains(q) }
     }
 
+    var isComparisonCategory: Bool {
+        category == .probableDuplicates || category == .similarPhotos
+    }
+
+    var comparisonGroups: [ComparisonGroup] {
+        let eligible = filtered.filter { $0.probableDuplicateGroupID != nil }
+        return Dictionary(grouping: eligible, by: { $0.probableDuplicateGroupID! })
+            .map { id, files in
+                ComparisonGroup(id: id, files: files.sorted { $0.filename < $1.filename })
+            }
+            .filter { $0.files.count > 1 }
+            .sorted { ($0.files.first?.filename ?? "") < ($1.files.first?.filename ?? "") }
+    }
+
+    var selectedComparisonGroup: ComparisonGroup? {
+        comparisonGroups.first { $0.id == selectedComparisonGroupID } ?? comparisonGroups.first
+    }
+
+    var comparisonBaseFile: MediaFile? {
+        guard let group = selectedComparisonGroup else { return nil }
+        if category == .probableDuplicates,
+           let original = group.files.first(where: { !$0.isProbableDuplicate }) {
+            return original
+        }
+        return group.files.sorted {
+            let left = $0.dateTaken ?? $0.dateModified ?? .distantFuture
+            let right = $1.dateTaken ?? $1.dateModified ?? .distantFuture
+            return left == right ? $0.filename < $1.filename : left < right
+        }.first
+    }
+
+    var comparisonCandidates: [MediaFile] {
+        guard let base = comparisonBaseFile, let group = selectedComparisonGroup else { return [] }
+        return group.files.filter { $0.id != base.id }
+    }
+
+    var selectedComparisonFile: MediaFile? {
+        comparisonCandidates.first { $0.id == selectedComparisonFileID } ?? comparisonCandidates.first
+    }
+
     var categoryColor: Color {
         switch category {
         case .photos:             return .blue
@@ -359,7 +408,7 @@ struct FileDrillSheet: View {
         case .archives:
             return "These photos and videos were extracted from compressed archives. The original ZIP, RAR, or 7z files remain untouched. On undo, Foldiq removes only the organized copies."
         case .missingDate:
-            return "These files have no EXIF date in their metadata. They could not be reliably dated and will be placed in an \"Unknown Date\" folder. You can assign them a date manually in the Preview step."
+            return "These files have no reliable EXIF, XMP, filename, or video capture date. A file-system date may still appear as an orange estimate, but Foldiq will not treat it as the photo date unless you choose it in Preview."
         case .duplicates:
             return "These are exact duplicate copies (identical file contents, verified by SHA-256). One copy per group stays organized; the rest go to Duplicates/Exact Duplicates/."
         case .probableDuplicates:
@@ -431,8 +480,10 @@ struct FileDrillSheet: View {
 
             Divider()
 
-            // File list
-            if filtered.isEmpty {
+            // File list or visual comparison workspace
+            if isComparisonCategory {
+                comparisonWorkspace
+            } else if filtered.isEmpty {
                 ContentUnavailableView {
                     Label("No matching files", systemImage: "magnifyingglass")
                 } description: {
@@ -491,6 +542,12 @@ struct FileDrillSheet: View {
                                     Text(date, style: .date)
                                 } else {
                                     Text("·  No date").foregroundStyle(.orange)
+                                    if category == .missingDate, let fileDate = file.dateModified {
+                                        Text("·  File date")
+                                            .foregroundStyle(.orange)
+                                        Text(fileDate, style: .date)
+                                            .foregroundStyle(.orange)
+                                    }
                                 }
                                 if file.isDuplicate {
                                     Text("·  Exact dup").foregroundStyle(.orange)
@@ -564,7 +621,9 @@ struct FileDrillSheet: View {
 
             // Footer
             HStack {
-                Text("\(filtered.count) of \(files.count) shown")
+                Text(isComparisonCategory
+                     ? "\(comparisonGroups.count) comparison group\(comparisonGroups.count == 1 ? "" : "s")"
+                     : "\(filtered.count) of \(files.count) shown")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Done") { dismiss() }
@@ -572,7 +631,150 @@ struct FileDrillSheet: View {
             }
             .padding(16)
         }
-        .frame(minWidth: 560, minHeight: 480)
+        .frame(minWidth: isComparisonCategory ? 980 : 560,
+               minHeight: isComparisonCategory ? 680 : 480)
+        .onAppear { selectInitialComparisonIfNeeded() }
+        .onChange(of: comparisonGroups.map(\.id)) { _, _ in selectInitialComparisonIfNeeded() }
+    }
+
+    @ViewBuilder
+    private var comparisonWorkspace: some View {
+        if comparisonGroups.isEmpty {
+            ContentUnavailableView {
+                Label("No comparison groups", systemImage: "photo.on.rectangle.angled")
+            } description: {
+                Text("Try clearing the search to see every matching group.")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            HStack(spacing: 0) {
+                ScrollView {
+                    LazyVStack(spacing: 7) {
+                        ForEach(comparisonGroups) { group in
+                            let selected = selectedComparisonGroup?.id == group.id
+                            Button {
+                                selectedComparisonGroupID = group.id
+                                selectedComparisonFileID = comparisonCandidate(in: group)?.id
+                                comparisonZoom = 1
+                            } label: {
+                                HStack(spacing: 9) {
+                                    Image(systemName: category == .similarPhotos
+                                          ? "photo.on.rectangle.angled" : "square.stack.3d.up")
+                                        .foregroundStyle(selected ? .white : categoryColor)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(group.files.first?.filename ?? "Photo group")
+                                            .lineLimit(1)
+                                            .font(.caption.weight(.semibold))
+                                        Text("\(group.files.count) photos")
+                                            .font(.caption2)
+                                            .opacity(0.75)
+                                    }
+                                    Spacer()
+                                }
+                                .padding(10)
+                                .foregroundStyle(selected ? .white : .primary)
+                                .background(selected ? categoryColor : categoryColor.opacity(0.07),
+                                            in: RoundedRectangle(cornerRadius: 9))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(12)
+                }
+                .frame(width: 230)
+
+                Divider()
+
+                VStack(spacing: 12) {
+                    HStack {
+                        Label(category == .similarPhotos ? "Review only" : "Content comparison",
+                              systemImage: category == .similarPhotos ? "eye.fill" : "checkmark.shield.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(category == .similarPhotos ? .orange : .green)
+                        Spacer()
+                        Text("Synchronized zoom")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        Slider(value: $comparisonZoom, in: 1...3, step: 0.25)
+                            .frame(width: 130)
+                        Text(String(format: "%.2gx", comparisonZoom))
+                            .font(.caption.monospacedDigit())
+                            .frame(width: 38, alignment: .trailing)
+                    }
+
+                    if let base = comparisonBaseFile, let candidate = selectedComparisonFile {
+                        HStack(spacing: 12) {
+                            ComparisonPhotoCard(
+                                file: base,
+                                title: category == .probableDuplicates ? "Best copy" : "Reference",
+                                tint: .green,
+                                zoom: comparisonZoom,
+                                onOpen: { previewURL = base.url }
+                            )
+                            ComparisonPhotoCard(
+                                file: candidate,
+                                title: category == .similarPhotos ? similarKindLabel(candidate) : "Matching copy",
+                                tint: category == .similarPhotos ? .orange : .yellow,
+                                zoom: comparisonZoom,
+                                onOpen: { previewURL = candidate.url }
+                            )
+                        }
+
+                        if comparisonCandidates.count > 1 {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Compare another photo in this group")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(comparisonCandidates, id: \.id) { file in
+                                            Button {
+                                                selectedComparisonFileID = file.id
+                                                comparisonZoom = 1
+                                            } label: {
+                                                ComparisonFilmstripItem(
+                                                    file: file,
+                                                    selected: selectedComparisonFile?.id == file.id
+                                                )
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if category == .similarPhotos {
+                        Text("Foldiq will not move or separate anything shown here. Similar Photos is always review-only.")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(14)
+            }
+            .sheet(isPresented: previewBinding) {
+                if let previewURL {
+                    QuickLookPreviewContainer(url: previewURL, onClose: { self.previewURL = nil })
+                        .frame(minWidth: 720, minHeight: 520)
+                }
+            }
+        }
+    }
+
+    private func comparisonCandidate(in group: ComparisonGroup) -> MediaFile? {
+        let base: MediaFile?
+        if category == .probableDuplicates {
+            base = group.files.first(where: { !$0.isProbableDuplicate }) ?? group.files.first
+        } else {
+            base = group.files.first
+        }
+        return group.files.first { $0.id != base?.id }
+    }
+
+    private func selectInitialComparisonIfNeeded() {
+        guard let group = selectedComparisonGroup else { return }
+        if selectedComparisonGroupID == nil { selectedComparisonGroupID = group.id }
+        if selectedComparisonFileID == nil { selectedComparisonFileID = comparisonCandidates.first?.id }
     }
 
     private var previewBinding: Binding<Bool> {
@@ -592,6 +794,133 @@ struct FileDrillSheet: View {
         case "edited": return "Edited version"
         default: return "Visually similar"
         }
+    }
+}
+
+private struct ComparisonPhotoCard: View {
+    let file: MediaFile
+    let title: String
+    let tint: Color
+    let zoom: Double
+    let onOpen: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                Spacer()
+                if file.probableMatchScore > 0 {
+                    Text("\(file.probableMatchScore)%")
+                        .font(.caption2.bold().monospacedDigit())
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(tint.opacity(0.14), in: Capsule())
+                }
+            }
+
+            LocalPhotoThumbnail(file: file, zoom: zoom)
+                .frame(maxWidth: .infinity, minHeight: 300, maxHeight: 360)
+                .background(Color.black.opacity(0.92), in: RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onOpen)
+                .help("Click for full preview")
+
+            Text(file.filename)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            HStack(spacing: 6) {
+                Text(file.formattedFileSize)
+                if let width = file.pixelWidth, let height = file.pixelHeight {
+                    Text("· \(width)×\(height)")
+                }
+                if let date = file.dateTaken {
+                    Text("·")
+                    Text(date, style: .date)
+                } else {
+                    Text("· No embedded date").foregroundStyle(.orange)
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            if let reasons = file.probableMatchReasons {
+                Text(reasons)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(11)
+        .background(PlatformColors.windowBackground.opacity(0.55),
+                    in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(tint.opacity(0.25)))
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct ComparisonFilmstripItem: View {
+    let file: MediaFile
+    let selected: Bool
+
+    var body: some View {
+        VStack(spacing: 4) {
+            LocalPhotoThumbnail(file: file, zoom: 1)
+                .frame(width: 72, height: 52)
+                .background(Color.black.opacity(0.88), in: RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            Text(file.filename)
+                .font(.system(size: 8))
+                .lineLimit(1)
+                .frame(width: 72)
+        }
+        .padding(5)
+        .background(selected ? Color.accentColor.opacity(0.16) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8)
+            .stroke(selected ? Color.accentColor : Color.secondary.opacity(0.18), lineWidth: selected ? 2 : 1))
+    }
+}
+
+private struct LocalPhotoThumbnail: View {
+    let file: MediaFile
+    let zoom: Double
+    @State private var image: PlatformImage?
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(platformImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .scaleEffect(zoom)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.white)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .task(id: file.id) {
+            image = await Self.loadThumbnail(url: file.url)
+        }
+    }
+
+    private static func loadThumbnail(url: URL) async -> PlatformImage? {
+        await Task.detached(priority: .utility) {
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+            let options: [String: Any] = [
+                kCGImageSourceThumbnailMaxPixelSize as String: 1200,
+                kCGImageSourceCreateThumbnailFromImageAlways as String: true,
+                kCGImageSourceCreateThumbnailWithTransform as String: true,
+                kCGImageSourceShouldCacheImmediately as String: true,
+            ]
+            guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+            else { return nil }
+            return PlatformImageFactory.make(cgImage: cgImage)
+        }.value
     }
 }
 

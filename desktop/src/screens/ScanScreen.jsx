@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import s from './Screen.module.css';
 
 const STAT_CARDS = [
@@ -247,9 +247,49 @@ function filesForCategory(key, files) {
 }
 
 function CategoryModal({ card, files, onClose }) {
+  const comparisonMode = card.key === 'probDupes' || card.key === 'similar';
+  const groups = useMemo(() => {
+    if (!comparisonMode) return [];
+    const grouped = new Map();
+    for (const file of files) {
+      if (!file.probableDuplicateGroupID) continue;
+      if (!grouped.has(file.probableDuplicateGroupID)) grouped.set(file.probableDuplicateGroupID, []);
+      grouped.get(file.probableDuplicateGroupID).push(file);
+    }
+    return Array.from(grouped, ([id, groupFiles]) => ({
+      id,
+      files: groupFiles.sort((left, right) => left.name.localeCompare(right.name)),
+    })).filter(group => group.files.length > 1)
+      .sort((left, right) => left.files[0].name.localeCompare(right.files[0].name));
+  }, [comparisonMode, files]);
+  const [selectedGroupID, setSelectedGroupID] = useState(null);
+  const [selectedFilePath, setSelectedFilePath] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const selectedGroup = groups.find(group => group.id === selectedGroupID) || groups[0];
+  const sortedReferenceFiles = selectedGroup ? [...selectedGroup.files].sort((left, right) => {
+    const leftDate = new Date(left.date || left.fileModifiedDate || 8640000000000000).getTime();
+    const rightDate = new Date(right.date || right.fileModifiedDate || 8640000000000000).getTime();
+    return leftDate - rightDate || left.name.localeCompare(right.name);
+  }) : [];
+  const reference = card.key === 'probDupes'
+    ? selectedGroup?.files.find(file => !file.isProbableDuplicate) || selectedGroup?.files[0]
+    : sortedReferenceFiles[0];
+  const candidates = selectedGroup?.files.filter(file => file.path !== reference?.path) || [];
+  const candidate = candidates.find(file => file.path === selectedFilePath) || candidates[0];
+
+  useEffect(() => {
+    if (!selectedGroupID && groups[0]) setSelectedGroupID(groups[0].id);
+  }, [groups, selectedGroupID]);
+
+  function chooseGroup(group) {
+    setSelectedGroupID(group.id);
+    setSelectedFilePath(null);
+    setZoom(1);
+  }
+
   return (
     <div className={s.modalBackdrop} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={s.modalCard} role="dialog" aria-modal="true" aria-label={card.label}>
+      <section className={`${s.modalCard} ${comparisonMode ? s.comparisonModalCard : ''}`} role="dialog" aria-modal="true" aria-label={card.label}>
         <div className={s.modalHeader}><h2>{card.label} — {files.length.toLocaleString()}</h2><button onClick={onClose}>×</button></div>
         <div className={s.modalBody}>
           {card.key === 'probDupes' && (
@@ -264,23 +304,122 @@ function CategoryModal({ card, files, onClose }) {
               <p>These suggestions are always Review only. Foldiq never separates or moves them automatically.</p>
             </div>
           )}
-          <div className={s.scanFileDrilldown}>
-            {files.length === 0 && <p>No matching files.</p>}
-            {files.slice(0, 500).map(file => (
-              <button key={file.path} onClick={() => window.foldiq.revealFile(file.archiveSourcePath || file.path)}>
-                <strong>{file.name}</strong>
-                <span>{file.probableDuplicateGroupID
-                  ? `${matchKindLabel(file)} · ${file.probableMatchScore}% · ${file.probableMatchReasons}`
-                  : file.path}</span>
-              </button>
-            ))}
-            {files.length > 500 && <p>Showing the first 500 files.</p>}
-          </div>
+          {card.key === 'noDate' && (
+            <div className={s.diagnosticPrivacyNotice}>
+              <p><strong>No reliable embedded or filename capture date was found.</strong></p>
+              <p>A file timestamp may appear below as an orange estimate, but Foldiq does not treat it as the photo date unless you enable that option in Organization Settings.</p>
+            </div>
+          )}
+          {comparisonMode ? (
+            <div className={s.comparisonWorkspace}>
+              <aside className={s.comparisonGroups}>
+                {groups.map(group => (
+                  <button key={group.id} className={selectedGroup?.id === group.id ? s.comparisonGroupSelected : ''} onClick={() => chooseGroup(group)}>
+                    <strong>{group.files[0].name}</strong>
+                    <span>{group.files.length} photos</span>
+                  </button>
+                ))}
+              </aside>
+              <div className={s.comparisonMain}>
+                <div className={s.comparisonToolbar}>
+                  <strong className={card.key === 'similar' ? s.reviewOnlyText : s.verifiedText}>
+                    {card.key === 'similar' ? '● Review only' : '● Content comparison'}
+                  </strong>
+                  <label>Synchronized zoom</label>
+                  <input type="range" min="1" max="3" step="0.25" value={zoom} onChange={event => setZoom(Number(event.target.value))} />
+                  <span>{zoom.toFixed(2)}×</span>
+                </div>
+                {reference && candidate ? (
+                  <>
+                    <div className={s.comparisonStage}>
+                      <ComparisonPhotoCard file={reference} title={card.key === 'probDupes' ? 'Best copy' : 'Reference'} tone="green" zoom={zoom} />
+                      <ComparisonPhotoCard file={candidate} title={card.key === 'similar' ? matchKindLabel(candidate).replace(' · Review only', '') : 'Matching copy'} tone={card.key === 'similar' ? 'orange' : 'yellow'} zoom={zoom} />
+                    </div>
+                    {candidates.length > 1 && (
+                      <div className={s.comparisonFilmstrip}>
+                        <small>Compare another photo in this group</small>
+                        <div>{candidates.map(file => (
+                          <ComparisonFilmstripButton key={file.path} file={file} selected={candidate.path === file.path} onClick={() => { setSelectedFilePath(file.path); setZoom(1); }} />
+                        ))}</div>
+                      </div>
+                    )}
+                    {card.key === 'similar' && <p className={s.comparisonSafety}>Foldiq will not move or separate anything shown here. Similar Photos is always review-only.</p>}
+                  </>
+                ) : <p className={s.comparisonEmpty}>No comparison group is available.</p>}
+              </div>
+            </div>
+          ) : (
+            <div className={s.scanFileDrilldown}>
+              {files.length === 0 && <p>No matching files.</p>}
+              {files.slice(0, 500).map(file => (
+                <button key={file.path} onClick={() => window.foldiq.revealFile(file.archiveSourcePath || file.path)}>
+                  <strong>{file.name}</strong>
+                  <span className={card.key === 'noDate' && file.fileModifiedDate ? s.fileDateEstimate : ''}>
+                    {card.key === 'noDate' && file.fileModifiedDate
+                      ? `No embedded date · File date estimate ${new Date(file.fileModifiedDate).toLocaleString()}`
+                      : file.path}
+                  </span>
+                </button>
+              ))}
+              {files.length > 500 && <p>Showing the first 500 files.</p>}
+            </div>
+          )}
           <div className={s.modalActions}><button className={s.btnPrimary} onClick={onClose}>Done</button></div>
         </div>
       </section>
     </div>
   );
+}
+
+function ComparisonPhotoCard({ file, title, tone, zoom }) {
+  const [thumbnail, setThumbnail] = useState(undefined);
+  useEffect(() => {
+    let active = true;
+    setThumbnail(undefined);
+    window.foldiq.getThumbnail(file.path).then(value => { if (active) setThumbnail(value); });
+    return () => { active = false; };
+  }, [file.path]);
+  return (
+    <section className={`${s.comparisonPhotoCard} ${s[`comparisonTone${tone}`] || ''}`}>
+      <header><strong>{title}</strong>{file.probableMatchScore > 0 && <span>{file.probableMatchScore}%</span>}</header>
+      <button className={s.comparisonImage} onClick={() => window.foldiq.revealFile(file.path)} title="Show original file">
+        {thumbnail === undefined && <i className={s.comparisonLoader} />}
+        {thumbnail && <img src={thumbnail} alt={file.name} draggable="false" style={{ transform: `scale(${zoom})` }} />}
+        {thumbnail === null && <span>Preview unavailable</span>}
+      </button>
+      <strong className={s.comparisonFilename}>{file.name}</strong>
+      <small>{formatComparisonMetadata(file)}</small>
+      {file.probableMatchReasons && <p>{file.probableMatchReasons}</p>}
+    </section>
+  );
+}
+
+function ComparisonFilmstripButton({ file, selected, onClick }) {
+  const [thumbnail, setThumbnail] = useState(undefined);
+  useEffect(() => {
+    let active = true;
+    window.foldiq.getThumbnail(file.path).then(value => { if (active) setThumbnail(value); });
+    return () => { active = false; };
+  }, [file.path]);
+  return <button className={selected ? s.comparisonFilmstripSelected : ''} onClick={onClick} title={file.name}>
+    {thumbnail ? <img src={thumbnail} alt="" draggable="false" /> : <span>▧</span>}
+    <small>{file.name}</small>
+  </button>;
+}
+
+function formatComparisonMetadata(file) {
+  const fields = [formatBytes(file.size)];
+  if (file.pixelWidth && file.pixelHeight) fields.push(`${file.pixelWidth}×${file.pixelHeight}`);
+  if (file.date) fields.push(new Date(file.date).toLocaleDateString());
+  else fields.push('No embedded date');
+  return fields.join(' · ');
+}
+
+function formatBytes(value) {
+  const bytes = Number(value) || 0;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function formatDuration(milliseconds) {

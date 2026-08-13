@@ -40,7 +40,7 @@ Choose how your library is structured: by Year, Year & Month, Exact Date, GPS Lo
 
 **Smart Duplicates**
 
-Foldiq verifies exact copies with SHA-256 and compares image content locally to find the same photo after renaming, rotation, metadata changes, or re-export. It groups all related copies and recommends the best original. A separate Similar Photos view identifies bursts, edited versions, and weaker visual similarities as review-only suggestions that are never moved automatically.
+Foldiq verifies exact copies with SHA-256 and compares image content locally to find the same photo after renaming, rotation, metadata changes, or re-export. It groups all related copies and recommends the best original. A side-by-side Similar Photos workspace identifies bursts, edited versions, and weaker visual similarities as review-only suggestions that are never moved automatically.
 
 **Advanced filters & preview**
 

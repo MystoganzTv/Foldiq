@@ -819,6 +819,28 @@ struct FileInspectorPanel: View {
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
 
+                            if let fileDateSuggestion {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Label("File date available", systemImage: "clock.badge.questionmark")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.orange)
+                                    Text(fileDateSuggestion.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.caption)
+                                    Text("This is a file-system timestamp, not confirmed camera metadata. It may be the date the photo was copied or exported.")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Button("Use File Date Estimate") {
+                                        assignedDate = fileDateSuggestion
+                                        applyDate(fileDateSuggestion)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.orange)
+                                }
+                                .padding(10)
+                                .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                            }
+
                             DatePicker(
                                 "Date",
                                 selection: $assignedDate,
@@ -872,6 +894,9 @@ struct FileInspectorPanel: View {
         )
         let file = (try? context.fetch(descriptor))?.first
         mediaFile = file
+        if isUnknownDate, let suggestion = fileSystemDateSuggestion(for: file) {
+            assignedDate = suggestion
+        }
 
         // Determine kind: prefer SwiftData value, fall back to file extension.
         let url = plan.sourceURL
@@ -910,6 +935,18 @@ struct FileInspectorPanel: View {
             }
         }.value
         thumbnail = img
+    }
+
+    private var fileDateSuggestion: Date? {
+        fileSystemDateSuggestion(for: mediaFile)
+    }
+
+    private func fileSystemDateSuggestion(for file: MediaFile?) -> Date? {
+        guard let file else { return nil }
+        return [file.dateCreated, file.dateModified]
+            .compactMap { $0 }
+            .filter { $0 <= Date() }
+            .min()
     }
 
     // MARK: - Apply manual date

@@ -50,6 +50,10 @@ Downloads/Photos/                Downloads/Photos/Organized Media/
 | 5 | **Apply** | Files moved/copied with live progress bar |
 | 6 | **Report** | Summary of results, undo button, open in Finder |
 
+Same Image and Similar Photos include a side-by-side comparison workspace with
+large previews, synchronized zoom, metadata, confidence, and group navigation.
+Bursts and edited versions are always review-only and never move automatically.
+
 ---
 
 ## Architecture
