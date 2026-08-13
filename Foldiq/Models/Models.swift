@@ -21,7 +21,7 @@ final class ScanSession {
     var missingMetaCount: Int
     var errorCount: Int
     var archivesExtractedCount: Int   // number of compressed archives extracted during scan
-    var probableDuplicateCount: Int   // files marked isProbableDuplicate by second-pass detector
+    var probableDuplicateCount: Int   // files classified as the same image by the visual detector
 
     @Relationship(deleteRule: .cascade, inverse: \MediaFile.session)
     var files: [MediaFile]
@@ -101,6 +101,7 @@ final class MediaFile {
     var probableMatchScore: Int         // confidence 0–100
     var probableMatchReasons: String?   // e.g. "Same filename · Size ±0.4% · Timestamp Δ3m"
     var probableMatchPeerFilename: String? // other file's filename for display
+    var probableMatchKindRaw: String?   // "same" | "burst" | "edited" | "similar"
 
     @Relationship(deleteRule: .nullify)
     var session: ScanSession?

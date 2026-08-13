@@ -41,7 +41,7 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
         : file.isProbableDuplicate
           ? 'strong-visual-match'
           : file.probableDuplicateGroupID
-            ? 'review-only-similar'
+            ? `review-only-${file.probableMatchKind || 'similar'}`
             : '',
       status: file.action === 'skip' || file.included === false
         ? 'untouched'

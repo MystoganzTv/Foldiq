@@ -3,7 +3,12 @@ const { minimumVisualDistance, SUPPORTED_EXTENSIONS } = require('./visual-hash')
 
 const SAME_IMAGE_DISTANCE = 4;
 const SIMILAR_IMAGE_DISTANCE = 10;
+const EDITED_IMAGE_DISTANCE = 14;
+const BURST_IMAGE_DISTANCE = 14;
 const TEN_MINUTES_MS = 10 * 60 * 1000;
+const FIFTEEN_SECONDS_MS = 15 * 1000;
+
+const EDIT_MARKER = /(?:^|[\s._-])(?:edited|edit|exported|export|compressed|optimized|converted|enhanced|filtered|retouched)(?:[\s._-]*\d+)?(?:$|[\s._-])/i;
 
 function normalizedStem(filename) {
   let stem = path.basename(filename, path.extname(filename)).normalize('NFKC').toLowerCase().trim();
@@ -14,6 +19,28 @@ function normalizedStem(filename) {
     stem = stem.replace(suffix, '').trim();
   } while (stem !== previous);
   return stem;
+}
+
+function hasEditMarker(filename) {
+  const stem = path.basename(filename, path.extname(filename)).normalize('NFKC').toLowerCase();
+  return EDIT_MARKER.test(stem);
+}
+
+function sequenceInfo(filename) {
+  const stem = path.basename(filename, path.extname(filename)).normalize('NFKC').toLowerCase().trim();
+  const match = stem.match(/^(.*?)(\d{2,})$/);
+  if (!match) return null;
+  return { prefix: match[1], number: Number(match[2]) };
+}
+
+function isLikelyBurst(a, b, dateDifference, visualDistance) {
+  if (dateDifference == null || dateDifference > FIFTEEN_SECONDS_MS) return false;
+  if (visualDistance == null || visualDistance > BURST_IMAGE_DISTANCE) return false;
+  if (hasEditMarker(a.name || '') || hasEditMarker(b.name || '')) return false;
+  const left = sequenceInfo(a.name || '');
+  const right = sequenceInfo(b.name || '');
+  return left != null && right != null && left.prefix === right.prefix
+    && left.number !== right.number && Math.abs(left.number - right.number) <= 20;
 }
 
 function isPhoto(file) {
@@ -66,7 +93,7 @@ function candidatePairs(files) {
     .sort((a, b) => a.date - b.date);
   for (let i = 0; i < dated.length; i++) {
     for (let j = i + 1; j < Math.min(dated.length, i + 100) && dated[j].date - dated[i].date <= TEN_MINUTES_MS; j++) {
-      if (orientationAwareAspectDifference(dated[i].aspect, dated[j].aspect) <= 0.05) add(dated[i].index, dated[j].index);
+      if (orientationAwareAspectDifference(dated[i].aspect, dated[j].aspect) <= 0.08) add(dated[i].index, dated[j].index);
     }
   }
 
@@ -183,6 +210,23 @@ function classifyPair(a, b) {
       || (a.pixelWidth === b.pixelHeight && a.pixelHeight === b.pixelWidth));
   const leftAspect = aspectRatio(a), rightAspect = aspectRatio(b);
   const aspectDifference = orientationAwareAspectDifference(leftAspect, rightAspect);
+  const editedVersion = hasEditMarker(a.name || '') || hasEditMarker(b.name || '');
+
+  if (visualDistance != null && visualDistance <= EDITED_IMAGE_DISTANCE && aspectDifference <= 0.18
+      && editedVersion && (sameStem || (dateDifference != null && dateDifference <= 24 * 60 * 60 * 1000))) {
+    return {
+      kind: 'edited',
+      score: Math.max(78, 94 - visualDistance),
+      reasons: `Edited version · visual distance ${visualDistance}/64 · review only`,
+    };
+  }
+  if (isLikelyBurst(a, b, dateDifference, visualDistance) && aspectDifference <= 0.08) {
+    return {
+      kind: 'burst',
+      score: Math.max(78, 92 - visualDistance),
+      reasons: `Burst sequence · ${Math.round(dateDifference / 1000)}s apart · review only`,
+    };
+  }
 
   if (visualDistance != null && visualDistance <= SAME_IMAGE_DISTANCE && aspectDifference <= 0.03
       && (sameStem || sameDimensions || (dateDifference != null && dateDifference <= 24 * 60 * 60 * 1000))) {
@@ -195,9 +239,9 @@ function classifyPair(a, b) {
   if (visualDistance != null && visualDistance <= SIMILAR_IMAGE_DISTANCE && aspectDifference <= 0.05
       && (sameStem || (dateDifference != null && dateDifference <= TEN_MINUTES_MS))) {
     return {
-      kind: 'similar',
+      kind: sameStem ? 'edited' : 'similar',
       score: Math.max(80, 92 - visualDistance),
-      reasons: `Visually similar · distance ${visualDistance}/64 · review only`,
+      reasons: `${sameStem ? 'Possible edited version' : 'Visually similar'} · distance ${visualDistance}/64 · review only`,
     };
   }
   if (visualDistance == null && metadata.score >= 90) {
@@ -218,6 +262,7 @@ function detectSmartDuplicates(files) {
     file.probableMatchScore = 0;
     file.probableMatchReasons = null;
     file.probableMatchPeerFilename = null;
+    file.probableMatchKind = null;
   }
 
   const allGroups = new UnionFind(candidates.length);
@@ -257,6 +302,7 @@ function detectSmartDuplicates(files) {
       candidates[index].probableMatchScore = edge.score;
       candidates[index].probableMatchReasons = edge.reasons;
       candidates[index].probableMatchPeerFilename = candidates[peerIndex].name;
+      candidates[index].probableMatchKind = edge.kind;
     }
 
     const highComponents = new Map();
@@ -269,6 +315,7 @@ function detectSmartDuplicates(files) {
       if (group.length < 2) continue;
       const original = electOriginal(group);
       for (const file of group) {
+        file.probableMatchKind = 'same';
         if (file === original) continue;
         file.isProbableDuplicate = true;
         file.probableMatchPeerFilename = original.name;
@@ -289,5 +336,10 @@ module.exports = {
   electOriginal,
   SAME_IMAGE_DISTANCE,
   SIMILAR_IMAGE_DISTANCE,
+  EDITED_IMAGE_DISTANCE,
+  BURST_IMAGE_DISTANCE,
+  hasEditMarker,
+  sequenceInfo,
+  isLikelyBurst,
   orientationAwareAspectDifference,
 };

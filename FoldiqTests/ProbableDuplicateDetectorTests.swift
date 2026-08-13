@@ -116,6 +116,44 @@ final class ProbableDuplicateDetectorTests: XCTestCase {
                       "Archive-sourced file should be elected as the duplicate")
         XCTAssertFalse(folderFile.isProbableDuplicate,
                        "Folder file should be elected as the original")
+        XCTAssertEqual(folderFile.probableMatchKindRaw, "same")
+        XCTAssertEqual(archiveFile.probableMatchKindRaw, "same")
+    }
+
+    func testBurstSequenceIsAlwaysReviewOnly() async throws {
+        let now = Date()
+        let firstURL = try makePatternPNG(filename: "IMG_0200.png")
+        let secondURL = firstURL.deletingLastPathComponent().appendingPathComponent("IMG_0201.png")
+        try Data(contentsOf: firstURL).write(to: secondURL)
+        let first = makeFile(path: firstURL.path, filename: "IMG_0200.png",
+                             fileSize: 3_000_000, date: now, width: 4032, height: 3024)
+        let second = makeFile(path: secondURL.path, filename: "IMG_0201.png",
+                              fileSize: 3_000_000, date: now + 2, width: 4032, height: 3024)
+
+        _ = await ProbableDuplicateDetector().detect(files: [first, second]) { _ in }
+
+        XCTAssertEqual(first.probableMatchKindRaw, "burst")
+        XCTAssertEqual(second.probableMatchKindRaw, "burst")
+        XCTAssertFalse(first.isProbableDuplicate)
+        XCTAssertFalse(second.isProbableDuplicate)
+    }
+
+    func testEditedVersionIsAlwaysReviewOnlyEvenWithIdenticalPixels() async throws {
+        let now = Date()
+        let originalURL = try makePatternPNG(filename: "portrait.png")
+        let editedURL = originalURL.deletingLastPathComponent().appendingPathComponent("portrait-edited.png")
+        try Data(contentsOf: originalURL).write(to: editedURL)
+        let original = makeFile(path: originalURL.path, filename: "portrait.png",
+                                fileSize: 3_000_000, date: now, width: 4032, height: 3024)
+        let edited = makeFile(path: editedURL.path, filename: "portrait-edited.png",
+                              fileSize: 2_500_000, date: now, width: 4032, height: 3024)
+
+        _ = await ProbableDuplicateDetector().detect(files: [original, edited]) { _ in }
+
+        XCTAssertEqual(original.probableMatchKindRaw, "edited")
+        XCTAssertEqual(edited.probableMatchKindRaw, "edited")
+        XCTAssertFalse(original.isProbableDuplicate)
+        XCTAssertFalse(edited.isProbableDuplicate)
     }
 
     // MARK: - Metadata-only safety

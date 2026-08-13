@@ -18,7 +18,10 @@ final class ProbableDuplicateDetector {
 
     static let sameImageDistance = 4
     static let similarImageDistance = 10
+    static let editedImageDistance = 14
+    static let burstImageDistance = 14
     private static let tenMinutes: TimeInterval = 10 * 60
+    private static let fifteenSeconds: TimeInterval = 15
 
     private struct FileSnapshot: Sendable {
         let id: UUID
@@ -46,7 +49,12 @@ final class ProbableDuplicateDetector {
         }
     }
 
-    private enum MatchKind: Sendable { case sameImage, similar }
+    private enum MatchKind: String, Sendable {
+        case sameImage = "same"
+        case burst
+        case edited
+        case similar
+    }
 
     private struct MatchEdge: Sendable {
         let left: Int
@@ -88,6 +96,7 @@ final class ProbableDuplicateDetector {
             file.probableMatchScore = 0
             file.probableMatchReasons = nil
             file.probableMatchPeerFilename = nil
+            file.probableMatchKindRaw = nil
         }
 
         let snapshots = files.map { file in
@@ -186,6 +195,7 @@ final class ProbableDuplicateDetector {
                 file.probableMatchScore = edge.score
                 file.probableMatchReasons = edge.reasons
                 file.probableMatchPeerFilename = snapshots[peer].filename
+                file.probableMatchKindRaw = edge.kind.rawValue
             }
 
             var highComponents: [Int: [Int]] = [:]
@@ -198,6 +208,9 @@ final class ProbableDuplicateDetector {
                     guard let duplicate = filesByID[snapshots[index].id] else { continue }
                     duplicate.isProbableDuplicate = true
                     duplicate.probableMatchPeerFilename = original.filename
+                }
+                for index in indexes {
+                    filesByID[snapshots[index].id]?.probableMatchKindRaw = MatchKind.sameImage.rawValue
                 }
             }
         }
@@ -228,7 +241,7 @@ final class ProbableDuplicateDetector {
             var right = left + 1
             while right < min(dated.count, left + 100)
                     && dated[right].1.timeIntervalSince(dated[left].1) <= tenMinutes {
-                if orientationAwareAspectDifference(dated[left].2, dated[right].2) <= 0.05 {
+                if orientationAwareAspectDifference(dated[left].2, dated[right].2) <= 0.08 {
                     result.insert(Pair(dated[left].0, dated[right].0))
                 }
                 right += 1
@@ -273,6 +286,28 @@ final class ProbableDuplicateDetector {
             guard let a = aspectRatio(left), let b = aspectRatio(right) else { return 0 }
             return orientationAwareAspectDifference(a, b)
         }()
+        let editedVersion = hasEditMarker(left.filename) || hasEditMarker(right.filename)
+
+        if let distance = visualDistance,
+           distance <= editedImageDistance,
+           aspectDifference <= 0.18,
+           editedVersion,
+           sameStem || (dateDifference.map { $0 <= 86_400 } ?? false) {
+            return (
+                .edited,
+                max(78, 94 - distance),
+                "Edited version · visual distance \(distance)/64 · review only"
+            )
+        }
+        if let distance = visualDistance,
+           isLikelyBurst(left, right, dateDifference: dateDifference, visualDistance: distance),
+           aspectDifference <= 0.08 {
+            return (
+                .burst,
+                max(78, 92 - distance),
+                "Burst sequence · \(Int((dateDifference ?? 0).rounded()))s apart · review only"
+            )
+        }
 
         if let distance = visualDistance,
            distance <= sameImageDistance,
@@ -289,9 +324,10 @@ final class ProbableDuplicateDetector {
            aspectDifference <= 0.05,
            sameStem || (dateDifference.map { $0 <= tenMinutes } ?? false) {
             return (
-                .similar,
+                sameStem ? .edited : .similar,
                 max(80, 92 - distance),
-                "Visually similar · distance \(distance)/64 · review only"
+                (sameStem ? "Possible edited version" : "Visually similar")
+                    + " · distance \(distance)/64 · review only"
             )
         }
 
@@ -324,6 +360,40 @@ final class ProbableDuplicateDetector {
             reasons.append("Dimensions \(left.pixelWidth!)×\(left.pixelHeight!)")
         }
         return (min(score, 100), reasons)
+    }
+
+    private static func hasEditMarker(_ filename: String) -> Bool {
+        let stem = (filename as NSString).deletingPathExtension.lowercased()
+        let markers = ["edited", "edit", "exported", "export", "compressed", "optimized",
+                       "converted", "enhanced", "filtered", "retouched"]
+        let tokens = stem.split(whereSeparator: { $0 == " " || $0 == "." || $0 == "_" || $0 == "-" })
+        return tokens.contains { token in
+            markers.contains { token == $0 || (token.hasPrefix($0) && token.dropFirst($0.count).allSatisfy(\.isNumber)) }
+        }
+    }
+
+    private static func sequenceInfo(_ filename: String) -> (prefix: String, number: Int)? {
+        let stem = (filename as NSString).deletingPathExtension.lowercased()
+        guard let digitStart = stem.lastIndex(where: { !$0.isNumber }).map({ stem.index(after: $0) })
+                ?? (stem.first?.isNumber == true ? stem.startIndex : nil),
+              digitStart < stem.endIndex else { return nil }
+        let digits = stem[digitStart...]
+        guard digits.count >= 2, let number = Int(digits) else { return nil }
+        return (String(stem[..<digitStart]), number)
+    }
+
+    private static func isLikelyBurst(
+        _ left: FileSnapshot,
+        _ right: FileSnapshot,
+        dateDifference: TimeInterval?,
+        visualDistance: Int
+    ) -> Bool {
+        guard let dateDifference, dateDifference <= fifteenSeconds,
+              visualDistance <= burstImageDistance,
+              !hasEditMarker(left.filename), !hasEditMarker(right.filename),
+              let a = sequenceInfo(left.filename), let b = sequenceInfo(right.filename),
+              a.prefix == b.prefix, a.number != b.number else { return false }
+        return abs(a.number - b.number) <= 20
     }
 
     // MARK: Original election

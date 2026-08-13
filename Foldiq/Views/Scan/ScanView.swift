@@ -219,9 +219,9 @@ struct ScanResultsPanel: View {
         case videos             = "Videos"
         case archives           = "From Archives"
         case duplicates         = "Exact Duplicates"
-        case probableDuplicates = "Smart Matches"
+        case probableDuplicates = "Same Image"
+        case similarPhotos      = "Similar Photos"
         case missingDate        = "Missing Date"
-        case noMetadata         = "No Metadata"
         case allFiles           = "All Files"
     }
 
@@ -247,9 +247,9 @@ struct ScanResultsPanel: View {
                 TappableStatCard(icon: "video.fill",           label: "Videos",           value: session.videoCount,             color: .purple) { drillCategory = .videos }
                 TappableStatCard(icon: "doc.zipper",           label: "Archives Extracted", value: session.archivesExtractedCount, color: .teal) { drillCategory = .archives }
                 TappableStatCard(icon: "square.on.square",     label: "Exact Dupes",      value: session.duplicateCount,         color: .orange) { drillCategory = .duplicates }
-                TappableStatCard(icon: "sparkles",             label: "Smart Matches", value: session.probableDuplicateCount, color: .yellow) { drillCategory = .probableDuplicates }
+                TappableStatCard(icon: "square.stack.3d.up",    label: "Same Image", value: session.probableDuplicateCount, color: .yellow) { drillCategory = .probableDuplicates }
+                TappableStatCard(icon: "photo.on.rectangle.angled", label: "Similar Photos", value: session.files.filter { $0.probableDuplicateGroupID != nil && $0.probableMatchKindRaw != "same" }.count, color: .indigo) { drillCategory = .similarPhotos }
                 TappableStatCard(icon: "questionmark.circle",  label: "Missing Date",     value: session.missingDateCount,       color: .red)    { drillCategory = .missingDate }
-                TappableStatCard(icon: "info.circle",          label: "No Metadata",      value: session.missingMetaCount,       color: .gray)   { drillCategory = .noMetadata }
                 TappableStatCard(icon: "doc.on.doc",           label: "Total Files",      value: session.totalFiles,             color: .green)  { drillCategory = .allFiles }
             }
             .padding(.horizontal, 40)
@@ -302,16 +302,22 @@ struct FileDrillSheet: View {
         case .archives:           return all.filter { $0.archiveSourcePath != nil }
         case .duplicates:         return all.filter { $0.isDuplicate }
         case .probableDuplicates: return all
-                .filter { $0.probableDuplicateGroupID != nil }
+                .filter { $0.probableMatchKindRaw == "same" }
                 .sorted {
-                    // Group pairs together; within a pair, duplicate side first
                     let g = ($0.probableDuplicateGroupID?.uuidString ?? "") <
                             ($1.probableDuplicateGroupID?.uuidString ?? "")
                     return g || ($0.probableDuplicateGroupID == $1.probableDuplicateGroupID
                                  && $0.isProbableDuplicate && !$1.isProbableDuplicate)
                 }
+        case .similarPhotos: return all
+                .filter { $0.probableDuplicateGroupID != nil && $0.probableMatchKindRaw != "same" }
+                .sorted {
+                    let g = ($0.probableDuplicateGroupID?.uuidString ?? "") <
+                            ($1.probableDuplicateGroupID?.uuidString ?? "")
+                    return g || ($0.probableDuplicateGroupID == $1.probableDuplicateGroupID
+                                 && $0.filename < $1.filename)
+                }
         case .missingDate:        return all.filter { !$0.hasDate }
-        case .noMetadata:         return all.filter { $0.cameraMake == nil && $0.cameraModel == nil && !$0.hasGPS }
         case .allFiles:           return all
         }
     }
@@ -329,8 +335,8 @@ struct FileDrillSheet: View {
         case .archives:           return .teal
         case .duplicates:         return .orange
         case .probableDuplicates: return .yellow
+        case .similarPhotos:      return .indigo
         case .missingDate:        return .red
-        case .noMetadata:         return .gray
         case .allFiles:           return .green
         }
     }
@@ -342,8 +348,8 @@ struct FileDrillSheet: View {
         case .archives:           return "doc.zipper"
         case .duplicates:         return "square.on.square"
         case .probableDuplicates: return "equal.circle"
+        case .similarPhotos:      return "photo.on.rectangle.angled"
         case .missingDate:        return "questionmark.circle"
-        case .noMetadata:         return "info.circle"
         case .allFiles:           return "doc.on.doc"
         }
     }
@@ -354,12 +360,12 @@ struct FileDrillSheet: View {
             return "These photos and videos were extracted from compressed archives. The original ZIP, RAR, or 7z files remain untouched. On undo, Foldiq removes only the organized copies."
         case .missingDate:
             return "These files have no EXIF date in their metadata. They could not be reliably dated and will be placed in an \"Unknown Date\" folder. You can assign them a date manually in the Preview step."
-        case .noMetadata:
-            return "These files have no camera make, model, or GPS data embedded. They may have been exported from messaging apps or cloud services that strip metadata."
         case .duplicates:
             return "These are exact duplicate copies (identical file contents, verified by SHA-256). One copy per group stays organized; the rest go to Duplicates/Exact Duplicates/."
         case .probableDuplicates:
-            return "Foldiq compared image content, orientation, capture time, dimensions, and filenames. Strong visual matches can be separated into Duplicates/Probable Duplicates/. Similar photos are marked Review only and stay in the normal organization unless you decide otherwise."
+            return "These are strong content matches: the same image after renaming, rotation, metadata changes, or re-encoding. The best copy stays organized; other copies follow your Duplicate handling setting."
+        case .similarPhotos:
+            return "Bursts, edited versions, and visually similar photos. These suggestions are always Review only: Foldiq never separates or moves them automatically."
         default:
             return ""
         }
@@ -438,16 +444,16 @@ struct FileDrillSheet: View {
             } else {
                 List(filtered, id: \.id) { file in
                     let fileURL = URL(fileURLWithPath: file.filePath)
-                    let isProbable = category == .probableDuplicates
+                    let isSmartMatch = category == .probableDuplicates || category == .similarPhotos
                     HStack(spacing: 12) {
 
                         // Role badge for probable-duplicate pairs
-                        if isProbable {
-                            Image(systemName: file.isProbableDuplicate ? "arrow.right.circle.fill" : "eye.circle.fill")
-                                .foregroundStyle(file.isProbableDuplicate ? .yellow : .blue)
+                        if isSmartMatch {
+                            Image(systemName: category == .similarPhotos ? "eye.circle.fill" : (file.isProbableDuplicate ? "arrow.right.circle.fill" : "checkmark.circle.fill"))
+                                .foregroundStyle(category == .similarPhotos ? .indigo : .yellow)
                                 .font(.caption)
                                 .frame(width: 16)
-                                .help(file.isProbableDuplicate ? "Strong match — will move to Probable Duplicates/" : "Review only — stays organized")
+                                .help(category == .similarPhotos ? "Review only — never moved automatically" : (file.isProbableDuplicate ? "Same image — follows Duplicate handling" : "Best copy — stays organized"))
                         } else {
                             Image(systemName: {
                                 switch file.mediaKind {
@@ -467,7 +473,7 @@ struct FileDrillSheet: View {
                                     .lineLimit(1)
 
                                 // Confidence badge for probable duplicates
-                                if isProbable && file.isProbableDuplicate && file.probableMatchScore > 0 {
+                                if isSmartMatch && file.probableMatchScore > 0 {
                                     Text("\(file.probableMatchScore)%")
                                         .font(.caption2.bold())
                                         .padding(.horizontal, 5)
@@ -494,9 +500,8 @@ struct FileDrillSheet: View {
                             .foregroundStyle(.secondary)
 
                             // Probable duplicate details
-                            if isProbable {
-                                if file.isProbableDuplicate,
-                                   let peer = file.probableMatchPeerFilename,
+                            if isSmartMatch {
+                                if let peer = file.probableMatchPeerFilename,
                                    let reasons = file.probableMatchReasons {
                                     Text("↔ \(peer)")
                                         .font(.caption2).foregroundStyle(.secondary)
@@ -504,10 +509,12 @@ struct FileDrillSheet: View {
                                     Text(reasons)
                                         .font(.caption2).foregroundStyle(.tertiary)
                                         .lineLimit(1)
+                                }
+                                if category == .similarPhotos {
+                                    Text("\(similarKindLabel(file)) — Review only")
+                                        .font(.caption2).foregroundStyle(.indigo.opacity(0.8))
                                 } else if !file.isProbableDuplicate {
-                                    Text(file.probableMatchScore >= 94
-                                         ? "Best copy — stays in organized structure"
-                                         : "Review only — stays in organized structure")
+                                    Text("Best copy — stays in organized structure")
                                         .font(.caption2).foregroundStyle(.blue.opacity(0.8))
                                 }
                             } else {
@@ -577,6 +584,14 @@ struct FileDrillSheet: View {
                 }
             }
         )
+    }
+
+    private func similarKindLabel(_ file: MediaFile) -> String {
+        switch file.probableMatchKindRaw {
+        case "burst": return "Burst"
+        case "edited": return "Edited version"
+        default: return "Visually similar"
+        }
     }
 }
 

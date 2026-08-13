@@ -49,6 +49,11 @@ original purchase-bound private download link for Windows 1.0.17. Gmail Sent
 verification found exactly five Mac notices and one Windows notice. No customer
 addresses, checkout sessions, or promo-code values are recorded here.
 
+Owner instruction as of 2026-08-13: do not contact these six purchasers again
+about updates. Their prior delivery obligation is settled. Future versions are
+self-service through the normal App Store or download/update channel unless the
+owner explicitly requests new outreach.
+
 Operational email caveat: the connected Resend account rejected
 `receipts@foldiq.app` because `foldiq.app` is not verified there (the only listed
 verified domain was `rbtgenius.com`). No Resend attempts were delivered; the six
@@ -204,6 +209,10 @@ capture dates`, the metadata stage was redesigned again:
 - Strong visual matches may follow the user's duplicate-handling choice. Weaker
   similarities and metadata-only matches are explicitly `Review only` and are
   never separated automatically.
+- Scan results now separate `Same Image` from `Similar Photos`. Similar Photos
+  labels bursts, edited/exported versions, and other visual similarities; every
+  one of these classifications is permanently review-only and remains in the
+  normal organization flow.
 - Windows supports JPG, PNG, HEIC/HEIF, and TIFF visual decoding. HEIC/TIFF run
   in a worker thread with concurrency 1, a 60 MP/256 MB safety cap, live
   progress, and cancellation so the scan UI remains responsive.
@@ -211,8 +220,8 @@ capture dates`, the metadata stage was redesigned again:
   ImageIO when the system provides a decoder.
 - Windows ships HEIC support outside `app.asar` with third-party license notices
   for LGPL compliance.
-- Current validation: Windows 54 tests passed (1 platform-gated RAR test skipped),
-  macOS 27 tests passed, the macOS Release build reports 1.0.18 (117), Windows
+- Current validation: Windows 56 tests passed (1 platform-gated RAR test skipped),
+  macOS 29 tests passed, the macOS Release build reports 1.0.18 (117), Windows
   installer packaging passed, and a real renamed HEIC with changed metadata was
   detected end-to-end as a 100% visual match in 2.9 seconds. The 1.0.18 installers
   have not been distributed or uploaded yet.

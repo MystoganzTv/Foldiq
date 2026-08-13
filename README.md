@@ -132,7 +132,7 @@ Foldiq/
 | ImageIO / CoreGraphics | EXIF metadata extraction from photos |
 | AVFoundation | Video metadata (duration, creation date, GPS) |
 | CryptoKit | SHA-256 file hashing for duplicate detection |
-| ImageIO / CoreGraphics | Orientation-aware visual hashing for Smart Duplicates |
+| ImageIO / CoreGraphics | Visual hashing for Same Image and review-only Similar Photos (bursts and edits) |
 | CoreLocation | Reverse geocoding GPS coordinates |
 | FileManager | All file system operations |
 | UniformTypeIdentifiers | File type detection |

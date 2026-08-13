@@ -91,7 +91,7 @@ test('a strong visual match can use different filenames and sizes', () => {
   };
   const match = classifyPair(
     { ...base, name: 'IMG_0001.JPG', size: 4_000_000, visualHashes: ['0123456789abcdef'] },
-    { ...base, name: 'vacation-export.JPG', size: 1_800_000, visualHashes: ['0123456789abcdef'] }
+    { ...base, name: 'vacation-renamed.JPG', size: 1_800_000, visualHashes: ['0123456789abcdef'] }
   );
   assert.equal(match.kind, 'same');
   assert.ok(match.score >= 94);
@@ -108,8 +108,35 @@ test('visually close burst photos remain review-only', () => {
     { ...base, name: 'IMG_0001.JPG', date: '2025-05-01T10:00:00.000Z', visualHashes: ['0000000000000000'] },
     { ...base, name: 'IMG_0002.JPG', date: '2025-05-01T10:00:02.000Z', visualHashes: ['00000000000000ff'] }
   );
-  assert.equal(match.kind, 'similar');
+  assert.equal(match.kind, 'burst');
   assert.match(match.reasons, /review only/);
+});
+
+test('an explicitly edited version is review-only even when its visual hash is identical', () => {
+  const base = {
+    ext: '.jpg',
+    date: '2025-05-01T10:00:00.000Z',
+    size: 4_000_000,
+    pixelWidth: 4032,
+    pixelHeight: 3024,
+    visualHashes: ['0123456789abcdef'],
+  };
+  const match = classifyPair(
+    { ...base, name: 'portrait.JPG' },
+    { ...base, name: 'portrait-edited.JPG', size: 3_000_000 }
+  );
+  assert.equal(match.kind, 'edited');
+  assert.match(match.reasons, /review only/);
+});
+
+test('similar-photo groups are classified and never marked as movable duplicates', () => {
+  const files = [
+    { id: 1, ext: '.jpg', name: 'IMG_0200.JPG', path: '/photos/IMG_0200.JPG', date: '2025-05-01T10:00:00.000Z', size: 4_000_000, pixelWidth: 4032, pixelHeight: 3024, visualHashes: ['0000000000000000'] },
+    { id: 2, ext: '.jpg', name: 'IMG_0201.JPG', path: '/photos/IMG_0201.JPG', date: '2025-05-01T10:00:02.000Z', size: 4_100_000, pixelWidth: 4032, pixelHeight: 3024, visualHashes: ['00000000000000ff'] },
+  ];
+  scanner.detectProbableDuplicates(files);
+  assert.equal(files.every(file => file.probableMatchKind === 'burst'), true);
+  assert.equal(files.every(file => !file.isProbableDuplicate), true);
 });
 
 test('exact duplicate election prefers metadata-rich non-archive file', () => {

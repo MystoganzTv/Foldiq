@@ -198,7 +198,7 @@ final class ScanCoordinator: ObservableObject {
         session.photoCount             = allFiles.filter { $0.mediaKind == .photo }.count
         session.videoCount             = allFiles.filter { $0.mediaKind == .video }.count
         session.duplicateCount         = allFiles.filter { $0.isDuplicate }.count
-        session.probableDuplicateCount = allFiles.filter { $0.probableDuplicateGroupID != nil }.count
+        session.probableDuplicateCount = allFiles.filter { $0.probableMatchKindRaw == "same" }.count
         session.missingDateCount       = allFiles.filter { !$0.hasDate }.count
         session.missingMetaCount       = allFiles.filter {
             $0.cameraMake == nil && $0.cameraModel == nil && !$0.hasGPS

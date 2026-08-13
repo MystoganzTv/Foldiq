@@ -6,9 +6,9 @@ const STAT_CARDS = [
   { key: 'videos',    label: 'Videos',          color: '#F5F3FF', iconColor: '#8B5CF6' },
   { key: 'zips',      label: 'Archives Extracted', color: '#F0FDFA', iconColor: '#14B8A6' },
   { key: 'dupes',     label: 'Exact Dupes',     color: '#FFF7ED', iconColor: '#F97316' },
-  { key: 'probDupes', label: 'Smart Matches',    color: '#FEFCE8', iconColor: '#EAB308' },
+  { key: 'probDupes', label: 'Same Image',       color: '#FEFCE8', iconColor: '#EAB308' },
+  { key: 'similar',   label: 'Similar Photos',   color: '#EEF2FF', iconColor: '#6366F1' },
   { key: 'noDate',    label: 'Missing Date',    color: '#FEF2F2', iconColor: '#EF4444' },
-  { key: 'fileDate',  label: 'File Date Available', color: '#F8FAFC', iconColor: '#64748B' },
   { key: 'total',     label: 'Total Files',     color: '#F0FDF4', iconColor: '#22C55E' },
 ];
 
@@ -46,7 +46,8 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
         videos:    files.filter(f => videoExts.has(f.ext)).length,
         zips:      Array.isArray(result) ? 0 : result.archivesExtracted,
         dupes:     files.filter(f => f.isDuplicate).length,
-        probDupes: files.filter(f => f.probableDuplicateGroupID).length,
+        probDupes: files.filter(f => f.probableMatchKind === 'same').length,
+        similar:   files.filter(f => f.probableDuplicateGroupID && f.probableMatchKind !== 'same').length,
         noDate:    files.filter(f => !f.date).length,
         fileDate:  files.filter(f => !f.date && f.fileModifiedDate).length,
         embeddedDates: files.filter(f => f.date && f.dateSource !== 'filename').length,
@@ -237,7 +238,8 @@ function filesForCategory(key, files) {
   if (key === 'photos') return files.filter(file => photos.has(file.ext));
   if (key === 'videos') return files.filter(file => videos.has(file.ext));
   if (key === 'dupes') return files.filter(file => file.isDuplicate);
-  if (key === 'probDupes') return files.filter(file => file.probableDuplicateGroupID);
+  if (key === 'probDupes') return files.filter(file => file.probableMatchKind === 'same');
+  if (key === 'similar') return files.filter(file => file.probableDuplicateGroupID && file.probableMatchKind !== 'same');
   if (key === 'noDate') return files.filter(file => !file.date);
   if (key === 'fileDate') return files.filter(file => !file.date && file.fileModifiedDate);
   if (key === 'zips') return files.filter(file => file.archiveSourcePath);
@@ -252,11 +254,14 @@ function CategoryModal({ card, files, onClose }) {
         <div className={s.modalBody}>
           {card.key === 'probDupes' && (
             <div className={s.diagnosticPrivacyNotice}>
-              <p><strong>Smart Matches compares image content locally.</strong></p>
-              <ul>
-                <li>Same image: the best copy stays organized; other strong matches follow your Duplicate handling setting.</li>
-                <li>Review only: visually similar photos always stay organized and are never separated automatically.</li>
-              </ul>
+              <p><strong>Same Image compares photo content locally.</strong></p>
+              <p>The best copy stays organized; other strong copies follow your Duplicate handling setting.</p>
+            </div>
+          )}
+          {card.key === 'similar' && (
+            <div className={s.diagnosticPrivacyNotice}>
+              <p><strong>Bursts, edited versions, and visually similar photos.</strong></p>
+              <p>These suggestions are always Review only. Foldiq never separates or moves them automatically.</p>
             </div>
           )}
           <div className={s.scanFileDrilldown}>
@@ -265,7 +270,7 @@ function CategoryModal({ card, files, onClose }) {
               <button key={file.path} onClick={() => window.foldiq.revealFile(file.archiveSourcePath || file.path)}>
                 <strong>{file.name}</strong>
                 <span>{file.probableDuplicateGroupID
-                  ? `${file.isProbableDuplicate ? 'Same image' : 'Review only'} · ${file.probableMatchScore}% · ${file.probableMatchReasons}`
+                  ? `${matchKindLabel(file)} · ${file.probableMatchScore}% · ${file.probableMatchReasons}`
                   : file.path}</span>
               </button>
             ))}
@@ -292,10 +297,18 @@ function StatIcon({ name, color }) {
     zips:      <svg {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg>,
     dupes:     <svg {...p}><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
     probDupes: <svg {...p}><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
+    similar:   <svg {...p}><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M8 5V3h13v14h-4"/><circle cx="8" cy="10" r="1"/><path d="m5 17 4-4 2 2 2-2 4 4"/></svg>,
     noDate:    <svg {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
     noMeta:    <svg {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
     fileDate:  <svg {...p}><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>,
     total:     <svg {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   };
   return icons[name] || null;
+}
+
+function matchKindLabel(file) {
+  if (file.probableMatchKind === 'same') return file.isProbableDuplicate ? 'Same image' : 'Best copy';
+  if (file.probableMatchKind === 'burst') return 'Burst · Review only';
+  if (file.probableMatchKind === 'edited') return 'Edited version · Review only';
+  return 'Visually similar · Review only';
 }
