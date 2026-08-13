@@ -50,6 +50,11 @@ test('cookie-free analytics is disclosed and strips purchase tokens', () => {
   assert.match(html, /anonymous, cookie-free traffic/);
 });
 
+test('landing screenshots preserve their native aspect ratio', () => {
+  assert.match(html, /\.screenshot-frame img\s*\{[^}]*height:\s*auto;/s);
+  assert.match(html, /\.screenshot-frame img\s*\{[^}]*aspect-ratio:\s*16\s*\/\s*10;/s);
+});
+
 test('social metadata points to the production domain', () => {
   assert.match(html, /<meta property="og:url" content="https:\/\/foldiq\.app\/"/);
   assert.match(html, /<link rel="canonical" href="https:\/\/foldiq\.app\/"/);
