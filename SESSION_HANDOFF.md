@@ -56,6 +56,12 @@ During that exact check, Resend 3.x exposed a real incompatibility: passing
 header and returned `Missing API Key`. The web app now uses Resend 6.19.0 and
 its supported `idempotencyKey` option. This preserves authentication and still
 prevents duplicate receipt sends when Stripe retries a webhook.
+The final production check succeeded after this fix: the private endpoint
+returned Resend email ID `0fb85050-b0fd-404e-b1a5-f7d0f3317299`, and the new
+Resend dashboard marked `Foldiq receipt delivery check` as `delivered` from
+`receipts@foldiq.app` to the owner's new-account Gmail address. Production
+deployment `dpl_2WXnTQR6h7TS75xD1VkJrQu6DNUz` is Ready and aliased to
+`https://foldiq.app`.
 The corrected webhook was deployed to Vercel production as deployment
 `dpl_rWsGv5MgnRYBEw7neYZHXQExbkwy` and `https://foldiq.app` is Ready. A live
 unsigned webhook request reached the new function and was correctly rejected
