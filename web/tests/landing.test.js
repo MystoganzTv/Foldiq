@@ -4,6 +4,14 @@ import test from 'node:test';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const privacy = await readFile(new URL('../privacy-policy.html', import.meta.url), 'utf8');
+const analytics = await readFile(new URL('../analytics.js', import.meta.url), 'utf8');
+const trackedPages = await Promise.all([
+  'index.html',
+  'contact.html',
+  'privacy-policy.html',
+  'terms.html',
+  'success.html',
+].map(name => readFile(new URL(`../${name}`, import.meta.url), 'utf8')));
 
 test('download navigation targets the purchase section with sticky-nav spacing', () => {
   assert.match(html, /<a class="btn-nav" href="#download">/);
@@ -27,6 +35,19 @@ test('privacy copy covers optional GPS lookup on both platforms', () => {
   assert.match(privacy, /two decimal places \(roughly 1 km precision\)/);
   assert.match(privacy, /OpenStreetMap Nominatim/);
   assert.match(privacy, /Photos, videos, filenames, folder paths, and other media metadata are not included/);
+});
+
+test('cookie-free analytics is disclosed and strips purchase tokens', () => {
+  for (const page of trackedPages) {
+    assert.match(page, /<script defer src="\/analytics\.js"><\/script>/);
+  }
+  assert.match(analytics, /script\.src = '\/_vercel\/insights\/script\.js'/);
+  assert.match(analytics, /url\.search = ''/);
+  assert.match(analytics, /url\.hash = ''/);
+  assert.match(privacy, /Vercel Web Analytics/);
+  assert.match(privacy, /does not use cookies/);
+  assert.match(privacy, /Stripe checkout session identifiers are not included/);
+  assert.match(html, /anonymous, cookie-free traffic/);
 });
 
 test('social metadata points to the production domain', () => {
