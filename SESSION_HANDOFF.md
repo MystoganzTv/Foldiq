@@ -1,17 +1,16 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-13 15:05 America/New_York
+Updated: 2026-08-13 16:00 America/New_York
 
-App Store upload preparation update 2026-08-13 15:50: App Store Connect already
-contains macOS 1.0.18 builds through build 150 (uploaded at 1:59 PM and Ready to
-Submit). Those builds predate the final Apply/Undo safety hardening in commit
-`95c8555`, so the correct next build is 151, not the old local baseline 117.
-`version.config` and both macOS target configurations now use build 151. All 34
-macOS tests pass at this number. Xcode is signed in to the correct Admin team
-`V6F97AK8AD`, but Apple Distribution certificates are shown as `Not in
-Keychain`; a new Apple Distribution certificate/private key must be created in
-Xcode before the archive can be signed and uploaded. This is pending the
-required user confirmation for creating a persistent signing credential.
+App Store Connect upload completed 2026-08-13: pushing commit `9fd31c3`
+triggered the configured Xcode Cloud workflow. Cloud build 157 archived the
+macOS app successfully and uploaded Foldiq 1.0.18 to TestFlight. App Store
+Connect reports the upload as `Complete` and the build as `Ready to Submit`.
+Build 157 contains the final Apply/Undo safety hardening and all 34 macOS tests
+pass. The repository baseline remains build 151; Xcode Cloud assigned 157 from
+its own monotonically increasing build sequence. No local Apple Distribution
+certificate was created or revoked. Build 157 has not been submitted for App
+Review or published; either action still requires an explicit release decision.
 
 ## Read this first
 
@@ -80,10 +79,12 @@ with HTTP 400 for the missing Stripe signature. After rotating the Resend key,
 Vercel production deployment `H7MLmN4SK3brp5ymLNEhWAHom4EM` became Ready.
 
 Smart Duplicates 1.0.18 is implemented for macOS and Windows in the current
-source and has a newly rebuilt, locally verified Windows installer, but it is not yet a GitHub
-Release and has not been uploaded to App Store Connect. Publishing remains a
-separate release decision. The currently supported customer release remains
-Windows 1.0.17 and macOS 1.0.8 until 1.0.18 is explicitly released.
+source and has a newly rebuilt, locally verified Windows installer, but it is
+not yet a GitHub Release. macOS build 157 has been uploaded successfully to App
+Store Connect and is Ready to Submit, but has not been submitted for review or
+published. Publishing remains a separate release decision. The currently
+supported customer release remains Windows 1.0.17 and macOS 1.0.8 until 1.0.18
+is explicitly released.
 
 The first Windows 1.0.18 test package exposed a concrete packaging error while
 scanning TIFF/HEIC visual hashes: `utif2` was unpacked but its runtime dependency
