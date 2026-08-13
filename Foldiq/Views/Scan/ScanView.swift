@@ -707,7 +707,7 @@ struct FileDrillSheet: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(category == .similarPhotos ? .orange : .green)
                         Spacer()
-                        Text("Synchronized zoom")
+                        Text(comparisonZoom > 1 ? "Drag either photo to inspect details" : "Synchronized zoom")
                             .font(.caption2).foregroundStyle(.secondary)
                         Slider(value: $comparisonZoom, in: 1...3, step: 0.25)
                             .frame(width: 130)
@@ -896,7 +896,7 @@ private struct ComparisonPhotoCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .contentShape(Rectangle())
                 .onTapGesture(perform: onOpen)
-                .help("Click for full preview")
+                .help(zoom > 1 ? "Drag to move around the zoomed photo" : "Click for full preview")
 
             Text(file.filename)
                 .font(.caption.weight(.semibold))
@@ -962,25 +962,82 @@ private struct LocalPhotoThumbnail: View {
     let file: MediaFile
     let zoom: Double
     @State private var image: PlatformImage?
+    @State private var panOffset: CGSize = .zero
+    @GestureState private var dragOffset: CGSize = .zero
 
     var body: some View {
-        ZStack {
-            if let image {
-                Image(platformImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .scaleEffect(zoom)
-            } else {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(.white)
+        GeometryReader { geometry in
+            let visibleOffset = limitedOffset(
+                CGSize(
+                    width: panOffset.width + dragOffset.width,
+                    height: panOffset.height + dragOffset.height
+                ),
+                in: geometry.size
+            )
+
+            ZStack {
+                if let image {
+                    Image(platformImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .scaleEffect(zoom)
+                        .offset(visibleOffset)
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .updating($dragOffset) { value, state, _ in
+                        guard zoom > 1 else { return }
+                        state = value.translation
+                    }
+                    .onChanged { _ in
+                        #if os(macOS)
+                        if zoom > 1 { NSCursor.closedHand.set() }
+                        #endif
+                    }
+                    .onEnded { value in
+                        guard zoom > 1 else { return }
+                        panOffset = limitedOffset(
+                            CGSize(
+                                width: panOffset.width + value.translation.width,
+                                height: panOffset.height + value.translation.height
+                            ),
+                            in: geometry.size
+                        )
+                        #if os(macOS)
+                        NSCursor.openHand.set()
+                        #endif
+                    }
+            )
+            .onChange(of: zoom) { _, newZoom in
+                panOffset = newZoom <= 1 ? .zero : limitedOffset(panOffset, in: geometry.size)
+                #if os(macOS)
+                if newZoom <= 1 { NSCursor.arrow.set() }
+                #endif
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
+        .modifier(PanCursorModifier(active: zoom > 1))
         .task(id: file.id) {
+            panOffset = .zero
             image = await Self.loadThumbnail(url: file.url)
         }
+    }
+
+    private func limitedOffset(_ proposed: CGSize, in container: CGSize) -> CGSize {
+        let extraScale = CGFloat(max(zoom - 1, 0))
+        let maxX = container.width * extraScale / 2
+        let maxY = container.height * extraScale / 2
+        return CGSize(
+            width: min(max(proposed.width, -maxX), maxX),
+            height: min(max(proposed.height, -maxY), maxY)
+        )
     }
 
     private static func loadThumbnail(url: URL) async -> PlatformImage? {
@@ -996,6 +1053,24 @@ private struct LocalPhotoThumbnail: View {
             else { return nil }
             return PlatformImageFactory.make(cgImage: cgImage)
         }.value
+    }
+}
+
+private struct PanCursorModifier: ViewModifier {
+    let active: Bool
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.onHover { hovering in
+            if hovering && active {
+                NSCursor.openHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        #else
+        content
+        #endif
     }
 }
 

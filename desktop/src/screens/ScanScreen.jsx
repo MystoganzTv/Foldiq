@@ -375,7 +375,7 @@ function CategoryModal({ card, files, onClose, onKeepPhotos }) {
                   <strong className={card.key === 'similar' ? s.reviewOnlyText : s.verifiedText}>
                     {card.key === 'dupes' ? '● Exact copies' : card.key === 'similar' ? '● You decide' : '● Same image'}
                   </strong>
-                  <label>Synchronized zoom</label>
+                  <label>{zoom > 1 ? 'Drag either photo to inspect details' : 'Synchronized zoom'}</label>
                   <input type="range" min="1" max="3" step="0.25" value={zoom} onChange={event => setZoom(Number(event.target.value))} />
                   <span>{zoom.toFixed(2)}×</span>
                 </div>
@@ -423,18 +423,87 @@ function CategoryModal({ card, files, onClose, onKeepPhotos }) {
 
 function ComparisonPhotoCard({ file, title, tone, zoom, kept, onKeep }) {
   const [thumbnail, setThumbnail] = useState(undefined);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const frameRef = useRef(null);
+  const imageRef = useRef(null);
+  const dragRef = useRef(null);
+  const suppressClickRef = useRef(false);
+
+  function clampPan(next) {
+    const frame = frameRef.current;
+    const image = imageRef.current;
+    if (!frame || !image || zoom <= 1) return { x: 0, y: 0 };
+    const rect = frame.getBoundingClientRect();
+    const imageRatio = image.naturalWidth / Math.max(image.naturalHeight, 1);
+    const frameRatio = rect.width / Math.max(rect.height, 1);
+    const renderedWidth = imageRatio > frameRatio ? rect.width : rect.height * imageRatio;
+    const renderedHeight = imageRatio > frameRatio ? rect.width / imageRatio : rect.height;
+    const maxX = Math.max(0, (renderedWidth * zoom - rect.width) / 2);
+    const maxY = Math.max(0, (renderedHeight * zoom - rect.height) / 2);
+    return {
+      x: Math.min(Math.max(next.x, -maxX), maxX),
+      y: Math.min(Math.max(next.y, -maxY), maxY),
+    };
+  }
+
   useEffect(() => {
     let active = true;
     setThumbnail(undefined);
+    setPan({ x: 0, y: 0 });
     window.foldiq.getThumbnail(file.path).then(value => { if (active) setThumbnail(value); });
     return () => { active = false; };
   }, [file.path]);
+
+  useEffect(() => {
+    setPan(current => clampPan(current));
+  }, [zoom]);
+
+  function beginPan(event) {
+    if (zoom <= 1 || !thumbnail) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = { startX: event.clientX, startY: event.clientY, origin: pan, moved: false };
+    setDragging(true);
+  }
+
+  function movePan(event) {
+    if (!dragRef.current) return;
+    const dx = event.clientX - dragRef.current.startX;
+    const dy = event.clientY - dragRef.current.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 3) dragRef.current.moved = true;
+    setPan(clampPan({ x: dragRef.current.origin.x + dx, y: dragRef.current.origin.y + dy }));
+  }
+
+  function endPan() {
+    if (dragRef.current?.moved) suppressClickRef.current = true;
+    dragRef.current = null;
+    setDragging(false);
+  }
+
+  function openOriginal() {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    window.foldiq.revealFile(file.path);
+  }
+
   return (
     <section className={`${s.comparisonPhotoCard} ${s[`comparisonTone${tone}`] || ''}`}>
       <header><strong>{title}</strong>{file.probableMatchScore > 0 && <span>{file.probableMatchScore}%</span>}</header>
-      <button className={s.comparisonImage} onClick={() => window.foldiq.revealFile(file.path)} title="Show original file">
+      <button
+        ref={frameRef}
+        className={`${s.comparisonImage} ${zoom > 1 ? s.comparisonImagePannable : ''} ${dragging ? s.comparisonImageDragging : ''}`}
+        onClick={openOriginal}
+        onPointerDown={beginPan}
+        onPointerMove={movePan}
+        onPointerUp={endPan}
+        onPointerCancel={endPan}
+        title={zoom > 1 ? 'Drag to move around the zoomed photo' : 'Show original file'}
+      >
         {thumbnail === undefined && <i className={s.comparisonLoader} />}
-        {thumbnail && <img src={thumbnail} alt={file.name} draggable="false" style={{ transform: `scale(${zoom})` }} />}
+        {thumbnail && <img ref={imageRef} src={thumbnail} alt={file.name} draggable="false" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }} />}
         {thumbnail === null && <span>Preview unavailable</span>}
       </button>
       <strong className={s.comparisonFilename}>{file.name}</strong>
