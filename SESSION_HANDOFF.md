@@ -45,6 +45,12 @@ ready to send. A sending-only key named `Foldiq Production` was stored directly
 as Vercel's sensitive `RESEND_API_KEY` for Production and Preview; the value is
 not stored in this repository or handoff. Foldiq support now also defaults to
 `support@foldiq.app`, not the unrelated `rbtgenius.com` domain.
+The key was rotated once after validation; the earlier credential was deleted
+from Resend and the replacement remains sending-only. Two live support messages
+through `https://foldiq.app/api/support` were accepted by production and marked
+`delivered` in the new Resend account. A private authenticated email-health
+endpoint exists solely to verify the exact `receipts@foldiq.app` sender without
+requiring a paid Stripe purchase; its secret and recipient live only in Vercel.
 The corrected webhook was deployed to Vercel production as deployment
 `dpl_rWsGv5MgnRYBEw7neYZHXQExbkwy` and `https://foldiq.app` is Ready. A live
 unsigned webhook request reached the new function and was correctly rejected
