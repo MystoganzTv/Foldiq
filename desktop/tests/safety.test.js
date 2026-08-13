@@ -124,6 +124,22 @@ test('planner separates exact and probable duplicates into explicit folders', (t
   assert.ok(plan.every(file => file.action === 'copy' && file.included));
 });
 
+test('planner never separates a review-only similar photo', (t) => {
+  const dir = tempDir(t);
+  const outputFolder = path.join(dir, 'output');
+  const plan = planner.buildPlan([{
+    id: 1,
+    path: path.join(dir, 'burst.jpg'),
+    name: 'burst.jpg',
+    date: '2026-08-11T12:00:00.000Z',
+    probableDuplicateGroupID: 'smart-1',
+    isProbableDuplicate: false,
+  }], { outputFolder, duplicateHandling: 'separate', copyMode: true });
+
+  assert.equal(plan[0].destPath.includes(`${path.sep}Duplicates${path.sep}`), false);
+  assert.equal(plan[0].included, true);
+});
+
 test('planner can leave duplicate extras untouched', (t) => {
   const dir = tempDir(t);
   const plan = planner.buildPlan([{
@@ -330,16 +346,32 @@ test('bounded concurrency preserves order without exceeding its limit', async ()
   assert.equal(peak, 2);
 });
 
-test('probable duplicate detector marks only the elected extra', () => {
+test('smart duplicate detector keeps metadata-only matches as review-only', () => {
   const files = [
     { id: 1, name: 'IMG_1000.HEIC', path: '/photos/IMG_1000.HEIC', size: 1000, date: '2024-01-01T10:00:00.000Z', pixelWidth: 100, pixelHeight: 100 },
     { id: 2, name: 'IMG_1000.JPG', path: '/export/nested/IMG_1000.JPG', size: 1005, date: '2024-01-01T10:02:00.000Z', pixelWidth: 100, pixelHeight: 100, archiveSourcePath: '/export.zip' },
   ];
 
   scanner.detectProbableDuplicates(files);
-  assert.equal(files.filter(file => file.isProbableDuplicate).length, 1);
-  assert.equal(files[1].isProbableDuplicate, true);
-  assert.ok(files[1].probableMatchScore >= 90);
+  assert.equal(files.filter(file => file.isProbableDuplicate).length, 0);
+  assert.equal(files.filter(file => file.probableDuplicateGroupID).length, 2);
+  assert.ok(files[0].probableMatchReasons.includes('review only'));
+});
+
+test('smart duplicate detector finds renamed visual copies and elects one original', () => {
+  const sameVisualImage = ['0123456789abcdef'];
+  const files = [
+    { id: 1, name: 'IMG_1000.HEIC', path: '/photos/IMG_1000.HEIC', ext: '.heic', size: 4000, date: '2024-01-01T10:00:00.000Z', dateSource: 'camera metadata', pixelWidth: 100, pixelHeight: 100, visualHashes: sameVisualImage },
+    { id: 2, name: 'family-holiday.jpg', path: '/export/family-holiday.jpg', ext: '.jpg', size: 3500, date: '2024-01-01T10:00:00.000Z', pixelWidth: 100, pixelHeight: 100, visualHashes: sameVisualImage, archiveSourcePath: '/export.zip' },
+    { id: 3, name: 'renamed-again.png', path: '/backup/renamed-again.png', ext: '.png', size: 4200, date: '2024-01-01T10:00:05.000Z', pixelWidth: 100, pixelHeight: 100, visualHashes: sameVisualImage },
+  ];
+
+  scanner.detectProbableDuplicates(files);
+  assert.equal(files.filter(file => file.probableDuplicateGroupID).length, 3);
+  assert.equal(new Set(files.map(file => file.probableDuplicateGroupID)).size, 1);
+  assert.equal(files.filter(file => file.isProbableDuplicate).length, 2);
+  assert.equal(files[1].isProbableDuplicate, true, 'archive copy must never win original election');
+  assert.equal(files.filter(file => !file.isProbableDuplicate).length, 1);
 });
 
 test('Start Over discards only an internal Foldiq Undo manifest', async (t) => {

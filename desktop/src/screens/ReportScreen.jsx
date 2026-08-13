@@ -36,7 +36,13 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
       operation: file.action,
       included: file.included !== false,
       date: file.date || '',
-      duplicate: file.isDuplicate ? 'exact' : file.isProbableDuplicate ? 'probable' : '',
+      duplicate: file.isDuplicate
+        ? 'exact'
+        : file.isProbableDuplicate
+          ? 'strong-visual-match'
+          : file.probableDuplicateGroupID
+            ? 'review-only-similar'
+            : '',
       status: file.action === 'skip' || file.included === false
         ? 'untouched'
         : errorPaths.has(`${file.path}\n${file.destPath}`)

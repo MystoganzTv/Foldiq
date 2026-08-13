@@ -56,12 +56,13 @@ final class DuplicateDetector {
             )
         }
 
-        let total = snapshots.count
-
         // ── 2. Pre-group by file size (cheap, stays on @MainActor) ────────
         var bySize: [Int64: [FileSnapshot]] = [:]
         for snap in snapshots {
             bySize[snap.fileSize, default: []].append(snap)
+        }
+        let total = bySize.values.reduce(0) { count, bucket in
+            count + (bucket.count > 1 ? bucket.count : 0)
         }
 
         // ── 3. Hash candidates (only same-size buckets) off main thread ───

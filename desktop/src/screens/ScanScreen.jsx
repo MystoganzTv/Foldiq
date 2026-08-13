@@ -6,7 +6,7 @@ const STAT_CARDS = [
   { key: 'videos',    label: 'Videos',          color: '#F5F3FF', iconColor: '#8B5CF6' },
   { key: 'zips',      label: 'Archives Extracted', color: '#F0FDFA', iconColor: '#14B8A6' },
   { key: 'dupes',     label: 'Exact Dupes',     color: '#FFF7ED', iconColor: '#F97316' },
-  { key: 'probDupes', label: 'Probable Dupes',  color: '#FEFCE8', iconColor: '#EAB308' },
+  { key: 'probDupes', label: 'Smart Matches',    color: '#FEFCE8', iconColor: '#EAB308' },
   { key: 'noDate',    label: 'Missing Date',    color: '#FEF2F2', iconColor: '#EF4444' },
   { key: 'fileDate',  label: 'File Date Available', color: '#F8FAFC', iconColor: '#64748B' },
   { key: 'total',     label: 'Total Files',     color: '#F0FDF4', iconColor: '#22C55E' },
@@ -46,7 +46,7 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
         videos:    files.filter(f => videoExts.has(f.ext)).length,
         zips:      Array.isArray(result) ? 0 : result.archivesExtracted,
         dupes:     files.filter(f => f.isDuplicate).length,
-        probDupes: files.filter(f => f.isProbableDuplicate).length,
+        probDupes: files.filter(f => f.probableDuplicateGroupID).length,
         noDate:    files.filter(f => !f.date).length,
         fileDate:  files.filter(f => !f.date && f.fileModifiedDate).length,
         embeddedDates: files.filter(f => f.date && f.dateSource !== 'filename').length,
@@ -94,6 +94,7 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
     indexing: 'Indexing files',
     metadata: 'Reading capture dates',
     duplicates: 'Checking exact duplicates',
+    similarity: 'Finding visually similar photos',
     finalizing: 'Preparing results',
   }[progress.phase] || 'Scanning files';
 
@@ -236,7 +237,7 @@ function filesForCategory(key, files) {
   if (key === 'photos') return files.filter(file => photos.has(file.ext));
   if (key === 'videos') return files.filter(file => videos.has(file.ext));
   if (key === 'dupes') return files.filter(file => file.isDuplicate);
-  if (key === 'probDupes') return files.filter(file => file.isProbableDuplicate);
+  if (key === 'probDupes') return files.filter(file => file.probableDuplicateGroupID);
   if (key === 'noDate') return files.filter(file => !file.date);
   if (key === 'fileDate') return files.filter(file => !file.date && file.fileModifiedDate);
   if (key === 'zips') return files.filter(file => file.archiveSourcePath);
@@ -249,12 +250,23 @@ function CategoryModal({ card, files, onClose }) {
       <section className={s.modalCard} role="dialog" aria-modal="true" aria-label={card.label}>
         <div className={s.modalHeader}><h2>{card.label} — {files.length.toLocaleString()}</h2><button onClick={onClose}>×</button></div>
         <div className={s.modalBody}>
+          {card.key === 'probDupes' && (
+            <div className={s.diagnosticPrivacyNotice}>
+              <p><strong>Smart Matches compares image content locally.</strong></p>
+              <ul>
+                <li>Same image: the best copy stays organized; other strong matches follow your Duplicate handling setting.</li>
+                <li>Review only: visually similar photos always stay organized and are never separated automatically.</li>
+              </ul>
+            </div>
+          )}
           <div className={s.scanFileDrilldown}>
             {files.length === 0 && <p>No matching files.</p>}
             {files.slice(0, 500).map(file => (
               <button key={file.path} onClick={() => window.foldiq.revealFile(file.archiveSourcePath || file.path)}>
                 <strong>{file.name}</strong>
-                <span>{file.isProbableDuplicate ? `${file.probableMatchScore}% · ${file.probableMatchReasons}` : file.path}</span>
+                <span>{file.probableDuplicateGroupID
+                  ? `${file.isProbableDuplicate ? 'Same image' : 'Review only'} · ${file.probableMatchScore}% · ${file.probableMatchReasons}`
+                  : file.path}</span>
               </button>
             ))}
             {files.length > 500 && <p>Showing the first 500 files.</p>}

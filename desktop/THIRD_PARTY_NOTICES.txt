@@ -1,0 +1,20 @@
+Foldiq 1.0.18 — Third-Party Notices
+===================================
+
+Smart Duplicates processes media locally and includes the following libraries:
+
+- heic-decode 2.1.0 — ISC License
+  https://github.com/catdad-experiments/heic-decode
+- libheif-js 1.19.8 — GNU Lesser General Public License v3.0
+  https://github.com/catdad-experiments/libheif-js
+- jpeg-js 0.4.4 — BSD 3-Clause License
+  https://github.com/eugeneware/jpeg-js
+- pngjs 7.0.0 — MIT License
+  https://github.com/pngjs/pngjs
+- utif2 4.1.0 — MIT License
+  https://github.com/photopea/UTIF.js
+
+The complete license texts distributed by these packages are included with
+the corresponding modules in the application resources. libheif-js and its
+WASM runtime are shipped outside app.asar so recipients can inspect or replace
+the library in accordance with LGPL-3.0.

@@ -9,7 +9,7 @@ export default function WelcomeScreen({ go, folders, setFolders, config, setConf
 
   useEffect(() => {
     if (!window.foldiq?.getAppInfo) {
-      setAppInfo({ version: '1.0.17', platform: 'browser-preview' });
+      setAppInfo({ version: '1.0.18', platform: 'browser-preview' });
       return;
     }
     window.foldiq.getAppInfo().then(setAppInfo).catch(() => {});

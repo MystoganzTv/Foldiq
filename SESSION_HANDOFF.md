@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-12 18:45 America/New_York
+Updated: 2026-08-13 00:05 America/New_York
 
 ## Read this first
 
@@ -9,6 +9,12 @@ The repository is `/Users/enrique/Developer/Foldiq`. The active branch is `main`
 older 1.0.15 test build: it fixes the metadata runtime/hang, closes the major
 macOS parity gaps, adds real opt-in location organization, retry/cleanup/report
 controls, and persists Windows preferences. Do not discard these changes.
+
+Smart Duplicates 1.0.18 is implemented for macOS and Windows in the current
+source and has a locally verified Windows installer, but it is not yet a GitHub
+Release and has not been uploaded to App Store Connect. Publishing remains a
+separate release decision. The currently supported customer release remains
+Windows 1.0.17 and macOS 1.0.8 until 1.0.18 is explicitly released.
 
 Windows 1.0.17 is pushed, tagged, and released at
 `https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.17-windows`. The release
@@ -186,6 +192,30 @@ capture dates`, the metadata stage was redesigned again:
   timings, counts, and error codes; it strips photos, filenames, folder paths,
   and local usernames. Nothing is sent until the user reviews and sends the
   email. Error results now say `Scan Failed`, not `Scan Complete`.
+
+### Smart Duplicates 1.0.18 (implemented locally; release not published yet)
+
+- Exact duplicates still use SHA-256, but Windows now elects the best original
+  after metadata extraction instead of keeping whichever path scanned first.
+- macOS and Windows calculate an orientation-aware 64-bit visual hash and can
+  find renamed, rotated, metadata-modified, and re-encoded photos.
+- Smart Matches form connected groups of two or more files instead of consuming
+  only one pair and silently dropping a third copy.
+- Strong visual matches may follow the user's duplicate-handling choice. Weaker
+  similarities and metadata-only matches are explicitly `Review only` and are
+  never separated automatically.
+- Windows supports JPG, PNG, HEIC/HEIF, and TIFF visual decoding. HEIC/TIFF run
+  in a worker thread with concurrency 1, a 60 MP/256 MB safety cap, live
+  progress, and cancellation so the scan UI remains responsive.
+- macOS uses ImageIO thumbnails and CoreGraphics. RAW formats are attempted by
+  ImageIO when the system provides a decoder.
+- Windows ships HEIC support outside `app.asar` with third-party license notices
+  for LGPL compliance.
+- Current validation: Windows 54 tests passed (1 platform-gated RAR test skipped),
+  macOS 27 tests passed, the macOS Release build reports 1.0.18 (117), Windows
+  installer packaging passed, and a real renamed HEIC with changed metadata was
+  detected end-to-end as a 100% visual match in 2.9 seconds. The 1.0.18 installers
+  have not been distributed or uploaded yet.
 
 Major macOS/Windows parity work included in the same build:
 

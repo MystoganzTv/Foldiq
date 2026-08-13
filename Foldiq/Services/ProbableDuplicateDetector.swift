@@ -1,30 +1,14 @@
 // ProbableDuplicateDetector.swift
-// Second-level duplicate detection: finds files that are visually the same
-// but fail SHA-256 due to EXIF rewrites, format conversion (HEIC→JPEG), etc.
-//
-// Strategy:
-//   1. Pre-group by filename stem (lowercase, no extension) — O(n), avoids O(n²).
-//   2. Score every pair within a group using filename, size, timestamp, dimensions.
-//   3. Pairs scoring ≥ threshold are elected: one side = original, other = probable dup.
-//
-// Performance: designed for 50k+ file libraries.
-//   - No file I/O during scoring — only in-memory @Model property reads.
-//   - All @Model reads happen on @MainActor via value-type snapshots.
-//   - All @Model writes happen on @MainActor after scoring is complete.
-//
-// Architecture: structured to accommodate a perceptual hash (pHash) signal
-// as an additional scoring term in the future without structural changes.
-// To add pHash: add a `pHashHex: String?` field to FileSnapshot, populate it
-// asynchronously in the snapshot phase, and add a Score.pHashMatch constant.
+// Smart Duplicates: local-only visual and metadata comparison for photos whose
+// bytes differ. Strong visual matches may be separated; weaker similarities are
+// review-only and always remain in the normal organization flow.
 
 import Foundation
-
-// MARK: ─── ProbableDuplicateDetector ─────────────────────────────────────────
+import ImageIO
+import CoreGraphics
 
 @MainActor
 final class ProbableDuplicateDetector {
-
-    // MARK: - Progress
 
     struct Progress {
         var processed: Int
@@ -32,248 +16,447 @@ final class ProbableDuplicateDetector {
         var currentFile: String
     }
 
-    // MARK: - Scoring weights
-    // These are intentionally named constants so they can be tuned without
-    // hunting through the scoring function.
-
-    private enum Weight {
-        static let filenameStemExact  = 50   // stems match (case-insensitive, no ext)
-        static let sizeWithin1Pct     = 25   // |sizeA - sizeB| / larger ≤ 1 %
-        static let sizeWithin3Pct     = 10   // |sizeA - sizeB| / larger ≤ 3 %
-        static let tsWithin5Min       = 20   // |dateA - dateB| ≤ 5 min
-        static let tsWithin1Hour      = 17   // |dateA - dateB| ≤ 1 h
-        static let tsWithin24Hours    = 10   // |dateA - dateB| ≤ 24 h
-        static let dimensionsMatch    = 10   // same pixel width × height
-        // Future: static let pHashMatch = 30
-    }
-
-    /// Pairs scoring at or above this threshold are surfaced as probable duplicates.
-    static let threshold = 90
-
-    // MARK: - Sendable snapshot (crosses actor boundaries safely)
+    static let sameImageDistance = 4
+    static let similarImageDistance = 10
+    private static let tenMinutes: TimeInterval = 10 * 60
 
     private struct FileSnapshot: Sendable {
         let id: UUID
+        let url: URL
         let filename: String
-        let stem: String          // normalized: lowercase, no extension
+        let stem: String
         let fileSize: Int64
-        let bestDate: Date?       // dateTaken ?? dateCreated ?? dateModified
-        let hasCaptureDate: Bool  // true only for EXIF/container capture metadata
+        let captureDate: Date?
+        let hasCaptureDate: Bool
+        let hasGPS: Bool
         let pixelWidth: Int?
         let pixelHeight: Int?
         let isExactDuplicate: Bool
-        let isFromArchive: Bool   // zip-extracted files are preferred as duplicates
-        let pathDepth: Int        // fewer path components = more "original"
+        let isFromArchive: Bool
+        let pathDepth: Int
     }
 
-    // MARK: - Match result (pure value type, assembled before any @Model write)
+    private struct Pair: Hashable, Sendable {
+        let left: Int
+        let right: Int
 
-    struct MatchResult {
-        let originalID: UUID
-        let duplicateID: UUID
+        init(_ first: Int, _ second: Int) {
+            left = min(first, second)
+            right = max(first, second)
+        }
+    }
+
+    private enum MatchKind: Sendable { case sameImage, similar }
+
+    private struct MatchEdge: Sendable {
+        let left: Int
+        let right: Int
+        let kind: MatchKind
         let score: Int
-        let reasons: String        // pre-formatted display string
-        let peerFilename: String   // the original's filename (shown in drill sheet)
+        let reasons: String
     }
 
-    // MARK: - Public API
+    private struct UnionFind {
+        var parent: [Int]
 
-    /// Detect probable duplicates across `files` and write results back to @Model
-    /// objects on @MainActor. Returns the number of probable-duplicate groups found.
+        init(count: Int) {
+            parent = Array(0..<count)
+        }
+
+        mutating func find(_ value: Int) -> Int {
+            if parent[value] != value {
+                parent[value] = find(parent[value])
+            }
+            return parent[value]
+        }
+
+        mutating func union(_ left: Int, _ right: Int) {
+            let a = find(left)
+            let b = find(right)
+            if a != b { parent[b] = a }
+        }
+    }
+
     @discardableResult
     func detect(
         files: [MediaFile],
         onProgress: @MainActor @escaping (Progress) -> Void
     ) async -> Int {
+        for file in files where !file.isDuplicate {
+            file.isProbableDuplicate = false
+            file.probableDuplicateGroupID = nil
+            file.probableMatchScore = 0
+            file.probableMatchReasons = nil
+            file.probableMatchPeerFilename = nil
+        }
 
-        // ── 1. Snapshot @Model properties on @MainActor ───────────────────
-        let snapshots: [FileSnapshot] = files.map { f in
+        let snapshots = files.map { file in
             FileSnapshot(
-                id:              f.id,
-                filename:        f.filename,
-                stem:            Self.normalizedStem(f.filename),
-                fileSize:        f.fileSize,
-                bestDate:        f.dateTaken ?? f.dateCreated ?? f.dateModified,
-                hasCaptureDate:  f.dateTaken != nil,
-                pixelWidth:      f.pixelWidth,
-                pixelHeight:     f.pixelHeight,
-                isExactDuplicate: f.isDuplicate,
-                isFromArchive:   f.archiveSourcePath != nil,
-                pathDepth:       f.filePath.components(separatedBy: "/").count
+                id: file.id,
+                url: file.url,
+                filename: file.filename,
+                stem: Self.normalizedStem(file.filename),
+                fileSize: file.fileSize,
+                captureDate: file.dateTaken,
+                hasCaptureDate: file.dateTaken != nil,
+                hasGPS: file.hasGPS,
+                pixelWidth: file.pixelWidth,
+                pixelHeight: file.pixelHeight,
+                isExactDuplicate: file.isDuplicate,
+                isFromArchive: file.archiveSourcePath != nil,
+                pathDepth: file.filePath.split(separator: "/").count
             )
+        }.filter { !$0.isExactDuplicate && Self.isSupportedPhoto($0.url) }
+
+        guard snapshots.count > 1 else { return 0 }
+        let pairs = Self.candidatePairs(snapshots)
+        let visualIndexes = Set(pairs.flatMap { [$0.left, $0.right] }).sorted()
+        var visualHashes: [Int: [UInt64]] = [:]
+        visualHashes.reserveCapacity(visualIndexes.count)
+
+        for (position, index) in visualIndexes.enumerated() {
+            if Task.isCancelled { return 0 }
+            onProgress(Progress(
+                processed: position,
+                total: visualIndexes.count,
+                currentFile: snapshots[index].filename
+            ))
+            if let hashes = await Self.computeVisualHashes(url: snapshots[index].url) {
+                visualHashes[index] = hashes
+            }
+            onProgress(Progress(
+                processed: position + 1,
+                total: visualIndexes.count,
+                currentFile: snapshots[index].filename
+            ))
         }
 
-        // Exclude files already identified as exact SHA-256 duplicates.
-        let candidates = snapshots.filter { !$0.isExactDuplicate }
-
-        // ── 2. Pre-group by filename stem — O(n) ─────────────────────────
-        // Files that share no stem can never be probable duplicates of each other.
-        var byStem: [String: [FileSnapshot]] = [:]
-        byStem.reserveCapacity(candidates.count)
-        for snap in candidates {
-            byStem[snap.stem, default: []].append(snap)
+        var allGroups = UnionFind(count: snapshots.count)
+        var sameGroups = UnionFind(count: snapshots.count)
+        var edges: [MatchEdge] = []
+        for pair in pairs {
+            guard let match = Self.classify(
+                snapshots[pair.left],
+                snapshots[pair.right],
+                leftHashes: visualHashes[pair.left],
+                rightHashes: visualHashes[pair.right]
+            ) else { continue }
+            edges.append(MatchEdge(
+                left: pair.left,
+                right: pair.right,
+                kind: match.kind,
+                score: match.score,
+                reasons: match.reasons
+            ))
+            allGroups.union(pair.left, pair.right)
+            if match.kind == .sameImage { sameGroups.union(pair.left, pair.right) }
         }
 
-        // ── 3. Score pairs within each stem group ─────────────────────────
-        // Groups of size 1 produce no pairs → skipped automatically.
-        var matches: [MatchResult] = []
-        var processed = 0
-        let total = candidates.count
+        struct Component {
+            var indexes = Set<Int>()
+            var edges: [MatchEdge] = []
+        }
+        var components: [Int: Component] = [:]
+        for edge in edges {
+            let root = allGroups.find(edge.left)
+            components[root, default: Component()].indexes.formUnion([edge.left, edge.right])
+            components[root, default: Component()].edges.append(edge)
+        }
 
-        for (_, group) in byStem where group.count > 1 {
-            for i in 0 ..< group.count {
-                for j in (i + 1) ..< group.count {
-                    processed += 1
-                    if processed % 100 == 0 {
-                        let p = Progress(processed: processed, total: total,
-                                         currentFile: group[i].filename)
-                        onProgress(p)
+        let filesByID = Dictionary(uniqueKeysWithValues: files.map { ($0.id, $0) })
+        var groupCount = 0
+        for component in components.values {
+            groupCount += 1
+            let groupID = UUID()
+            for index in component.indexes {
+                filesByID[snapshots[index].id]?.probableDuplicateGroupID = groupID
+            }
+
+            var bestEdgeByIndex: [Int: MatchEdge] = [:]
+            for edge in component.edges {
+                for index in [edge.left, edge.right] {
+                    if bestEdgeByIndex[index]?.score ?? -1 < edge.score {
+                        bestEdgeByIndex[index] = edge
                     }
+                }
+            }
+            for (index, edge) in bestEdgeByIndex {
+                guard let file = filesByID[snapshots[index].id] else { continue }
+                let peer = edge.left == index ? edge.right : edge.left
+                file.probableMatchScore = edge.score
+                file.probableMatchReasons = edge.reasons
+                file.probableMatchPeerFilename = snapshots[peer].filename
+            }
 
-                    let a = group[i], b = group[j]
-                    let (score, reasons) = Self.score(a, b)
-                    guard score >= Self.threshold else { continue }
-
-                    let (orig, dup) = Self.electOriginal(a, b)
-                    matches.append(MatchResult(
-                        originalID:   orig.id,
-                        duplicateID:  dup.id,
-                        score:        score,
-                        reasons:      reasons,
-                        peerFilename: orig.filename
-                    ))
+            var highComponents: [Int: [Int]] = [:]
+            for index in component.indexes {
+                highComponents[sameGroups.find(index), default: []].append(index)
+            }
+            for indexes in highComponents.values where indexes.count > 1 {
+                let original = Self.electOriginal(indexes.map { snapshots[$0] })
+                for index in indexes where snapshots[index].id != original.id {
+                    guard let duplicate = filesByID[snapshots[index].id] else { continue }
+                    duplicate.isProbableDuplicate = true
+                    duplicate.probableMatchPeerFilename = original.filename
                 }
             }
         }
-
-        // ── 4. Assign results — each file participates in at most one pair ─
-        // Sort by score descending so the strongest matches are assigned first.
-        let ranked = matches.sorted { $0.score > $1.score }
-        var assigned = Set<UUID>()
-
-        let fileByID = Dictionary(uniqueKeysWithValues: files.map { ($0.id, $0) })
-        var groupCount = 0
-
-        for match in ranked {
-            // Skip if either side already belongs to a group.
-            guard !assigned.contains(match.duplicateID),
-                  !assigned.contains(match.originalID) else { continue }
-
-            guard let dupFile  = fileByID[match.duplicateID],
-                  let origFile = fileByID[match.originalID] else { continue }
-
-            let gid = UUID()
-            groupCount += 1
-
-            // Duplicate side — will be routed to Duplicates/Probable Duplicates/
-            dupFile.isProbableDuplicate       = true
-            dupFile.probableDuplicateGroupID  = gid
-            dupFile.probableMatchScore        = match.score
-            dupFile.probableMatchReasons      = match.reasons
-            dupFile.probableMatchPeerFilename = match.peerFilename
-
-            // Original side — stays in normal organized structure,
-            // but tagged so it appears in the "Probable Duplicates" drill sheet.
-            origFile.probableDuplicateGroupID = gid
-
-            assigned.insert(match.duplicateID)
-            assigned.insert(match.originalID)
-        }
-
         return groupCount
     }
 
-    // MARK: - Scoring
+    // MARK: Candidate generation
 
-    /// Returns (totalScore, humanReadableReasons) for a candidate pair.
-    /// Scores are capped at 100 to avoid overflow in display.
-    private static func score(_ a: FileSnapshot, _ b: FileSnapshot) -> (Int, String) {
-        var total = 0
-        var parts: [String] = []
-
-        // ── Filename stem (guaranteed to match since we group by stem,
-        //    but we annotate the extension difference if any) ────────────
-        let extA = (a.filename as NSString).pathExtension.lowercased()
-        let extB = (b.filename as NSString).pathExtension.lowercased()
-        total += Weight.filenameStemExact
-        if extA == extB {
-            parts.append("Same filename")
-        } else {
-            parts.append("Same name (\(extA.uppercased()) vs \(extB.uppercased()))")
+    private static func candidatePairs(_ files: [FileSnapshot]) -> Set<Pair> {
+        var result = Set<Pair>()
+        var byStem: [String: [Int]] = [:]
+        for (index, file) in files.enumerated() where !file.stem.isEmpty {
+            byStem[file.stem, default: []].append(index)
         }
-
-        // ── File size ────────────────────────────────────────────────────
-        if a.fileSize > 0 && b.fileSize > 0 {
-            let larger  = Double(max(a.fileSize, b.fileSize))
-            let smaller = Double(min(a.fileSize, b.fileSize))
-            let ratio   = (larger - smaller) / larger
-            if ratio <= 0.01 {
-                total += Weight.sizeWithin1Pct
-                let pct = String(format: "%.1f", ratio * 100)
-                parts.append("Size ±\(pct)%")
-            } else if ratio <= 0.03 {
-                total += Weight.sizeWithin3Pct
-                let pct = String(format: "%.1f", ratio * 100)
-                parts.append("Size ±\(pct)%")
+        for group in byStem.values {
+            for left in group.indices {
+                let upper = min(group.count, left + 100)
+                guard left + 1 < upper else { continue }
+                for right in (left + 1)..<upper { result.insert(Pair(group[left], group[right])) }
             }
         }
 
-        // ── Timestamp ────────────────────────────────────────────────────
-        if let ta = a.bestDate, let tb = b.bestDate {
-            let diff = abs(ta.timeIntervalSince(tb))
-            if diff <= 300 {          // 5 minutes
-                total += Weight.tsWithin5Min
-                let m = Int(diff / 60), s = Int(diff) % 60
-                parts.append(m > 0 ? "Timestamp Δ\(m)m \(s)s" : "Timestamp Δ\(s)s")
-            } else if diff <= 3600 {  // 1 hour
-                total += Weight.tsWithin1Hour
-                parts.append("Timestamp Δ\(Int(diff / 60))m")
-            } else if diff <= 86_400 { // 24 hours
-                total += Weight.tsWithin24Hours
-                parts.append("Timestamp Δ\(Int(diff / 3600))h")
+        let dated = files.enumerated().compactMap { index, file -> (Int, Date, Double)? in
+            guard let date = file.captureDate, let aspect = aspectRatio(file) else { return nil }
+            return (index, date, aspect)
+        }.sorted { $0.1 < $1.1 }
+        for left in dated.indices {
+            var right = left + 1
+            while right < min(dated.count, left + 100)
+                    && dated[right].1.timeIntervalSince(dated[left].1) <= tenMinutes {
+                if orientationAwareAspectDifference(dated[left].2, dated[right].2) <= 0.05 {
+                    result.insert(Pair(dated[left].0, dated[right].0))
+                }
+                right += 1
             }
         }
 
-        // ── Image dimensions ─────────────────────────────────────────────
-        if let wA = a.pixelWidth, let hA = a.pixelHeight,
-           let wB = b.pixelWidth, let hB = b.pixelHeight,
-           wA > 0 && hA > 0, wA == wB && hA == hB {
-            total += Weight.dimensionsMatch
-            parts.append("Dimensions \(wA)×\(hA)")
+        var byDimensions: [String: [Int]] = [:]
+        for (index, file) in files.enumerated() {
+            guard let width = file.pixelWidth, let height = file.pixelHeight, width > 0, height > 0 else { continue }
+            byDimensions["\(min(width, height))x\(max(width, height))", default: []].append(index)
         }
-
-        // Future pHash signal would be inserted here as an additional if-block.
-
-        return (min(total, 100), parts.joined(separator: " · "))
+        for var group in byDimensions.values {
+            group.sort { files[$0].fileSize < files[$1].fileSize }
+            for left in group.indices {
+                let upper = min(group.count, left + 7)
+                guard left + 1 < upper else { continue }
+                for right in (left + 1)..<upper {
+                    if relativeDifference(Double(files[group[left]].fileSize), Double(files[group[right]].fileSize)) <= 0.15 {
+                        result.insert(Pair(group[left], group[right]))
+                    }
+                }
+            }
+        }
+        return result
     }
 
-    // MARK: - Original election
+    // MARK: Pair classification
 
-    /// Decides which file is the "original" to keep organized and which is the
-    /// probable duplicate to move to Duplicates/Probable Duplicates/.
-    ///
-    /// Priority (highest first):
-    ///   1. Non-archive file preferred as original (folder files beat zip-extracted)
-    ///   2. File with EXIF date preferred (richer metadata)
-    ///   3. Shallower directory depth (less nested = more "root" copy)
-    private static func electOriginal(_ a: FileSnapshot, _ b: FileSnapshot)
-        -> (original: FileSnapshot, duplicate: FileSnapshot)
-    {
-        func rank(_ s: FileSnapshot) -> Int {
-            var r = 0
-            if !s.isFromArchive { r += 100 }
-            if s.hasCaptureDate { r += 10 }
-            r -= s.pathDepth          // deeper path = lower rank
-            return r
+    private static func classify(
+        _ left: FileSnapshot,
+        _ right: FileSnapshot,
+        leftHashes: [UInt64]?,
+        rightHashes: [UInt64]?
+    ) -> (kind: MatchKind, score: Int, reasons: String)? {
+        let visualDistance = minimumVisualDistance(leftHashes, rightHashes)
+        let sameStem = left.stem == right.stem
+        let sameDimensions = left.pixelWidth != nil && left.pixelHeight != nil
+            && ((left.pixelWidth == right.pixelWidth && left.pixelHeight == right.pixelHeight)
+                || (left.pixelWidth == right.pixelHeight && left.pixelHeight == right.pixelWidth))
+        let dateDifference = left.captureDate.flatMap { a in right.captureDate.map { abs(a.timeIntervalSince($0)) } }
+        let aspectDifference: Double = {
+            guard let a = aspectRatio(left), let b = aspectRatio(right) else { return 0 }
+            return orientationAwareAspectDifference(a, b)
+        }()
+
+        if let distance = visualDistance,
+           distance <= sameImageDistance,
+           aspectDifference <= 0.03,
+           sameStem || sameDimensions || (dateDifference.map { $0 <= 86_400 } ?? false) {
+            return (
+                .sameImage,
+                max(94, 100 - distance),
+                "Visual match · distance \(distance)/64" + (sameDimensions ? " · same dimensions" : "")
+            )
         }
-        return rank(a) >= rank(b) ? (a, b) : (b, a)
+        if let distance = visualDistance,
+           distance <= similarImageDistance,
+           aspectDifference <= 0.05,
+           sameStem || (dateDifference.map { $0 <= tenMinutes } ?? false) {
+            return (
+                .similar,
+                max(80, 92 - distance),
+                "Visually similar · distance \(distance)/64 · review only"
+            )
+        }
+
+        let metadata = metadataScore(left, right)
+        if visualDistance == nil && metadata.score >= 90 {
+            return (
+                .similar,
+                min(89, metadata.score - 5),
+                metadata.reasons.joined(separator: " · ") + " · visual check unavailable · review only"
+            )
+        }
+        return nil
     }
 
-    // MARK: - Helpers
+    private static func metadataScore(_ left: FileSnapshot, _ right: FileSnapshot) -> (score: Int, reasons: [String]) {
+        var score = left.stem == right.stem ? 50 : 0
+        var reasons = score > 0 ? ["Related filename"] : []
+        let sizeDifference = relativeDifference(Double(left.fileSize), Double(right.fileSize))
+        if sizeDifference <= 0.01 { score += 25; reasons.append("Size within 1%") }
+        else if sizeDifference <= 0.03 { score += 10; reasons.append("Size within 3%") }
+        if let a = left.captureDate, let b = right.captureDate {
+            let difference = abs(a.timeIntervalSince(b))
+            if difference <= 300 { score += 20; reasons.append("Capture time within 5 min") }
+            else if difference <= 3_600 { score += 17; reasons.append("Capture time within 1 hour") }
+            else if difference <= 86_400 { score += 10; reasons.append("Capture time within 24 hours") }
+        }
+        if left.pixelWidth != nil && left.pixelHeight != nil
+            && left.pixelWidth == right.pixelWidth && left.pixelHeight == right.pixelHeight {
+            score += 10
+            reasons.append("Dimensions \(left.pixelWidth!)×\(left.pixelHeight!)")
+        }
+        return (min(score, 100), reasons)
+    }
 
-    /// Normalize a filename to its stem for grouping:
-    /// "IMG_1234.HEIC" → "img_1234", "DSC00001.JPG" → "dsc00001"
+    // MARK: Original election
+
+    private static func electOriginal(_ group: [FileSnapshot]) -> FileSnapshot {
+        group.max { rank($0) < rank($1) }!
+    }
+
+    private static func rank(_ file: FileSnapshot) -> Double {
+        var value = 0.0
+        if !file.isFromArchive { value += 10_000 }
+        if file.hasCaptureDate { value += 1_000 }
+        if file.hasGPS { value += 200 }
+        value += min(Double((file.pixelWidth ?? 0) * (file.pixelHeight ?? 0)) / 1_000_000, 100)
+        value += min(Double(file.fileSize) / 10_000_000, 10)
+        value -= Double(file.pathDepth)
+        return value
+    }
+
+    // MARK: Visual hashing
+
+    private static func computeVisualHashes(url: URL) async -> [UInt64]? {
+        await Task.detached(priority: .utility) {
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+            let options: [String: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways as String: true,
+                kCGImageSourceCreateThumbnailWithTransform as String: true,
+                kCGImageSourceThumbnailMaxPixelSize as String: 96,
+                kCGImageSourceShouldCacheImmediately as String: true,
+            ]
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+            let width = image.width, height = image.height
+            guard width >= 9, height >= 8 else { return nil }
+            var pixels = [UInt8](repeating: 0, count: width * height * 4)
+            guard let context = CGContext(
+                data: &pixels,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return nil }
+            context.interpolationQuality = .low
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+            func transformed(_ transform: Int, _ x: Double, _ y: Double) -> (Double, Double) {
+                switch transform {
+                case 1: return (1 - x, y)
+                case 2: return (x, 1 - y)
+                case 3: return (1 - x, 1 - y)
+                case 4: return (y, x)
+                case 5: return (1 - y, x)
+                case 6: return (y, 1 - x)
+                case 7: return (1 - y, 1 - x)
+                default: return (x, y)
+                }
+            }
+
+            func luminance(_ x: Double, _ y: Double) -> Double {
+                let px = max(0, min(width - 1, Int((x * Double(width - 1)).rounded())))
+                let py = max(0, min(height - 1, Int((y * Double(height - 1)).rounded())))
+                let offset = (py * width + px) * 4
+                let alpha = Double(pixels[offset + 3]) / 255
+                let red = Double(pixels[offset]) * alpha + 255 * (1 - alpha)
+                let green = Double(pixels[offset + 1]) * alpha + 255 * (1 - alpha)
+                let blue = Double(pixels[offset + 2]) * alpha + 255 * (1 - alpha)
+                return (red * 299 + green * 587 + blue * 114) / 1_000
+            }
+
+            return (0..<8).map { transform in
+                var hash: UInt64 = 0
+                for row in 0..<8 {
+                    let values = (0..<9).map { column -> Double in
+                        let point = transformed(transform, (Double(column) + 0.5) / 9, (Double(row) + 0.5) / 8)
+                        return luminance(point.0, point.1)
+                    }
+                    for column in 0..<8 {
+                        hash = (hash << 1) | (values[column] > values[column + 1] ? 1 : 0)
+                    }
+                }
+                return hash
+            }
+        }.value
+    }
+
+    private static func minimumVisualDistance(_ left: [UInt64]?, _ right: [UInt64]?) -> Int? {
+        guard let left, let right, !left.isEmpty, !right.isEmpty else { return nil }
+        var best = 64
+        for a in left {
+            for b in right {
+                best = min(best, (a ^ b).nonzeroBitCount)
+                if best == 0 { return 0 }
+            }
+        }
+        return best
+    }
+
+    // MARK: Helpers
+
     static func normalizedStem(_ filename: String) -> String {
-        (filename as NSString).deletingPathExtension.lowercased()
+        var stem = (filename as NSString).deletingPathExtension
+            .precomposedStringWithCompatibilityMapping
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let pattern = #"(?:[\s._-]+(?:copy|duplicate|duplicated|dup|edited|edit|exported|export|compressed|optimized|converted|backup)(?:[\s._-]*\d+)?|\s*\(\d+\))+$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return stem }
+        while true {
+            let range = NSRange(stem.startIndex..<stem.endIndex, in: stem)
+            let replaced = regex.stringByReplacingMatches(in: stem, range: range, withTemplate: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if replaced == stem { return stem }
+            stem = replaced
+        }
+    }
+
+    private static func isSupportedPhoto(_ url: URL) -> Bool {
+        ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "webp", "cr2", "cr3", "nef", "arw", "dng", "raf", "orf", "rw2"]
+            .contains(url.pathExtension.lowercased())
+    }
+
+    private static func aspectRatio(_ file: FileSnapshot) -> Double? {
+        guard let width = file.pixelWidth, let height = file.pixelHeight, width > 0, height > 0 else { return nil }
+        return Double(width) / Double(height)
+    }
+
+    private static func relativeDifference(_ left: Double, _ right: Double) -> Double {
+        let larger = max(abs(left), abs(right))
+        return larger > 0 ? abs(left - right) / larger : 1
+    }
+
+    private static func orientationAwareAspectDifference(_ left: Double, _ right: Double) -> Double {
+        guard left > 0, right > 0 else { return 0 }
+        return min(relativeDifference(left, right), relativeDifference(1 / left, right))
     }
 }

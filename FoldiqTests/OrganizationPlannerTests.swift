@@ -214,6 +214,28 @@ final class OrganizationPlannerTests: XCTestCase {
         )
     }
 
+    func testReviewOnlySimilarPhotoStaysInNormalOrganization() async {
+        let similar = makePhoto(
+            path: "/Users/tester/Photos/BURST.JPG",
+            filename: "BURST.JPG",
+            date: isoDate("2026-01-04")
+        )
+        similar.probableDuplicateGroupID = UUID()
+        similar.probableMatchScore = 84
+        similar.isProbableDuplicate = false
+
+        let session = makeSession(rootPath: "/Users/tester/Photos", files: [similar])
+        var config = OrganizationConfig()
+        config.mode = .byYear
+        config.separateDuplicates = true
+
+        let plans = await OrganizationPlanner().buildPlan(session: session, config: config) { _ in }
+
+        XCTAssertEqual(plans.count, 1)
+        XCTAssertFalse(plans[0].destinationAbsPath.contains("/Duplicates/"))
+        XCTAssertTrue(plans[0].destinationAbsPath.contains("/2026/"))
+    }
+
     func testReviewPromptRequiresASuccessfulOrganizationAndOnlyRequestsOnce() {
         let suiteName = "AppReviewPromptPolicyTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

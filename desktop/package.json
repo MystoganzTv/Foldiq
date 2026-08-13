@@ -1,6 +1,6 @@
 {
   "name": "foldiq-desktop",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "Foldiq — Photo & Video Organizer for Windows",
   "main": "electron/main.js",
   "scripts": {
@@ -17,7 +17,11 @@
   "dependencies": {
     "7zip-bin": "^5.2.0",
     "exiftool-vendored": "^37.2.0",
-    "unzipper": "0.12.5"
+    "heic-decode": "^2.1.0",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0",
+    "unzipper": "0.12.5",
+    "utif2": "^4.1.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.5",
@@ -38,6 +42,15 @@
     "directories": {
       "output": "dist-electron"
     },
+    "asarUnpack": [
+      "electron/services/visual-hash.js",
+      "electron/services/visual-hash-worker.js",
+      "node_modules/heic-decode/**/*",
+      "node_modules/jpeg-js/**/*",
+      "node_modules/libheif-js/**/*",
+      "node_modules/pngjs/**/*",
+      "node_modules/utif2/**/*"
+    ],
     "win": {
       "target": [
         {
@@ -52,12 +65,16 @@
         {
           "from": ".vendor/7zip-win",
           "to": "7zip",
-          "filter": ["**/*"]
+          "filter": [
+            "**/*"
+          ]
         },
         {
           "from": ".vendor/exiftool-win",
           "to": "exiftool",
-          "filter": ["**/*"]
+          "filter": [
+            "**/*"
+          ]
         }
       ]
     },
@@ -85,6 +102,7 @@
       "dist/**/*",
       "electron/**/*",
       "assets/**/*",
+      "THIRD_PARTY_NOTICES.txt",
       "!node_modules/7zip-bin/{linux,mac,win,7x.sh}/**/*"
     ]
   }

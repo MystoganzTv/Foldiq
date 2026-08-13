@@ -490,8 +490,8 @@ function PreviewInspector({ file, outputFolder, onClose, onToggle, onCorrectDate
         {file.durationSeconds > 0 && <MetaRow label="Duration" value={`${Math.round(file.durationSeconds)} seconds`} />}
         {file.latitude != null && file.longitude != null && <MetaRow label="GPS" value={`${Number(file.latitude).toFixed(4)}, ${Number(file.longitude).toFixed(4)}`} />}
         {file.isDuplicate && <MetaRow label="Duplicate" value="Exact content match" warning />}
-        {file.isProbableDuplicate && <MetaRow label="Probable duplicate" value={`${file.probableMatchScore}% · ${file.probableMatchPeerFilename || 'matching file'}`} warning />}
-        {file.isProbableDuplicate && file.probableMatchReasons && <p className={s.inspectorReason}>{file.probableMatchReasons}</p>}
+        {file.probableDuplicateGroupID && <MetaRow label="Smart match" value={`${file.isProbableDuplicate ? 'Same image' : 'Review only'} · ${file.probableMatchScore}% · ${file.probableMatchPeerFilename || 'matching file'}`} warning />}
+        {file.probableDuplicateGroupID && file.probableMatchReasons && <p className={s.inspectorReason}>{file.probableMatchReasons}</p>}
         <MetaRow label="Source" value={file.archiveSourcePath ? 'Compressed archive' : 'Folder'} />
         <div className={s.dateCorrection}>
           <div className={s.dateCorrectionHeader}>

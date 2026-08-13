@@ -6,6 +6,12 @@ const { spawn } = require('child_process');
 const { exiftoolPath } = require('exiftool-vendored');
 const { extractArchive } = require('./archive');
 const { isArchive } = require('./sources');
+const { VisualHashWorker } = require('./visual-hash');
+const {
+  detectSmartDuplicates,
+  markExactDuplicates,
+  visualCandidateIndexes,
+} = require('./smart-duplicates');
 
 const SUPPORTED = new Set([
   '.jpg', '.jpeg', '.png', '.heic', '.heif',
@@ -18,6 +24,7 @@ const MAX_FUTURE_OFFSET_MS = 24 * 60 * 60 * 1000;
 const METADATA_BATCH_SIZE = 40;
 const METADATA_CONCURRENCY = 2;
 const HASH_CONCURRENCY = 2;
+const VISUAL_HASH_CONCURRENCY = 1;
 const METADATA_TIMEOUT_MS = 15 * 1000;
 const METADATA_READ_ARGS = [
   '-fast',
@@ -548,7 +555,6 @@ async function scan(folders, onProgress, options = {}) {
   );
 
   const files = [];
-  const hashMap = new Map();
   for (let i = 0; i < preparedFiles.length; i++) {
     const { candidate, stat } = preparedFiles[i];
     const filePath = candidate.filePath;
@@ -563,10 +569,7 @@ async function scan(folders, onProgress, options = {}) {
       file: `Preparing result: ${path.basename(filePath)}`,
     });
 
-    const duplicateOf = hash ? hashMap.get(hash) : null;
-    const isDuplicate = duplicateOf != null;
     const id = files.length;
-    if (hash && !hashMap.has(hash)) hashMap.set(hash, id);
 
     const file = {
       id,
@@ -585,8 +588,8 @@ async function scan(folders, onProgress, options = {}) {
       longitude: metadata.longitude,
       durationSeconds: metadata.durationSeconds,
       hash,
-      isDuplicate: isDuplicate,
-      duplicateOf: isDuplicate ? duplicateOf : null,
+      isDuplicate: false,
+      duplicateOf: null,
       archiveSourcePath: candidate.archiveSourcePath ?? null,
       archiveTempDirectory: candidate.archiveTempDirectory ?? null,
       fileModifiedDate: isPlausibleDate(stat.mtime) ? stat.mtime.toISOString() : null,
@@ -596,60 +599,54 @@ async function scan(folders, onProgress, options = {}) {
     progress({ phase: 'finalizing', current: i + 1, total, file: file.name });
   }
 
-  detectProbableDuplicates(files);
+  // Elect the best original for every exact group after all metadata is known.
+  // This fixes Windows choosing whichever path happened to be scanned first.
+  markExactDuplicates(files);
 
-  diagnostic('scan-finish', { files: files.length, warnings: warnings.length, elapsedMs: Date.now() - startedAt });
+  const visualIndexes = Array.from(visualCandidateIndexes(
+    files.filter(file => !file.isDuplicate)
+  ));
+  const nonExactFiles = files.filter(file => !file.isDuplicate);
+  let visualCompleted = 0;
+  const visualWorker = new VisualHashWorker();
+  try {
+    await mapWithConcurrency(visualIndexes, VISUAL_HASH_CONCURRENCY, async visualIndex => {
+      throwIfAborted(signal);
+      const file = nonExactFiles[visualIndex];
+      progress({
+        phase: 'similarity',
+        current: visualCompleted,
+        total: visualIndexes.length,
+        file: `Comparing image: ${file.name}`,
+      });
+      file.visualHashes = await visualWorker.compute(file.path, file.pixelWidth, file.pixelHeight, signal);
+      visualCompleted++;
+      progress({
+        phase: 'similarity',
+        current: visualCompleted,
+        total: visualIndexes.length,
+        file: `Images compared: ${visualCompleted.toLocaleString()} of ${visualIndexes.length.toLocaleString()}`,
+      });
+    });
+  } finally {
+    await visualWorker.close();
+  }
+
+  const smartResult = detectSmartDuplicates(files);
+  for (const file of files) delete file.visualHashes;
+
+  diagnostic('scan-finish', {
+    files: files.length,
+    smartDuplicateGroups: smartResult.groups,
+    smartMatchedFiles: smartResult.matchedFiles,
+    warnings: warnings.length,
+    elapsedMs: Date.now() - startedAt,
+  });
   return { files, archivesExtracted, warnings, diagnosticsAvailable: Boolean(diagnosticsLogPath) };
 }
 
 function detectProbableDuplicates(files) {
-  const groups = new Map();
-  for (const file of files) {
-    if (file.isDuplicate) continue;
-    const stem = path.basename(file.name, path.extname(file.name)).toLowerCase();
-    if (!groups.has(stem)) groups.set(stem, []);
-    groups.get(stem).push(file);
-  }
-
-  for (const group of groups.values()) {
-    if (group.length < 2) continue;
-    const assigned = new Set();
-    const matches = [];
-    for (let i = 0; i < group.length; i++) {
-      for (let j = i + 1; j < group.length; j++) {
-        const a = group[i], b = group[j];
-        let score = 50;
-        const reasons = ['Same filename'];
-        const larger = Math.max(a.size, b.size);
-        const sizeRatio = larger > 0 ? Math.abs(a.size - b.size) / larger : 1;
-        if (sizeRatio <= 0.01) { score += 25; reasons.push('Size within 1%'); }
-        else if (sizeRatio <= 0.03) { score += 10; reasons.push('Size within 3%'); }
-        if (a.date && b.date) {
-          const diff = Math.abs(new Date(a.date) - new Date(b.date));
-          if (diff <= 5 * 60 * 1000) { score += 20; reasons.push('Capture time within 5 min'); }
-          else if (diff <= 60 * 60 * 1000) { score += 17; reasons.push('Capture time within 1 hour'); }
-          else if (diff <= 24 * 60 * 60 * 1000) { score += 10; reasons.push('Capture time within 24 hours'); }
-        }
-        if (a.pixelWidth && a.pixelHeight && a.pixelWidth === b.pixelWidth && a.pixelHeight === b.pixelHeight) {
-          score += 10; reasons.push(`Dimensions ${a.pixelWidth}×${a.pixelHeight}`);
-        }
-        if (score >= 90) matches.push({ a, b, score: Math.min(100, score), reasons: reasons.join(' · ') });
-      }
-    }
-    matches.sort((left, right) => right.score - left.score);
-    for (const match of matches) {
-      if (assigned.has(match.a.id) || assigned.has(match.b.id)) continue;
-      const rank = file => (file.archiveSourcePath ? 0 : 100) + (file.date ? 10 : 0) - file.path.split(/[\\/]/).length;
-      const original = rank(match.a) >= rank(match.b) ? match.a : match.b;
-      const duplicate = original === match.a ? match.b : match.a;
-      duplicate.isProbableDuplicate = true;
-      duplicate.probableMatchScore = match.score;
-      duplicate.probableMatchReasons = match.reasons;
-      duplicate.probableMatchPeerFilename = original.name;
-      assigned.add(original.id);
-      assigned.add(duplicate.id);
-    }
-  }
+  return detectSmartDuplicates(files);
 }
 
 async function end() {
@@ -676,6 +673,7 @@ module.exports = {
   mapWithConcurrency,
   METADATA_CONCURRENCY,
   HASH_CONCURRENCY,
+  VISUAL_HASH_CONCURRENCY,
   METADATA_TIMEOUT_MS,
   end,
 };

@@ -103,8 +103,8 @@ struct ScanProgressPanel: View {
     var progress: Double {
         guard coordinator.foundCount > 0 else { return 0 }
         switch coordinator.phase {
-        case .extracting, .hashing:
-            let total = max(coordinator.foundCount, 1)
+        case .extracting, .hashing, .matching:
+            let total = max(coordinator.phaseItemCount, 1)
             return min(Double(coordinator.processedCount) / Double(total), 1.0)
         default:
             return 0
@@ -115,7 +115,8 @@ struct ScanProgressPanel: View {
     var isActive: Bool {
         coordinator.phase == .scanning ||
         coordinator.phase == .extracting ||
-        coordinator.phase == .hashing
+        coordinator.phase == .hashing ||
+        coordinator.phase == .matching
     }
 
     var body: some View {
@@ -218,7 +219,7 @@ struct ScanResultsPanel: View {
         case videos             = "Videos"
         case archives           = "From Archives"
         case duplicates         = "Exact Duplicates"
-        case probableDuplicates = "Probable Duplicates"
+        case probableDuplicates = "Smart Matches"
         case missingDate        = "Missing Date"
         case noMetadata         = "No Metadata"
         case allFiles           = "All Files"
@@ -246,7 +247,7 @@ struct ScanResultsPanel: View {
                 TappableStatCard(icon: "video.fill",           label: "Videos",           value: session.videoCount,             color: .purple) { drillCategory = .videos }
                 TappableStatCard(icon: "doc.zipper",           label: "Archives Extracted", value: session.archivesExtractedCount, color: .teal) { drillCategory = .archives }
                 TappableStatCard(icon: "square.on.square",     label: "Exact Dupes",      value: session.duplicateCount,         color: .orange) { drillCategory = .duplicates }
-                TappableStatCard(icon: "equal.circle",         label: "Probable Dupes",   value: session.probableDuplicateCount, color: .yellow) { drillCategory = .probableDuplicates }
+                TappableStatCard(icon: "sparkles",             label: "Smart Matches", value: session.probableDuplicateCount, color: .yellow) { drillCategory = .probableDuplicates }
                 TappableStatCard(icon: "questionmark.circle",  label: "Missing Date",     value: session.missingDateCount,       color: .red)    { drillCategory = .missingDate }
                 TappableStatCard(icon: "info.circle",          label: "No Metadata",      value: session.missingMetaCount,       color: .gray)   { drillCategory = .noMetadata }
                 TappableStatCard(icon: "doc.on.doc",           label: "Total Files",      value: session.totalFiles,             color: .green)  { drillCategory = .allFiles }
@@ -358,7 +359,7 @@ struct FileDrillSheet: View {
         case .duplicates:
             return "These are exact duplicate copies (identical file contents, verified by SHA-256). One copy per group stays organized; the rest go to Duplicates/Exact Duplicates/."
         case .probableDuplicates:
-            return "These files share a name and closely match in size, timestamp, or dimensions — but have different bytes, so SHA-256 couldn't confirm them. Each pair is shown together. Review before applying: the flagged copy goes to Duplicates/Probable Duplicates/, the original stays organized."
+            return "Foldiq compared image content, orientation, capture time, dimensions, and filenames. Strong visual matches can be separated into Duplicates/Probable Duplicates/. Similar photos are marked Review only and stay in the normal organization unless you decide otherwise."
         default:
             return ""
         }
@@ -442,11 +443,11 @@ struct FileDrillSheet: View {
 
                         // Role badge for probable-duplicate pairs
                         if isProbable {
-                            Image(systemName: file.isProbableDuplicate ? "arrow.right.circle.fill" : "checkmark.circle.fill")
-                                .foregroundStyle(file.isProbableDuplicate ? .yellow : .green)
+                            Image(systemName: file.isProbableDuplicate ? "arrow.right.circle.fill" : "eye.circle.fill")
+                                .foregroundStyle(file.isProbableDuplicate ? .yellow : .blue)
                                 .font(.caption)
                                 .frame(width: 16)
-                                .help(file.isProbableDuplicate ? "Will move to Probable Duplicates/" : "Original — stays organized")
+                                .help(file.isProbableDuplicate ? "Strong match — will move to Probable Duplicates/" : "Review only — stays organized")
                         } else {
                             Image(systemName: {
                                 switch file.mediaKind {
@@ -504,8 +505,10 @@ struct FileDrillSheet: View {
                                         .font(.caption2).foregroundStyle(.tertiary)
                                         .lineLimit(1)
                                 } else if !file.isProbableDuplicate {
-                                    Text("Original copy — will stay in organized structure")
-                                        .font(.caption2).foregroundStyle(.green.opacity(0.8))
+                                    Text(file.probableMatchScore >= 94
+                                         ? "Best copy — stays in organized structure"
+                                         : "Review only — stays in organized structure")
+                                        .font(.caption2).foregroundStyle(.blue.opacity(0.8))
                                 }
                             } else {
                                 Text(file.filePath)

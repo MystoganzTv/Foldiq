@@ -6,6 +6,9 @@
 
 import XCTest
 import SwiftData
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 @testable import Foldiq
 
 @MainActor
@@ -54,7 +57,7 @@ final class ProbableDuplicateDetectorTests: XCTestCase {
 
     // MARK: - High-confidence pair detection
 
-    func testDetectFindsProbableDuplicateAboveThreshold() async {
+    func testMetadataOnlyMatchIsReviewOnly() async {
         // Stem match (50) + size ≈1% (25) + ts <5min (20) + dimensions match (10) = 105 → capped 100
         let now = Date()
         let heic = makeFile(path: "/Photos/IMG_0001.HEIC", filename: "IMG_0001.HEIC",
@@ -66,7 +69,7 @@ final class ProbableDuplicateDetectorTests: XCTestCase {
 
         XCTAssertEqual(count, 1, "One probable-duplicate group should be detected")
         let dupSide = [heic, jpg].filter(\.isProbableDuplicate)
-        XCTAssertEqual(dupSide.count, 1, "Exactly one file should be marked as the duplicate")
+        XCTAssertEqual(dupSide.count, 0, "Metadata alone must never move a file automatically")
         let inGroup = [heic, jpg].filter { $0.probableDuplicateGroupID != nil }
         XCTAssertEqual(inGroup.count, 2, "Both files should share a group ID")
         XCTAssertEqual(heic.probableDuplicateGroupID, jpg.probableDuplicateGroupID,
@@ -92,15 +95,18 @@ final class ProbableDuplicateDetectorTests: XCTestCase {
         XCTAssertNil(b.probableDuplicateGroupID)
     }
 
-    // MARK: - Election: non-archive file wins as original
+    // MARK: - Strong visual match election
 
-    func testElectsNonArchiveFileAsOriginal() async {
+    func testVisualMatchElectsNonArchiveFileAsOriginal() async throws {
         let now = Date()
-        // Both files identical in size, date, and dimensions — only origin differs.
-        let folderFile  = makeFile(path: "/Photos/IMG_9999.JPG",       filename: "IMG_9999.JPG",
+        let originalURL = try makePatternPNG(filename: "original.png")
+        let duplicateURL = originalURL.deletingLastPathComponent().appendingPathComponent("renamed-copy.png")
+        try Data(contentsOf: originalURL).write(to: duplicateURL)
+
+        let folderFile  = makeFile(path: originalURL.path, filename: "original.png",
                                    fileSize: 3_000_000, date: now, width: 3024, height: 4032,
                                    isFromArchive: false)
-        let archiveFile = makeFile(path: "/tmp/extracted/IMG_9999.JPG", filename: "IMG_9999.JPG",
+        let archiveFile = makeFile(path: duplicateURL.path, filename: "renamed-copy.png",
                                    fileSize: 3_000_000, date: now, width: 3024, height: 4032,
                                    isFromArchive: true)
 
@@ -112,24 +118,25 @@ final class ProbableDuplicateDetectorTests: XCTestCase {
                        "Folder file should be elected as the original")
     }
 
-    // MARK: - Election: EXIF date wins over file without date
+    // MARK: - Metadata-only safety
 
-    func testElectsFileWithExifDateAsOriginal() async {
+    func testFilesystemDateDoesNotCreateSmartMatch() async {
         let now = Date()
         let withDate    = makeFile(path: "/a/IMG_7777.JPG", filename: "IMG_7777.JPG",
                                    fileSize: 3_000_000, date: now, width: 3024, height: 4032)
         let withoutDate = makeFile(path: "/b/IMG_7777.JPG", filename: "IMG_7777.JPG",
                                    fileSize: 3_000_000, date: nil, width: 3024, height: 4032)
-        // A filesystem timestamp lets the pair reach the confidence threshold,
-        // while only `withDate` has authoritative EXIF capture metadata.
+        // A filesystem timestamp is not trusted as capture evidence.
         withoutDate.dateModified = now
 
         _ = await ProbableDuplicateDetector().detect(files: [withDate, withoutDate]) { _ in }
 
-        XCTAssertTrue(withoutDate.isProbableDuplicate,
-                      "File without EXIF date should be the duplicate")
+        XCTAssertFalse(withoutDate.isProbableDuplicate,
+                       "A metadata-only match must remain review-only")
         XCTAssertFalse(withDate.isProbableDuplicate,
-                       "File with EXIF date should be the original")
+                       "A metadata-only match must remain review-only")
+        XCTAssertNil(withDate.probableDuplicateGroupID)
+        XCTAssertNil(withoutDate.probableDuplicateGroupID)
     }
 
     // MARK: - Exact duplicates excluded from second-pass
@@ -203,10 +210,10 @@ final class ProbableDuplicateDetectorTests: XCTestCase {
 
         _ = await ProbableDuplicateDetector().detect(files: [a, b]) { _ in }
 
-        let dupSide = [a, b].first(where: \.isProbableDuplicate)
-        XCTAssertNotNil(dupSide?.probableMatchReasons,
+        let matchedSide = [a, b].first { $0.probableDuplicateGroupID != nil }
+        XCTAssertNotNil(matchedSide?.probableMatchReasons,
                         "Reasons string should be set on the duplicate side")
-        XCTAssertFalse(dupSide?.probableMatchReasons?.isEmpty ?? true,
+        XCTAssertFalse(matchedSide?.probableMatchReasons?.isEmpty ?? true,
                         "Reasons string must not be empty")
     }
 
@@ -236,5 +243,53 @@ final class ProbableDuplicateDetectorTests: XCTestCase {
         }
         context.insert(f)
         return f
+    }
+
+    private func makePatternPNG(filename: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FoldiqSmartDuplicates-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+        let width = 16, height = 16
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = (y * width + x) * 4
+                pixels[offset] = UInt8(x * 14)
+                pixels[offset + 1] = UInt8(y * 14)
+                pixels[offset + 2] = UInt8((x + y) * 7)
+                pixels[offset + 3] = 255
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let image = CGImage(
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+              ) else {
+            throw NSError(domain: "FoldiqTests", code: 1)
+        }
+
+        let url = directory.appendingPathComponent(filename)
+        guard let destination = CGImageDestinationCreateWithURL(
+            url as CFURL,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else { throw NSError(domain: "FoldiqTests", code: 2) }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw NSError(domain: "FoldiqTests", code: 3)
+        }
+        return url
     }
 }

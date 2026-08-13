@@ -14,6 +14,7 @@ final class ScanCoordinator: ObservableObject {
     @Published var scannedCount   = 0
     @Published var foundCount     = 0
     @Published var processedCount = 0
+    @Published var phaseItemCount = 0
     @Published var currentFile    = ""
     @Published var errorMessage: String?
 
@@ -22,7 +23,7 @@ final class ScanCoordinator: ObservableObject {
         case scanning    = "Scanning…"
         case extracting  = "Reading metadata…"
         case hashing     = "Detecting duplicates…"
-        case matching    = "Finding probable duplicates…"
+        case matching    = "Finding Smart Matches…"
         case done        = "Scan complete"
         case failed      = "Scan failed"
     }
@@ -46,6 +47,7 @@ final class ScanCoordinator: ObservableObject {
         phase = .scanning
         errorMessage = nil
         archiveTempDirs = []
+        phaseItemCount = 0
 
         // 1. Discover files across all selected folders
         var discovered: [DiscoveredFile] = []
@@ -114,6 +116,7 @@ final class ScanCoordinator: ObservableObject {
         // 3. Extract metadata for each file
         phase = .extracting
         processedCount = 0
+        phaseItemCount = discovered.count
 
         for (idx, disc) in discovered.enumerated() {
             // Honour cancellation every 25 files
@@ -172,17 +175,21 @@ final class ScanCoordinator: ObservableObject {
         phase = .hashing
         processedCount = 0
         let allFiles = session.files
+        phaseItemCount = allFiles.count
 
         let groupCount = await detector.detect(files: allFiles) { [weak self] p in
             self?.processedCount = p.processed
+            self?.phaseItemCount = p.total
             self?.currentFile    = p.currentFile
         }
 
         // 5. Probable duplicate detection (second pass, non-exact matches)
         phase = .matching
         processedCount = 0
+        phaseItemCount = 0
         await probableDetector.detect(files: allFiles) { [weak self] p in
             self?.processedCount = p.processed
+            self?.phaseItemCount = p.total
             self?.currentFile    = p.currentFile
         }
 
@@ -191,7 +198,7 @@ final class ScanCoordinator: ObservableObject {
         session.photoCount             = allFiles.filter { $0.mediaKind == .photo }.count
         session.videoCount             = allFiles.filter { $0.mediaKind == .video }.count
         session.duplicateCount         = allFiles.filter { $0.isDuplicate }.count
-        session.probableDuplicateCount = allFiles.filter { $0.isProbableDuplicate }.count
+        session.probableDuplicateCount = allFiles.filter { $0.probableDuplicateGroupID != nil }.count
         session.missingDateCount       = allFiles.filter { !$0.hasDate }.count
         session.missingMetaCount       = allFiles.filter {
             $0.cameraMake == nil && $0.cameraModel == nil && !$0.hasGPS

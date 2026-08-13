@@ -72,6 +72,7 @@ Foldiq/
 │   ├── MetadataExtractor.swift  EXIF via ImageIO, video via AVFoundation
 │   ├── ReverseGeocoder.swift    GPS → city/state/country (CLGeocoder, cached)
 │   ├── DuplicateDetector.swift  SHA-256 content hashing (actor)
+│   ├── ProbableDuplicateDetector.swift  local visual hashing + similarity groups
 │   ├── OrganizationPlanner.swift Destination path calculation (actor)
 │   ├── FileMover.swift          Safe move/copy + undo manifest (actor)
 │   ├── ReportExporter.swift     CSV export via NSSavePanel
@@ -131,6 +132,7 @@ Foldiq/
 | ImageIO / CoreGraphics | EXIF metadata extraction from photos |
 | AVFoundation | Video metadata (duration, creation date, GPS) |
 | CryptoKit | SHA-256 file hashing for duplicate detection |
+| ImageIO / CoreGraphics | Orientation-aware visual hashing for Smart Duplicates |
 | CoreLocation | Reverse geocoding GPS coordinates |
 | FileManager | All file system operations |
 | UniformTypeIdentifiers | File type detection |

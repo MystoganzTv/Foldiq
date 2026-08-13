@@ -38,9 +38,9 @@ Foldiq scans any folder of photos and videos on your Mac — including ZIP, RAR,
 
 Choose how your library is structured: by Year, Year & Month, Exact Date, GPS Location, or the recommended Smart Hybrid mode that combines all of the above. Foldiq uses the real EXIF capture date — not the file creation date — so your library stays in true chronological order even after files were copied, shared, or forwarded via WhatsApp or Telegram.
 
-**Duplicate detection**
+**Smart Duplicates**
 
-Foldiq finds exact duplicates using SHA-256 file hashing and routes them to a separate Duplicates folder for easy review. It also detects probable duplicates — files with the same name, nearly identical size, and similar timestamps — and flags them separately so you decide what to keep.
+Foldiq verifies exact copies with SHA-256 and compares image content locally to find the same photo after renaming, rotation, metadata changes, or re-export. It groups all related copies, recommends the best original, and keeps weaker visual similarities as review-only suggestions that are never moved automatically.
 
 **Advanced filters & preview**
 
@@ -68,16 +68,15 @@ photo,organizer,library,duplicate,cleaner,EXIF,sort,folder,media,rename,batch,RA
 
 ---
 
-## What's New (Version 1.0)
+## What's New (Version 1.0.18)
 
-First release of Foldiq — the safest way to organize a messy photo library on your Mac.
+Smart Duplicates now understands the photo, not just the filename.
 
-- Smart folder organization by date, location, or both
-- Duplicate detection (exact SHA-256 + probable match)
-- Full preview before any file moves
-- Complete undo with one click
-- ZIP, RAR, and 7z archive support
-- On-device media processing — no Foldiq cloud or account required
+- Finds the same photo after renaming, rotation, metadata changes, or re-export
+- Groups all related copies instead of showing only one pair
+- Recommends the best copy using metadata, resolution, and source quality
+- Shows weaker visual similarities for review without moving them automatically
+- Keeps all image comparison on-device
 
 ---
 

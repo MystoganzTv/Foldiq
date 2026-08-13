@@ -167,7 +167,7 @@ struct SettingsStepView: View {
                             )
                             ToggleRow(
                                 label: "Separate duplicates",
-                                detail: "Route duplicates to a Duplicates/ subfolder instead of organizing normally",
+                                detail: "Route exact copies and strong visual matches to Duplicates/. Review-only similar photos always stay organized normally.",
                                 isOn: $nav.organizationConfig.separateDuplicates
                             )
                             ToggleRow(

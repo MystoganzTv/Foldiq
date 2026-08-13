@@ -145,7 +145,7 @@ export default function SettingsScreen({ go, files, config, setConfig }) {
             </button>
           )}
           <div className={s.settingSelectRow}>
-            <div><div className={s.toggleLabel}>Duplicate handling</div><div className={s.toggleSub}>Choose what happens to exact and probable duplicates</div></div>
+            <div><div className={s.toggleLabel}>Duplicate handling</div><div className={s.toggleSub}>Applies to exact copies and strong visual matches. Review-only similar photos are never separated automatically.</div></div>
             <select value={config.duplicateHandling} onChange={event => setConfig(c => ({ ...c, duplicateHandling: event.target.value }))}>
               <option value="separate">Separate into Duplicates folders</option>
               <option value="skip">Leave duplicates untouched</option>
