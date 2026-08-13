@@ -103,6 +103,16 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
     similarity: 'Finding visually similar photos',
     finalizing: 'Preparing results',
   }[progress.phase] || 'Scanning files';
+  const phaseDescription = {
+    cleanup: 'Preparing a safe temporary workspace…',
+    archive: 'Opening compressed media without changing the originals…',
+    'archive-list': 'Checking the extracted media list…',
+    indexing: 'Finding supported photos and videos…',
+    metadata: 'Reading capture dates in efficient batches…',
+    duplicates: 'Verifying possible exact copies…',
+    similarity: 'Comparing likely bursts and edited versions…',
+    finalizing: 'Preparing your scan results…',
+  }[progress.phase] || 'Reading your selected media…';
 
   return (
     <div className={s.screen}>
@@ -126,7 +136,7 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
                 : folders.map(f => f.split(/[\\/]/).pop()).join(', ')
               : openingArchives
                 ? 'The original compressed files remain untouched.'
-                : 'Reading metadata from every file…'}
+                : phaseDescription}
           </p>
         </div>
 

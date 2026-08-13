@@ -11,6 +11,7 @@ const {
   classifyPair,
   markExactDuplicates,
   orientationAwareAspectDifference,
+  visualCandidateIndexes,
 } = require('../electron/services/smart-duplicates');
 const { computeVisualHashes, hammingDistance, minimumVisualDistance } = require('../electron/services/visual-hash');
 
@@ -35,6 +36,28 @@ test('a renamed 90-degree rotation remains a visual candidate', () => {
     { name: 'renamed.jpg', size: 900, date: '2025-01-01T10:00:01Z', pixelWidth: 3000, pixelHeight: 4000, visualHashes: ['0123456789abcdef'] }
   );
   assert.equal(match.kind, 'same');
+});
+
+test('large phone libraries do not hash every same-dimension photo', () => {
+  const files = Array.from({ length: 200 }, (_, index) => ({
+    ext: '.heic',
+    name: `IMG_${String(index).padStart(4, '0')}.HEIC`,
+    size: 3_000_000 + index * 1_000,
+    date: new Date(Date.UTC(2024, 0, 1 + index, 12, 0, 0)).toISOString(),
+    pixelWidth: 4032,
+    pixelHeight: 3024,
+  }));
+  assert.equal(visualCandidateIndexes(files).size, 0);
+});
+
+test('bursts and same-name conversions remain visual candidates', () => {
+  const files = [
+    { ext: '.heic', name: 'IMG_1000.HEIC', size: 4_000_000, date: '2025-05-01T10:00:00Z', pixelWidth: 4032, pixelHeight: 3024 },
+    { ext: '.heic', name: 'IMG_1001.HEIC', size: 4_100_000, date: '2025-05-01T10:00:03Z', pixelWidth: 4032, pixelHeight: 3024 },
+    { ext: '.jpg', name: 'IMG_9000.JPG', size: 2_000_000, date: '2024-01-01T10:00:00Z', pixelWidth: 4032, pixelHeight: 3024 },
+    { ext: '.heic', name: 'IMG_9000.HEIC', size: 4_500_000, date: '2023-01-01T10:00:00Z', pixelWidth: 4032, pixelHeight: 3024 },
+  ];
+  assert.deepEqual([...visualCandidateIndexes(files)].sort((a, b) => a - b), [0, 1, 2, 3]);
 });
 
 test('visual hasher decodes an actual PNG locally', async (t) => {

@@ -24,7 +24,9 @@ const MAX_FUTURE_OFFSET_MS = 24 * 60 * 60 * 1000;
 const METADATA_BATCH_SIZE = 40;
 const METADATA_CONCURRENCY = 2;
 const HASH_CONCURRENCY = 2;
-const VISUAL_HASH_CONCURRENCY = 1;
+// Two HEIC/TIFF decoder workers cut visual comparison time substantially while
+// keeping peak decoded-image memory bounded on ordinary Windows machines.
+const VISUAL_HASH_CONCURRENCY = 2;
 const METADATA_TIMEOUT_MS = 15 * 1000;
 const METADATA_READ_ARGS = [
   '-fast',
@@ -364,16 +366,16 @@ async function mapWithConcurrency(items, concurrency, worker) {
   const results = new Array(items.length);
   let nextIndex = 0;
 
-  async function runWorker() {
+  async function runWorker(workerIndex) {
     while (true) {
       const index = nextIndex++;
       if (index >= items.length) return;
-      results[index] = await worker(items[index], index);
+      results[index] = await worker(items[index], index, workerIndex);
     }
   }
 
   const workerCount = Math.min(items.length, Math.max(1, concurrency));
-  await Promise.all(Array.from({ length: workerCount }, runWorker));
+  await Promise.all(Array.from({ length: workerCount }, (_, workerIndex) => runWorker(workerIndex)));
   return results;
 }
 
@@ -608,9 +610,12 @@ async function scan(folders, onProgress, options = {}) {
   ));
   const nonExactFiles = files.filter(file => !file.isDuplicate);
   let visualCompleted = 0;
-  const visualWorker = new VisualHashWorker();
+  const visualWorkers = Array.from(
+    { length: Math.min(VISUAL_HASH_CONCURRENCY, Math.max(1, visualIndexes.length)) },
+    () => new VisualHashWorker()
+  );
   try {
-    await mapWithConcurrency(visualIndexes, VISUAL_HASH_CONCURRENCY, async visualIndex => {
+    await mapWithConcurrency(visualIndexes, VISUAL_HASH_CONCURRENCY, async (visualIndex, _index, workerIndex) => {
       throwIfAborted(signal);
       const file = nonExactFiles[visualIndex];
       progress({
@@ -619,7 +624,7 @@ async function scan(folders, onProgress, options = {}) {
         total: visualIndexes.length,
         file: `Comparing image: ${file.name}`,
       });
-      file.visualHashes = await visualWorker.compute(file.path, file.pixelWidth, file.pixelHeight, signal);
+      file.visualHashes = await visualWorkers[workerIndex].compute(file.path, file.pixelWidth, file.pixelHeight, signal);
       visualCompleted++;
       progress({
         phase: 'similarity',
@@ -629,7 +634,7 @@ async function scan(folders, onProgress, options = {}) {
       });
     });
   } finally {
-    await visualWorker.close();
+    await Promise.all(visualWorkers.map(worker => worker.close()));
   }
 
   const smartResult = detectSmartDuplicates(files);

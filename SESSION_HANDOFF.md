@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-13 10:55 America/New_York
+Updated: 2026-08-13 11:20 America/New_York
 
 ## Read this first
 
@@ -22,6 +22,16 @@ scanning TIFF/HEIC visual hashes: `utif2` was unpacked but its runtime dependenc
 Desktop installer include unpacked `pako`, and the mandatory Windows package
 verifier now resolves `pako` from `utif2` and loads the packaged visual-hash
 module before accepting a build. This fix is not present in public 1.0.17.
+
+A real Windows NAS scan then exposed a separate 1.0.18 performance defect:
+Foldiq selected 6,344 visual candidates and had processed only 965 after 9:06.
+It was not frozen; the candidate rule was far too broad because thousands of
+unrelated phone photos shared the same dimensions and similar file sizes. The
+current source skips dimension-only matching for large homogeneous groups,
+limits time-based visual candidates to two minutes, and uses two independent
+HEIC/TIFF decoder workers. Bursts, same-name conversions, edited copies, and
+small same-dimension groups remain supported. Regression tests cover both the
+large-library exclusion and preserved useful candidates.
 
 Windows 1.0.17 is pushed, tagged, and released at
 `https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.17-windows`. The release
@@ -407,7 +417,7 @@ dates to `Unknown Date` items. No macOS date-code change was made in this turn.
 
 From `/Users/enrique/Developer/Foldiq/desktop`:
 
-- `npm test`: 58 passed, 0 failed, 1 skipped. The skipped case is the real
+- `npm test`: 60 passed, 0 failed, 1 skipped. The skipped case is the real
   bundled Windows RAR-engine execution, which is platform-gated on macOS.
 - `npx vite build`: passed.
 - `node --check` for modified Electron services: passed.
@@ -425,11 +435,13 @@ Latest local installer:
 `/Users/enrique/Developer/Foldiq/desktop/dist-electron/Foldiq Setup 1.0.18.exe`
 
 - Size: approximately 120 MB
-- SHA-256: `f6c88ce552f049fd72b08f3cd3324901362f18e19bd9c6cf583f425deea82b5c`
+- SHA-256: `7387b1a727897b0334b98faae1b4904341605ba478eec1d985ec20102e2ad71c`
 - Desktop copy: `/Users/enrique/Desktop/Foldiq Setup 1.0.18.exe`
 - This 1.0.18 installer is a local test build and is not yet a GitHub Release.
 - The package verifier passed, `utif2` resolved the packaged `pako`, and the
   packaged `visual-hash.js` dependency chain loaded successfully.
+- The latest local build also contains the large-library visual-scan
+  optimization described above. It has not yet completed its real Windows gate.
 
 ## Important product/safety notes
 

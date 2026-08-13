@@ -7,6 +7,8 @@ const EDITED_IMAGE_DISTANCE = 14;
 const BURST_IMAGE_DISTANCE = 14;
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 const FIFTEEN_SECONDS_MS = 15 * 1000;
+const VISUAL_CANDIDATE_WINDOW_MS = 2 * 60 * 1000;
+const MAX_DIMENSION_ONLY_GROUP = 40;
 
 const EDIT_MARKER = /(?:^|[\s._-])(?:edited|edit|exported|export|compressed|optimized|converted|enhanced|filtered|retouched)(?:[\s._-]*\d+)?(?:$|[\s._-])/i;
 
@@ -92,7 +94,7 @@ function candidatePairs(files) {
     .filter(item => item.date != null && item.aspect != null)
     .sort((a, b) => a.date - b.date);
   for (let i = 0; i < dated.length; i++) {
-    for (let j = i + 1; j < Math.min(dated.length, i + 100) && dated[j].date - dated[i].date <= TEN_MINUTES_MS; j++) {
+    for (let j = i + 1; j < Math.min(dated.length, i + 100) && dated[j].date - dated[i].date <= VISUAL_CANDIDATE_WINDOW_MS; j++) {
       if (orientationAwareAspectDifference(dated[i].aspect, dated[j].aspect) <= 0.08) add(dated[i].index, dated[j].index);
     }
   }
@@ -105,6 +107,11 @@ function candidatePairs(files) {
     byDimensions.get(key).push(index);
   });
   for (const group of byDimensions.values()) {
+    // Dimension-only matching is useful in a small mixed folder, but a large
+    // phone library can contain thousands of unrelated images with identical
+    // dimensions. Hashing all of them turns a scan into an hour-long job.
+    // Large groups still get candidates from related names and capture times.
+    if (group.length > MAX_DIMENSION_ONLY_GROUP) continue;
     group.sort((a, b) => files[a].size - files[b].size);
     for (let i = 0; i < group.length; i++) {
       for (let j = i + 1; j < Math.min(group.length, i + 7); j++) {
