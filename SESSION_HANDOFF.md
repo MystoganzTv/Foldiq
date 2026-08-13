@@ -1,6 +1,6 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-13 03:10 America/New_York
+Updated: 2026-08-13 10:55 America/New_York
 
 ## Read this first
 
@@ -11,10 +11,17 @@ macOS parity gaps, adds real opt-in location organization, retry/cleanup/report
 controls, and persists Windows preferences. Do not discard these changes.
 
 Smart Duplicates 1.0.18 is implemented for macOS and Windows in the current
-source and has a locally verified Windows installer, but it is not yet a GitHub
+source and has a newly rebuilt, locally verified Windows installer, but it is not yet a GitHub
 Release and has not been uploaded to App Store Connect. Publishing remains a
 separate release decision. The currently supported customer release remains
 Windows 1.0.17 and macOS 1.0.8 until 1.0.18 is explicitly released.
+
+The first Windows 1.0.18 test package exposed a concrete packaging error while
+scanning TIFF/HEIC visual hashes: `utif2` was unpacked but its runtime dependency
+`pako` was not, producing `Cannot find module 'pako'`. The current source and
+Desktop installer include unpacked `pako`, and the mandatory Windows package
+verifier now resolves `pako` from `utif2` and loads the packaged visual-hash
+module before accepting a build. This fix is not present in public 1.0.17.
 
 Windows 1.0.17 is pushed, tagged, and released at
 `https://github.com/MystoganzTv/Foldiq/releases/tag/v1.0.17-windows`. The release
@@ -54,7 +61,7 @@ about updates. Their prior delivery obligation is settled. Future versions are
 self-service through the normal App Store or download/update channel unless the
 owner explicitly requests new outreach.
 
-Operational email caveat: the connected Resend account rejected
+Operational purchase-email caveat: the connected Resend account rejected
 `receipts@foldiq.app` because `foldiq.app` is not verified there (the only listed
 verified domain was `rbtgenius.com`). No Resend attempts were delivered; the six
 customer notices were sent successfully from the connected owner Gmail account,
@@ -62,6 +69,11 @@ customer notices were sent successfully from the connected owner Gmail account,
 automatic purchase receipts from `web/api/webhook.js`, confirm whether Vercel's
 production `RESEND_API_KEY` belongs to a different account where `foldiq.app` is
 verified, or verify the domain and rotate/update that key.
+
+The new support form deliberately uses `Foldiq Support <support@rbtgenius.com>`
+on the verified domain. A protected Vercel preview accepted and delivered a real
+end-to-end test request to the owner's own email on 2026-08-13. This does not
+change the separate purchase-receipt sender caveat above.
 
 ## Published state
 
@@ -192,11 +204,13 @@ capture dates`, the metadata stage was redesigned again:
 - Scan and archive extraction are cancellable from the UI.
 - UI names each phase. The raw `Open diagnostics` control was removed from the
   normal scan UI. Only after a warning or failure, the user can choose `Send
-  diagnostics to developer`, review a privacy/consent dialog, and open a draft
-  to `support@foldiq.app`. The summary contains app/Windows versions, stages,
+  diagnostics to developer`, review a privacy/consent dialog, and open a secure
+  form at `foldiq.app` in the default browser without requiring Outlook or any
+  local email client. The summary contains app/Windows versions, stages,
   timings, counts, and error codes; it strips photos, filenames, folder paths,
-  and local usernames. Nothing is sent until the user reviews and sends the
-  email. Error results now say `Scan Failed`, not `Scan Complete`.
+  and local usernames. It is also copied to the clipboard as a fallback. Nothing
+  is sent until the user reviews and submits the form. Error results now say
+  `Scan Failed`, not `Scan Complete`.
 
 ### Smart Duplicates 1.0.18 (implemented locally; release not published yet)
 
@@ -393,7 +407,7 @@ dates to `Unknown Date` items. No macOS date-code change was made in this turn.
 
 From `/Users/enrique/Developer/Foldiq/desktop`:
 
-- `npm test`: 25 passed, 0 failed, 1 skipped. The skipped case is the real
+- `npm test`: 58 passed, 0 failed, 1 skipped. The skipped case is the real
   bundled Windows RAR-engine execution, which is platform-gated on macOS.
 - `npx vite build`: passed.
 - `node --check` for modified Electron services: passed.
@@ -401,21 +415,21 @@ From `/Users/enrique/Developer/Foldiq/desktop`:
 - `npm run build:win`: passed after the final UI/date corrections.
 - The updated 7-Zip path was exercised against the real iCloud ZIP and emitted
   progress while extracting all 46 supported media files.
-- Web `npm test`: 10 passed, 0 failed.
+- Web `npm test`: 18 passed, 0 failed.
 - A real `/Users/enrique/Downloads/iCloud Photos.zip` scan was used to verify
   archive handling, thumbnails, destinations, folder-tree preview, and correct
   `46 copied / 0 moved` reporting.
 
 Latest local installer:
 
-`/Users/enrique/Developer/Foldiq/desktop/dist-electron/Foldiq Setup 1.0.10.exe`
+`/Users/enrique/Developer/Foldiq/desktop/dist-electron/Foldiq Setup 1.0.18.exe`
 
-- Size: approximately 109 MB
-- SHA-256: `49e8a3ecc3cf66da44e8d77c47d3c7f91a24dfa36d0d26f2137be83382bcfb77`
-- Desktop copy: `/Users/enrique/Desktop/Foldiq Setup 1.0.10.exe`
-- GitHub asset: `Foldiq-Setup.exe` (114,666,978 bytes)
-- The GitHub asset was downloaded after publishing and its SHA-256 matched the
-  local installer exactly.
+- Size: approximately 120 MB
+- SHA-256: `f6c88ce552f049fd72b08f3cd3324901362f18e19bd9c6cf583f425deea82b5c`
+- Desktop copy: `/Users/enrique/Desktop/Foldiq Setup 1.0.18.exe`
+- This 1.0.18 installer is a local test build and is not yet a GitHub Release.
+- The package verifier passed, `utif2` resolved the packaged `pako`, and the
+  packaged `visual-hash.js` dependency chain loaded successfully.
 
 ## Important product/safety notes
 
@@ -437,9 +451,14 @@ Latest local installer:
    `/Users/enrique/Desktop/Foldiq Setup 1.0.17.exe` as the known-good installer.
 3. Do not overwrite or replace the published 1.0.17 asset with different bytes.
    Any future Windows app correction must receive a new version and fresh test.
-4. The next independent product track is iPhone/iPad: inspect the current iOS
+4. Install `/Users/enrique/Desktop/Foldiq Setup 1.0.18.exe` on the real Windows
+   PC and repeat the exact scan that produced `Cannot find module 'pako'` before
+   publishing 1.0.18.
+5. After that real-PC test, decide whether to publish Windows 1.0.18 as a new
+   GitHub Release; never replace the existing 1.0.17 bytes.
+6. The next independent product track is iPhone/iPad: inspect the current iOS
    build/submission state in App Store Connect before uploading or submitting.
-5. Keep public privacy copy aligned with optional GPS lookup: media stays on the
+7. Keep public privacy copy aligned with optional GPS lookup: media stays on the
    device; Apple platforms may use Apple's geocoder, while Windows sends only a
    coordinate rounded to two decimals to OpenStreetMap when the user enables
    location naming.

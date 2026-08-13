@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -7,7 +7,7 @@ const planner  = require('./services/planner');
 const mover    = require('./services/mover');
 const { rowsToCSV } = require('./services/csv');
 const { filterSupportedSources } = require('./services/sources');
-const { buildSupportEmailURL } = require('./services/diagnostics');
+const { buildDiagnosticSummary, buildSupportWebURL } = require('./services/diagnostics');
 const geocoder = require('./services/geocoder');
 const preferences = require('./services/preferences');
 
@@ -301,11 +301,19 @@ ipcMain.handle('shell:openAttribution', async () => {
   return true;
 });
 
-ipcMain.handle('support:createDiagnosticsEmail', async () => {
+ipcMain.handle('support:openDiagnosticsForm', async () => {
   let logContent = '';
   try { logContent = require('fs').readFileSync(diagnosticsPath(), 'utf8'); } catch {}
-  const emailURL = buildSupportEmailURL({ logContent, appVersion: app.getVersion() });
-  await shell.openExternal(emailURL);
+  const options = { logContent, appVersion: app.getVersion() };
+  clipboard.writeText(buildDiagnosticSummary(options));
+  await shell.openExternal(buildSupportWebURL(options));
+  return true;
+});
+
+ipcMain.handle('support:copyDiagnostics', async () => {
+  let logContent = '';
+  try { logContent = require('fs').readFileSync(diagnosticsPath(), 'utf8'); } catch {}
+  clipboard.writeText(buildDiagnosticSummary({ logContent, appVersion: app.getVersion() }));
   return true;
 });
 

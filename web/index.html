@@ -732,7 +732,7 @@
     </details>
     <details class="faq-item">
       <summary>How does Foldiq decide where files go?</summary>
-      <p>It reads each file's real capture date from its EXIF metadata (falling back to the filename or file date when needed) and builds a clean, dated folder structure. You choose the organization style, review the full plan, and confirm before any file moves.</p>
+      <p>It reads each file's real capture date from trusted embedded metadata or a date encoded in the filename. If no reliable capture date exists, Foldiq clearly places it in Unknown Date instead of guessing from an unrelated file date. You choose the organization style, review the full plan, and confirm before any file moves.</p>
     </details>
   </div>
 </section>

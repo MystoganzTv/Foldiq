@@ -23,7 +23,8 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const [showDiagnosticConsent, setShowDiagnosticConsent] = useState(false);
-  const [creatingSupportEmail, setCreatingSupportEmail] = useState(false);
+  const [openingSupportForm, setOpeningSupportForm] = useState(false);
+  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const startedAt = useRef(Date.now());
 
   useEffect(() => {
@@ -74,14 +75,19 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
     try { await window.foldiq.cancelScan(); } finally { go('welcome'); }
   }
 
-  async function createSupportEmail() {
-    setCreatingSupportEmail(true);
+  async function openSupportForm() {
+    setOpeningSupportForm(true);
     try {
-      await window.foldiq.createDiagnosticsEmail();
+      await window.foldiq.openDiagnosticsForm();
       setShowDiagnosticConsent(false);
     } finally {
-      setCreatingSupportEmail(false);
+      setOpeningSupportForm(false);
     }
+  }
+
+  async function copyDiagnostics() {
+    await window.foldiq.copyDiagnostics();
+    setDiagnosticsCopied(true);
   }
 
   const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
@@ -239,16 +245,18 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
             <div className={s.modalHeader}><h2>Send diagnostics to developer?</h2><button onClick={() => setShowDiagnosticConsent(false)}>×</button></div>
             <div className={s.modalBody}>
               <div className={s.diagnosticPrivacyNotice}>
-                <p>Foldiq will open your default email app with a short technical summary.</p>
+                <p>Foldiq will open a secure support form in your web browser. No email app or Outlook account is required.</p>
                 <ul>
                   <li>Includes the Foldiq version, Windows version, scan stages, timing, and error codes.</li>
                   <li>Does not include photos, filenames, or folder paths.</li>
-                  <li>Nothing is sent until you review the email and press Send.</li>
+                  <li>The same private diagnostic summary is copied to your clipboard as a backup.</li>
+                  <li>Nothing is sent until you review the form and press Send.</li>
                 </ul>
               </div>
               <div className={s.modalActions}>
+                <button className={s.btnSecondary} onClick={copyDiagnostics}>{diagnosticsCopied ? 'Copied ✓' : 'Copy diagnostics'}</button>
                 <button className={s.btnSecondary} onClick={() => setShowDiagnosticConsent(false)}>Cancel</button>
-                <button className={s.btnPrimary} disabled={creatingSupportEmail} onClick={createSupportEmail}>{creatingSupportEmail ? 'Opening email…' : 'Create support email'}</button>
+                <button className={s.btnPrimary} disabled={openingSupportForm} onClick={openSupportForm}>{openingSupportForm ? 'Opening form…' : 'Open support form'}</button>
               </div>
             </div>
           </section>

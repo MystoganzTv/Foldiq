@@ -49,6 +49,7 @@
       "node_modules/jpeg-js/**/*",
       "node_modules/libheif-js/**/*",
       "node_modules/pngjs/**/*",
+      "node_modules/pako/**/*",
       "node_modules/utif2/**/*"
     ],
     "win": {

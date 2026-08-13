@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildSupportEmailURL, parseEvents, redactMessage } = require('../electron/services/diagnostics');
+const { buildDiagnosticSummary, buildSupportWebURL, parseEvents, redactMessage } = require('../electron/services/diagnostics');
 
 test('diagnostic parser ignores malformed log lines', () => {
   assert.deepEqual(parseEvents('{"event":"app-start"}\nnot-json\n{"event":"scan-start"}\n'), [
@@ -9,20 +9,21 @@ test('diagnostic parser ignores malformed log lines', () => {
   ]);
 });
 
-test('support email contains useful diagnostics without local paths', () => {
-  const logContent = [
-    JSON.stringify({ at: '2026-08-12T18:00:00Z', event: 'scan-start', sourceCount: 1, includeVideos: true }),
-    JSON.stringify({ at: '2026-08-12T18:00:15Z', event: 'metadata-batch-error', batchNumber: 2, message: 'Failed at C:\\Users\\Jane Doe\\Pictures\\private.heic' }),
-  ].join('\n');
-  const url = buildSupportEmailURL({ logContent, appVersion: '1.0.12', platform: 'win32', arch: 'x64', osRelease: '10.0' });
-  const decoded = decodeURIComponent(url);
+test('browser support form carries the same private diagnostic summary', () => {
+  const options = {
+    logContent: JSON.stringify({ event: 'scan-error', message: 'Failed at C:\\Users\\Jane\\private.heic' }),
+    appVersion: '1.0.18',
+    platform: 'win32',
+    arch: 'x64',
+    osRelease: '10.0',
+  };
+  const summary = buildDiagnosticSummary(options);
+  const url = buildSupportWebURL(options);
 
-  assert.match(decoded, /^mailto:support@foldiq\.app\?/);
-  assert.match(decoded, /metadata-batch-error/);
-  assert.match(decoded, /Windows version|System: win32 x64/);
-  assert.match(decoded, /\[local path\]/);
-  assert.doesNotMatch(decoded, /Jane Doe|private\.heic|Pictures/);
-  assert.match(decoded, /no photos, filenames, or folder paths are included/i);
+  assert.match(url, /^https:\/\/foldiq\.app\/contact\.html\?source=foldiq-windows#diagnostic=/);
+  assert.equal(decodeURIComponent(url.split('#diagnostic=')[1]), summary);
+  assert.doesNotMatch(summary, /Jane|private\.heic/);
+  assert.match(summary, /\[local path\]/);
 });
 
 test('diagnostic message redaction removes Unix home paths', () => {

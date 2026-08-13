@@ -5,6 +5,8 @@ import test from 'node:test';
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const privacy = await readFile(new URL('../privacy-policy.html', import.meta.url), 'utf8');
 const analytics = await readFile(new URL('../analytics.js', import.meta.url), 'utf8');
+const contact = await readFile(new URL('../contact.html', import.meta.url), 'utf8');
+const success = await readFile(new URL('../success.html', import.meta.url), 'utf8');
 const trackedPages = await Promise.all([
   'index.html',
   'contact.html',
@@ -59,4 +61,17 @@ test('social metadata points to the production domain', () => {
   assert.match(html, /<meta property="og:url" content="https:\/\/foldiq\.app\/"/);
   assert.match(html, /<link rel="canonical" href="https:\/\/foldiq\.app\/"/);
   assert.doesNotMatch(html, /mystoganztv\.github\.io/);
+});
+
+test('support form works without a local email client and strips diagnostic fragments', () => {
+  assert.doesNotMatch(contact, /action="mailto:/);
+  assert.match(contact, /fetch\('\/api\/support'/);
+  assert.match(contact, /#diagnostic=/);
+  assert.match(contact, /history\.replaceState/);
+  assert.match(contact, /You do not need Outlook/);
+});
+
+test('purchase success support link does not require a local email app', () => {
+  assert.match(success, /href="\/contact\.html"/);
+  assert.doesNotMatch(success, /mailto:support@foldiq\.app/);
 });

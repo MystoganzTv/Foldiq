@@ -37,7 +37,8 @@ contextBridge.exposeInMainWorld('foldiq', {
   openFolder:     (p)          => ipcRenderer.invoke('shell:openFolder', { folderPath: p }),
   revealFile:     (p)          => ipcRenderer.invoke('shell:revealFile', { filePath: p }),
   openAttribution:()           => ipcRenderer.invoke('shell:openAttribution'),
-  createDiagnosticsEmail: ()  => ipcRenderer.invoke('support:createDiagnosticsEmail'),
+  openDiagnosticsForm: ()    => ipcRenderer.invoke('support:openDiagnosticsForm'),
+  copyDiagnostics: ()        => ipcRenderer.invoke('support:copyDiagnostics'),
 
   // Report
   exportCSV:      (rows)       => ipcRenderer.invoke('report:exportCSV', { rows }),

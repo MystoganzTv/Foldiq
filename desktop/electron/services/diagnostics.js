@@ -1,6 +1,6 @@
 const os = require('os');
 
-const SUPPORT_EMAIL = 'support@foldiq.app';
+const SUPPORT_FORM = 'https://foldiq.app/contact.html?source=foldiq-windows';
 const SAFE_FIELDS = [
   'sourceCount', 'includeVideos', 'includeArchives', 'batchNumber', 'count',
   'returned', 'code', 'files', 'warnings', 'elapsedMs',
@@ -44,21 +44,26 @@ function formatEvent(event) {
   return `${redactMessage(event.at || 'unknown time')} | ${redactMessage(event.event || 'unknown event')}${details.length ? ` | ${details.join(' ')}` : ''}`;
 }
 
-function buildSupportEmailURL({ logContent, appVersion, platform = process.platform, arch = process.arch, osRelease = os.release() }) {
+function buildDiagnosticSummary({ logContent, appVersion, platform = process.platform, arch = process.arch, osRelease = os.release() }) {
   const events = selectEvents(parseEvents(logContent));
-  const body = [
-    'Please describe what happened above this line:',
-    '',
-    '',
+  return [
     '--- Foldiq diagnostic summary ---',
     `Version: ${redactMessage(appVersion || 'unknown')}`,
     `System: ${redactMessage(platform)} ${redactMessage(arch)} (${redactMessage(osRelease)})`,
     'Privacy: no photos, filenames, or folder paths are included.',
     '',
     ...(events.length ? events.map(formatEvent) : ['No scan events were recorded.']),
-  ].join('\r\n');
-  const subject = `Foldiq Windows diagnostics — v${appVersion || 'unknown'}`;
-  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  ].join('\n');
 }
 
-module.exports = { buildSupportEmailURL, parseEvents, redactMessage, SUPPORT_EMAIL };
+function buildSupportWebURL(options) {
+  return `${SUPPORT_FORM}#diagnostic=${encodeURIComponent(buildDiagnosticSummary(options))}`;
+}
+
+module.exports = {
+  buildDiagnosticSummary,
+  buildSupportWebURL,
+  parseEvents,
+  redactMessage,
+  SUPPORT_FORM,
+};

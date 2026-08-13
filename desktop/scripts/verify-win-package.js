@@ -20,11 +20,20 @@ const requiredFiles = [
   path.join(resources, 'app.asar.unpacked', 'node_modules', 'heic-decode', 'index.js'),
   path.join(resources, 'app.asar.unpacked', 'node_modules', 'jpeg-js', 'index.js'),
   path.join(resources, 'app.asar.unpacked', 'node_modules', 'pngjs', 'lib', 'png.js'),
+  path.join(resources, 'app.asar.unpacked', 'node_modules', 'pako', 'index.js'),
   path.join(resources, 'app.asar.unpacked', 'node_modules', 'utif2', 'UTIF.js'),
 ];
 
 for (const filePath of requiredFiles) {
   if (!fs.existsSync(filePath)) throw new Error(`Windows package is missing ${path.relative(projectRoot, filePath)}`);
+}
+
+const unpackedRoot = path.join(resources, 'app.asar.unpacked');
+const pakoFromUtif = require.resolve('pako', {
+  paths: [path.join(unpackedRoot, 'node_modules', 'utif2')],
+});
+if (!pakoFromUtif.startsWith(unpackedRoot)) {
+  throw new Error('Packaged UTIF decoder cannot resolve its unpacked pako dependency');
 }
 
 for (const filePath of [
