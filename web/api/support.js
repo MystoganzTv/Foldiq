@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 
 const OWNER_EMAIL = 'enrique.padron853@gmail.com';
-const FROM_EMAIL = process.env.SUPPORT_FROM_EMAIL || 'Foldiq Support <support@rbtgenius.com>';
+const FROM_EMAIL = process.env.SUPPORT_FROM_EMAIL || 'Foldiq Support <support@foldiq.app>';
 const recentRequests = new Map();
 
 function text(value, maxLength) {

@@ -40,6 +40,12 @@ test('support endpoint validates fields and sends a replyable private message', 
   assert.match(deliveries[0].html, /Jane &lt;Tester&gt;/);
 });
 
+test('support messages use the verified Foldiq domain by default', async () => {
+  const source = await import('node:fs').then(fs => fs.readFileSync(new URL('../api/support.js', import.meta.url), 'utf8'));
+  assert.match(source, /Foldiq Support <support@foldiq\.app>/);
+  assert.doesNotMatch(source, /support@rbtgenius\.com/);
+});
+
 test('support endpoint rejects invalid submissions and silently accepts bots', async () => {
   let deliveries = 0;
   const handler = createSupportHandler({

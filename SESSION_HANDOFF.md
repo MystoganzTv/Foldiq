@@ -37,18 +37,19 @@ Store releases until explicitly published.
 Purchase-receipt code now centralizes the Resend sender as
 `Foldiq <receipts@foldiq.app>`, sets a reply-to address, and uses Stripe session
 IDs as Resend idempotency keys so webhook retries cannot duplicate customer or
-owner emails. This source-side correction is tested, but Resend cannot activate
-the address yet: the free account has its single domain slot occupied by
-`rbtgenius.com`. Adding `foldiq.app` opens Resend's Pro upgrade ($20/month), and
-deleting `rbtgenius.com` would break the existing Foldiq support sender. The
-owner must explicitly choose Pro or authorize replacing the existing domain;
-do not purchase or delete a domain without that decision. `foldiq.app` uses
-Vercel DNS and currently has no Resend MX/DKIM records.
+owner emails. The owner opened a separate free Resend account under
+`enriquespangberg@gmail.com`, avoiding the occupied domain slot in the older
+account. `foldiq.app` was added there and Vercel Domain Connect installed the
+DKIM, SPF, and outbound MX records. Resend now reports the domain `verified` and
+ready to send. A sending-only key named `Foldiq Production` was stored directly
+as Vercel's sensitive `RESEND_API_KEY` for Production and Preview; the value is
+not stored in this repository or handoff. Foldiq support now also defaults to
+`support@foldiq.app`, not the unrelated `rbtgenius.com` domain.
 The corrected webhook was deployed to Vercel production as deployment
 `dpl_rWsGv5MgnRYBEw7neYZHXQExbkwy` and `https://foldiq.app` is Ready. A live
 unsigned webhook request reached the new function and was correctly rejected
-with HTTP 400 for the missing Stripe signature. Actual delivery from
-`receipts@foldiq.app` remains blocked only by the Resend domain-slot decision.
+with HTTP 400 for the missing Stripe signature. After rotating the Resend key,
+Vercel production deployment `H7MLmN4SK3brp5ymLNEhWAHom4EM` became Ready.
 
 Smart Duplicates 1.0.18 is implemented for macOS and Windows in the current
 source and has a newly rebuilt, locally verified Windows installer, but it is not yet a GitHub
