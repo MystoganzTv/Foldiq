@@ -1,30 +1,184 @@
 const $ = selector => document.querySelector(selector);
-const money = cents => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((cents||0)/100);
-const escape = value => String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
-const row = (label,value) => `<div class="row"><span>${escape(label)}</span><strong>${escape(value)}</strong></div>`;
+const money = cents => cents == null ? 'Unavailable' : new Intl.NumberFormat('en-US', {
+  style: 'currency', currency: 'USD', minimumFractionDigits: 2,
+}).format(cents / 100);
+const number = value => new Intl.NumberFormat('en-US').format(value ?? 0);
+const escape = value => String(value ?? '')
+  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+const row = (label, value, note = '') => `<div class="row"><span>${escape(label)}${note ? `<small>${escape(note)}</small>` : ''}</span><strong>${escape(value)}</strong></div>`;
 
-async function load() {
-  const response = await fetch('/api/owner-metrics',{credentials:'same-origin'});
-  if (response.status === 401) { $('#login').hidden=false; $('#dashboard').hidden=true; return; }
-  if (!response.ok) throw new Error('Metrics could not be loaded.');
-  const data = await response.json();
-  $('#login').hidden=true; $('#dashboard').hidden=false;
-  $('#updated').textContent=`Updated ${new Date(data.generatedAt).toLocaleString()}`;
-  const win=data.windows||{}, apple=data.apple?.auditedSnapshot||{}, dl=data.downloads||{}, product=data.product||{};
-  $('#win-customers').textContent=win.externalCustomers ?? 'Setup';
-  $('#win-sales').textContent=win.configured ? `${money(win.externalGrossCents)} external gross` : 'Stripe setup required';
-  $('#mac-downloads').textContent=apple.downloads ?? '—';
-  $('#mac-sales').textContent=apple.salesUSD!=null ? `$${apple.salesUSD} sales · audited snapshot` : 'Apple setup required';
-  $('#exe-downloads').textContent=dl.current?.downloads ?? 'Setup';
-  $('#exe-version').textContent=dl.current ? `${dl.current.tag} · current asset` : 'GitHub setup required';
-  $('#active-installs').textContent=product.configured ? product.activeInstalls : 'Off';
-  $('#sales-detail').innerHTML=[row('Windows purchases',win.purchases ?? '—'),row('External buyers who downloaded',win.externalBuyerDownloads ?? 'Tracking now'),row('Tracked download requests',win.trackedDownloadRequests ?? '—'),row('External Windows gross',win.externalGrossCents!=null?money(win.externalGrossCents):'—'),row('Mac sales',apple.salesUSD!=null?`$${apple.salesUSD}`:'—'),row('Mac proceeds',apple.proceedsUSD!=null?`$${apple.proceedsUSD}`:'—')].join('');
-  $('#download-detail').innerHTML=[row('Unique external purchases tracked',win.externalBuyerDownloads ?? '—'),row('Requests tied to purchases',win.trackedDownloadRequests ?? '—'),row('GitHub asset requests (not unique)',dl.current?.downloads ?? '—'),...(dl.releases?.length?dl.releases.slice(0,4).map(item=>row(item.tag,item.downloads.toLocaleString())):[])].join('');
-  if(product.configured){$('#product-status').textContent='Live';$('#product-status').classList.add('live');$('#product-detail').innerHTML=[row('Opted-in active installs',product.activeInstalls),row('Operations measured',product.events),row('Successful operations',product.successRate==null?'—':`${product.successRate}%`),...Object.entries(product.byEvent||{}).map(([name,value])=>row(name.replaceAll('_',' '),value.total))].join('')}else{$('#product-detail').innerHTML='<p class="muted">Anonymous product metrics are ready in the apps but remain off until private storage is connected. Users must explicitly opt in.</p>'}
-  const errors=[win.error,dl.error,product.error].filter(Boolean); $('#notice').hidden=!errors.length; $('#notice').textContent=errors.join(' · ');
+function dateLabel(value, options = { month: 'short', day: 'numeric', year: 'numeric' }) {
+  if (!value) return '—';
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00Z` : value;
+  return new Date(normalized).toLocaleDateString('en-US', options);
 }
 
-$('#login-form').addEventListener('submit',async event=>{event.preventDefault();$('#login-error').textContent='';const response=await fetch('/api/owner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:$('#token').value})});if(!response.ok){$('#login-error').textContent='That access code is not correct.';return}$('#token').value='';await load()});
-$('#refresh').addEventListener('click',()=>load().catch(error=>{$('#notice').hidden=false;$('#notice').textContent=error.message}));
-$('#logout').addEventListener('click',async()=>{await fetch('/api/owner-logout',{method:'POST'});location.reload()});
-load().catch(error=>{$('#login').hidden=false;$('#login-error').textContent=error.message});
+function renderBars(target, items, labelKey, valueKey, format = value => value) {
+  if (!items?.length) {
+    target.innerHTML = '<p class="empty">No data yet.</p>';
+    return;
+  }
+  const max = Math.max(...items.map(item => Number(item[valueKey]) || 0), 1);
+  target.innerHTML = items.map(item => {
+    const value = Number(item[valueKey]) || 0;
+    return `<div class="rank-item"><div><span>${escape(item[labelKey])}</span><strong>${escape(format(value, item))}</strong></div><i><b style="width:${Math.max(4, value / max * 100)}%"></b></i></div>`;
+  }).join('');
+}
+
+function countryName(code) {
+  if (!code || code === 'Unknown') return 'Unknown';
+  try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) || code; }
+  catch { return code; }
+}
+
+function renderSalesChart(items = []) {
+  const target = $('#sales-chart');
+  if (!items.length) {
+    target.innerHTML = '<p class="empty">No external purchase history available.</p>';
+    return;
+  }
+  const max = Math.max(...items.map(item => item.grossCents), 1);
+  target.innerHTML = items.map(item => `<div class="bar-column" title="${escape(`${dateLabel(item.date)} · ${item.purchases} purchase(s) · ${money(item.grossCents)}`)}"><div class="bar-value">${escape(money(item.grossCents))}</div><i style="height:${Math.max(8, item.grossCents / max * 100)}%"></i><span>${escape(dateLabel(item.date, { month: 'short', day: 'numeric' }))}</span></div>`).join('');
+}
+
+function funnelStep(label, value, note, state = '') {
+  return `<div class="funnel-step ${state}"><span>${escape(label)}</span><strong>${escape(value)}</strong><small>${escape(note)}</small></div>`;
+}
+
+function renderDashboard(data) {
+  const win = data.windows || {};
+  const apple = data.apple?.auditedSnapshot || {};
+  const downloads = data.downloads || {};
+  const product = data.product || {};
+  const website = data.website?.snapshot || {};
+
+  $('#updated').textContent = `Refreshed ${new Date(data.generatedAt).toLocaleString()} · Stripe and GitHub are live`;
+
+  $('#win-customers').textContent = win.externalCustomers ?? '—';
+  $('#win-sales').textContent = `${money(win.externalGrossCents)} gross · all time`;
+  $('#win-net').textContent = win.externalNetCents == null ? 'Pending' : money(win.externalNetCents);
+  $('#win-net-note').textContent = win.externalNetCents == null ? 'Stripe fee detail unavailable' : `${money(win.externalFeesCents)} in Stripe fees`;
+  $('#mac-downloads').textContent = apple.downloads ?? '—';
+  $('#mac-sales').textContent = `${money((apple.salesUSD || 0) * 100)} sales · ${apple.period || 'snapshot'}`;
+  $('#apple-conversion').textContent = apple.conversionRate == null ? '—' : `${apple.conversionRate}%`;
+  $('#apple-period').textContent = `${number(apple.pageViews)} page views · ${apple.period || 'snapshot'}`;
+
+  $('#windows-finance').innerHTML = [
+    row('External gross sales', money(win.externalGrossCents)),
+    row('Stripe fees', money(win.externalFeesCents)),
+    row('External net proceeds', money(win.externalNetCents)),
+    row('Refunded purchases', number(win.refundedPurchases), money(win.refundedCents)),
+    row('Average order value', win.externalCustomers ? money(Math.round(win.externalGrossCents / win.externalCustomers)) : '—'),
+  ].join('');
+
+  $('#windows-movement').innerHTML = [
+    row('External customers · all time', number(win.externalCustomers)),
+    row('New customers · last 30 days', number(win.externalCustomers30d)),
+    row('New customers · last 7 days', number(win.externalCustomers7d)),
+    row('Verified buyer downloads', number(win.externalBuyerDownloads), 'tracked from Aug 14'),
+    row('Purchase → download', win.downloadConversionRate == null ? 'Not enough data' : `${win.downloadConversionRate}%`, `${number(win.trackingEligibleCustomers)} eligible purchases`),
+  ].join('');
+
+  renderSalesChart(win.daily);
+  renderBars($('#windows-countries'), (win.countries || []).map(item => ({ ...item, country: countryName(item.country) })), 'country', 'customers', value => `${number(value)} customer${value === 1 ? '' : 's'}`);
+  $('#recent-purchases').innerHTML = win.recentPurchases?.length
+    ? win.recentPurchases.map(item => `<tr><td>${escape(dateLabel(item.date))}</td><td>${escape(countryName(item.country))}</td><td>${escape(money(item.grossCents))}</td><td>${escape(money(item.netCents))}</td><td>${number(item.downloadCount)}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="empty">No purchase data.</td></tr>';
+
+  const eligible = win.trackingEligibleCustomers || 0;
+  const buyerDownloads = win.externalBuyerDownloads || 0;
+  $('#windows-funnel').innerHTML = [
+    funnelStep('Eligible purchases', number(eligible), 'Purchased after tracking began'),
+    funnelStep('Verified downloads', number(buyerDownloads), win.downloadConversionRate == null ? 'Waiting for a new purchase' : `${win.downloadConversionRate}% of eligible purchases`),
+    funnelStep('Opted-in active installs', product.configured ? number(product.activeInstalls) : 'Not connected', 'Anonymous and optional', product.configured ? '' : 'disabled'),
+    funnelStep('Successful organizations', product.configured ? number(product.byEvent?.apply_completed?.successful || 0) : 'Not connected', 'The strongest product-value signal', product.configured ? '' : 'disabled'),
+  ].join('<div class="funnel-arrow">→</div>');
+  $('#tracking-note').textContent = `Reliable buyer-download tracking began ${dateLabel(win.downloadTrackingSince?.slice(0, 10))}. GitHub's earlier requests cannot be assigned to unique customers.`;
+
+  $('#apple-funnel').innerHTML = [
+    row('Impressions', number(apple.impressions)),
+    row('Product page views', number(apple.pageViews)),
+    row('Store conversion rate', apple.conversionRate == null ? '—' : `${apple.conversionRate}%`),
+    row('First-time downloads', number(apple.downloads)),
+    row('Redownloads', number(apple.redownloads)),
+  ].join('');
+  $('#apple-commerce').innerHTML = [
+    row('Sales', money((apple.salesUSD || 0) * 100)),
+    row('Proceeds', money((apple.proceedsUSD || 0) * 100)),
+    row('Difference: sales vs. proceeds', money(((apple.salesUSD || 0) - (apple.proceedsUSD || 0)) * 100), 'Apple commission, taxes and adjustments may contribute'),
+    row('Updates', number(apple.updates)),
+    row('Snapshot period', apple.period || '—'),
+  ].join('');
+  renderBars($('#apple-sources'), apple.proceedsBySource, 'source', 'usd', value => money(value * 100));
+  renderBars($('#apple-territories'), apple.proceedsByTerritory, 'territory', 'usd', value => money(value * 100));
+
+  $('#website-summary').innerHTML = [
+    `<div><strong>${number(website.visitors)}</strong><span>Visitors</span></div>`,
+    `<div><strong>${number(website.pageViews)}</strong><span>Page views</span></div>`,
+    `<div><strong>${website.bounceRate == null ? '—' : `${website.bounceRate}%`}</strong><span>Bounce rate</span></div>`,
+  ].join('');
+  $('#website-period').textContent = website.period || 'Last captured period';
+  renderBars($('#website-referrers'), website.referrers, 'label', 'visitors', value => `${number(value)} visitor${value === 1 ? '' : 's'}`);
+  renderBars($('#website-countries'), website.countries, 'label', 'visitors', value => `${number(value)} visitor${value === 1 ? '' : 's'}`);
+  renderBars($('#website-devices'), website.devices, 'label', 'share', value => `${number(value)}%`);
+
+  $('#release-downloads').innerHTML = downloads.releases?.length
+    ? downloads.releases.map(item => `<div><span>${escape(item.tag)}</span><strong>${number(item.downloads)}</strong><small>${escape(dateLabel(item.publishedAt))}</small></div>`).join('')
+    : '<p class="empty">GitHub data unavailable.</p>';
+
+  if (product.configured) {
+    $('#product-source').innerHTML = '<i class="dot live-dot"></i>Product usage · live';
+    $('#product-status').textContent = 'Live · opted-in only';
+    $('#product-status').classList.add('live');
+    $('#product-detail').innerHTML = `<div class="mini-metrics"><div><strong>${number(product.activeInstalls)}</strong><span>Active installs · 30 days</span></div><div><strong>${number(product.events)}</strong><span>Measured operations</span></div><div><strong>${product.successRate == null ? '—' : `${product.successRate}%`}</strong><span>Operation success</span></div></div><div class="rows">${Object.entries(product.byEvent || {}).map(([name, value]) => row(name.replaceAll('_', ' '), `${number(value.successful)} / ${number(value.total)} successful`)).join('')}</div>`;
+  } else {
+    $('#product-detail').innerHTML = '<div><h3>Not active yet</h3><p class="muted">The app-side measurement is implemented, optional, and off by default. Private storage must be connected before a new Mac and Windows build can report anonymous scan, organization, and Undo health.</p></div><span class="status">No data collected</span>';
+  }
+
+  const errors = [win.error, downloads.error, product.error].filter(Boolean);
+  $('#notice').hidden = !errors.length;
+  $('#notice').textContent = errors.join(' · ');
+}
+
+async function load() {
+  const response = await fetch('/api/owner-metrics', { credentials: 'same-origin' });
+  if (response.status === 401) {
+    $('#login').hidden = false;
+    $('#dashboard').hidden = true;
+    return;
+  }
+  if (!response.ok) throw new Error('Metrics could not be loaded.');
+  const data = await response.json();
+  $('#login').hidden = true;
+  $('#dashboard').hidden = false;
+  renderDashboard(data);
+}
+
+$('#login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  $('#login-error').textContent = '';
+  const response = await fetch('/api/owner-auth', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: $('#token').value }),
+  });
+  if (!response.ok) {
+    $('#login-error').textContent = 'That access code is not correct.';
+    return;
+  }
+  $('#token').value = '';
+  await load();
+});
+
+$('#refresh').addEventListener('click', () => load().catch(error => {
+  $('#notice').hidden = false;
+  $('#notice').textContent = error.message;
+}));
+$('#logout').addEventListener('click', async () => {
+  await fetch('/api/owner-logout', { method: 'POST' });
+  location.reload();
+});
+load().catch(error => {
+  $('#login').hidden = false;
+  $('#login-error').textContent = error.message;
+});

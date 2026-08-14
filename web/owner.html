@@ -21,20 +21,83 @@
     </section>
 
     <section id="dashboard" hidden>
-      <header><div><p class="eyebrow">FOLDIQ OWNER</p><h1>Product pulse</h1><p id="updated">Loading…</p></div><div class="actions"><button id="refresh" class="secondary">Refresh</button><button id="logout" class="secondary">Sign out</button></div></header>
+      <header>
+        <div><p class="eyebrow">FOLDIQ OWNER</p><h1>Business & product health</h1><p id="updated">Loading…</p></div>
+        <div class="actions"><button id="refresh" class="secondary">Refresh</button><button id="logout" class="secondary">Sign out</button></div>
+      </header>
       <div id="notice" class="notice" hidden></div>
-      <div class="cards">
-        <article><span>External Windows customers</span><strong id="win-customers">—</strong><small id="win-sales">Stripe</small></article>
-        <article><span>Mac first-time downloads</span><strong id="mac-downloads">—</strong><small id="mac-sales">App Store Connect</small></article>
-        <article><span>Current Windows installer</span><strong id="exe-downloads">—</strong><small id="exe-version">GitHub Releases</small></article>
-        <article><span>Active opted-in installs</span><strong id="active-installs">—</strong><small>Last 30 days</small></article>
+
+      <div class="source-strip" aria-label="Data source status">
+        <span><i class="dot live-dot"></i>Stripe · live</span>
+        <span><i class="dot live-dot"></i>GitHub · live</span>
+        <span><i class="dot snapshot-dot"></i>Apple · snapshot</span>
+        <span><i class="dot snapshot-dot"></i>Vercel · snapshot</span>
+        <span id="product-source"><i class="dot setup-dot"></i>Product usage · setup</span>
       </div>
-      <div class="grid">
-        <article class="panel"><div class="panel-title"><div><p class="eyebrow">REVENUE</p><h2>Sales</h2></div><span class="status live">Live</span></div><div id="sales-detail" class="rows"></div></article>
-        <article class="panel"><div class="panel-title"><div><p class="eyebrow">PRODUCT</p><h2>Reliability</h2></div><span id="product-status" class="status">Setup</span></div><div id="product-detail" class="rows"></div></article>
-        <article class="panel"><div class="panel-title"><div><p class="eyebrow">DISTRIBUTION</p><h2>Windows downloads</h2></div><span class="status live">Live</span></div><div id="download-detail" class="rows"></div></article>
-        <article class="panel"><div class="panel-title"><div><p class="eyebrow">ACQUISITION</p><h2>Website traffic</h2></div><span class="status live">Live</span></div><p class="muted">Vercel measures visitors without advertising cookies. Its live view remains the source of truth.</p><a class="button-link" href="https://vercel.com/mystodevs-projects/foldiq/analytics" target="_blank" rel="noopener">Open Vercel Analytics ↗</a></article>
-      </div>
+
+      <section class="section-block">
+        <div class="section-heading"><div><p class="eyebrow">OVERVIEW</p><h2>What matters now</h2></div><p>Each card shows its own period and source.</p></div>
+        <div class="cards hero-cards">
+          <article><span>External Windows customers</span><strong id="win-customers">—</strong><small id="win-sales">Stripe · live</small></article>
+          <article><span>External Windows net</span><strong id="win-net">—</strong><small id="win-net-note">After Stripe fees</small></article>
+          <article><span>Apple first-time downloads</span><strong id="mac-downloads">—</strong><small id="mac-sales">App Store Connect snapshot</small></article>
+          <article><span>Apple store conversion</span><strong id="apple-conversion">—</strong><small id="apple-period">Snapshot period</small></article>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-heading"><div><p class="eyebrow">WINDOWS · STRIPE</p><h2>Sales performance</h2></div><span class="status live">Live</span></div>
+        <div class="grid sales-grid">
+          <article class="panel"><h3>Financial summary</h3><div id="windows-finance" class="rows"></div></article>
+          <article class="panel"><h3>Customer movement</h3><div id="windows-movement" class="rows"></div></article>
+          <article class="panel span-2"><div class="panel-title"><h3>External purchases over time</h3><span class="caption">No customer identities</span></div><div id="sales-chart" class="bar-chart"></div></article>
+          <article class="panel"><h3>Customer countries</h3><div id="windows-countries" class="rank-list"></div></article>
+          <article class="panel"><h3>Recent external purchases</h3><div class="table-wrap"><table><thead><tr><th>Date</th><th>Country</th><th>Gross</th><th>Net</th><th>Downloads</th></tr></thead><tbody id="recent-purchases"></tbody></table></div></article>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-heading"><div><p class="eyebrow">WINDOWS · FULFILLMENT</p><h2>Purchase → download → use</h2></div><span class="status live">Live from tracking start</span></div>
+        <article class="panel">
+          <div id="windows-funnel" class="funnel"></div>
+          <p id="tracking-note" class="footnote"></p>
+        </article>
+      </section>
+
+      <section class="section-block">
+        <div class="section-heading"><div><p class="eyebrow">APPLE STORE</p><h2>Discovery, downloads & revenue</h2></div><span class="status snapshot">Audited snapshot</span></div>
+        <div class="grid">
+          <article class="panel"><h3>Store funnel</h3><div id="apple-funnel" class="rows"></div></article>
+          <article class="panel"><h3>Commerce & usage</h3><div id="apple-commerce" class="rows"></div></article>
+          <article class="panel"><h3>Proceeds by source</h3><div id="apple-sources" class="rank-list"></div></article>
+          <article class="panel"><h3>Proceeds by territory</h3><div id="apple-territories" class="rank-list"></div></article>
+        </div>
+        <p class="footnote">Apple usage metrics can be absent at this volume because Apple applies opt-in and privacy thresholds.</p>
+      </section>
+
+      <section class="section-block">
+        <div class="section-heading"><div><p class="eyebrow">ACQUISITION</p><h2>Website traffic</h2></div><span class="status snapshot">Manual snapshot</span></div>
+        <div class="grid traffic-grid">
+          <article class="panel"><div class="panel-title"><h3>Last captured period</h3><span id="website-period" class="caption"></span></div><div id="website-summary" class="mini-metrics"></div><a class="button-link" href="https://vercel.com/mystodevs-projects/foldiq/analytics" target="_blank" rel="noopener">Open current Vercel Analytics ↗</a></article>
+          <article class="panel"><h3>How visitors arrived</h3><div id="website-referrers" class="rank-list"></div></article>
+          <article class="panel"><h3>Visitor countries</h3><div id="website-countries" class="rank-list"></div></article>
+          <article class="panel"><h3>Device share</h3><div id="website-devices" class="rank-list"></div></article>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-heading"><div><p class="eyebrow">DISTRIBUTION DIAGNOSTIC</p><h2>GitHub installer requests</h2></div><span class="status live">Live · not unique</span></div>
+        <article class="panel">
+          <p class="muted compact-copy">Useful for release diagnostics, not customer counts. Requests can include your tests, repeats, and incomplete downloads.</p>
+          <div id="release-downloads" class="release-grid"></div>
+        </article>
+      </section>
+
+      <section class="section-block" id="product-section">
+        <div class="section-heading"><div><p class="eyebrow">PRODUCT QUALITY</p><h2>Anonymous operational health</h2></div><span id="product-status" class="status">Setup</span></div>
+        <article class="panel setup-panel" id="product-detail"></article>
+      </section>
+
       <footer>No customer identities, filenames, paths, photo metadata, or media content appear here.</footer>
     </section>
   </main>

@@ -18,4 +18,27 @@ test('anonymous event rejects unknown event types and identifiers',()=>{assert.e
 test('telemetry endpoint forwards only normalized data with the server secret',async()=>{let request;const handler=createTelemetryHandler({fetchImpl:async(url,options)=>{request={url,options};return{ok:true,status:201}}});const res=response();await handler({method:'POST',headers:{'content-length':'400'},body:validEvent},res);assert.equal(res.statusCode,202);assert.equal(request.options.headers.apikey,'sb_secret_test');assert.equal(request.options.headers.Authorization,undefined);assert.equal(JSON.parse(request.options.body).event_name,'scan_completed')});
 test('owner metrics require private authentication',async()=>{const handler=createOwnerMetricsHandler({stripeClient:{paymentIntents:{list:async()=>({data:[],has_more:false})}},fetchImpl:async()=>({ok:true,json:async()=>[]})});const res=response();await handler({method:'GET',headers:{}},res);assert.equal(res.statusCode,401)});
 
-test('owner metrics count all succeeded Stripe payments and exclude owner tests',async()=>{const stripeClient={paymentIntents:{list:async()=>({has_more:false,data:[{id:'pi_1',status:'succeeded',amount_received:499,currency:'usd',receipt_email:'buyer@example.com',metadata:{foldiq_download_count:'2'}},{id:'pi_2',status:'succeeded',amount_received:499,currency:'usd',receipt_email:'enrique.padron853@gmail.com',metadata:{foldiq_download_count:'1'}},{id:'pi_3',status:'requires_payment_method',amount:499,currency:'usd',metadata:{}}]})}};const fetchImpl=async url=>url.includes('github')?{ok:true,json:async()=>[]}:{ok:true,json:async()=>[]};const handler=createOwnerMetricsHandler({stripeClient,fetchImpl});const res=response();await handler({method:'GET',headers:{authorization:'Bearer correct-horse-battery-staple'}},res);assert.equal(res.statusCode,200);assert.equal(res.body.windows.purchases,2);assert.equal(res.body.windows.externalCustomers,1);assert.equal(res.body.windows.externalGrossCents,499);assert.equal(res.body.windows.externalBuyerDownloads,1);assert.equal(res.body.windows.trackedDownloadRequests,3)});
+test('owner metrics calculate detailed external sales without exposing buyer identities',async()=>{
+  const created=Math.floor(Date.parse('2026-08-14T04:00:00Z')/1000);
+  const stripeClient={paymentIntents:{list:async()=>({has_more:false,data:[
+    {id:'pi_1',created,status:'succeeded',amount_received:499,currency:'usd',receipt_email:'buyer@example.com',metadata:{foldiq_download_count:'2'},latest_charge:{billing_details:{email:'buyer@example.com',address:{country:'US'}},balance_transaction:{fee:44,net:455},amount_refunded:0}},
+    {id:'pi_2',created,status:'succeeded',amount_received:499,currency:'usd',receipt_email:'enrique.padron853@gmail.com',metadata:{foldiq_download_count:'1'},latest_charge:{billing_details:{email:'enrique.padron853@gmail.com',address:{country:'US'}},balance_transaction:{fee:44,net:455},amount_refunded:0}},
+    {id:'pi_3',created,status:'requires_payment_method',amount:499,currency:'usd',metadata:{}},
+  ]})}};
+  const fetchImpl=async()=>({ok:true,json:async()=>[]});
+  const handler=createOwnerMetricsHandler({stripeClient,fetchImpl});
+  const res=response();
+  await handler({method:'GET',headers:{authorization:'Bearer correct-horse-battery-staple'}},res);
+  assert.equal(res.statusCode,200);
+  assert.equal(res.body.windows.purchases,2);
+  assert.equal(res.body.windows.externalCustomers,1);
+  assert.equal(res.body.windows.externalGrossCents,499);
+  assert.equal(res.body.windows.externalFeesCents,44);
+  assert.equal(res.body.windows.externalNetCents,455);
+  assert.equal(res.body.windows.externalBuyerDownloads,1);
+  assert.equal(res.body.windows.trackedDownloadRequests,3);
+  assert.deepEqual(res.body.windows.countries,[{country:'US',customers:1}]);
+  assert.equal(res.body.windows.daily[0].purchases,1);
+  assert.equal(res.body.windows.recentPurchases[0].country,'US');
+  assert.equal(JSON.stringify(res.body).includes('buyer@example.com'),false);
+});

@@ -5,6 +5,16 @@ import { aggregateTelemetry } from '../lib/telemetry.js';
 const REPOSITORY = 'MystoganzTv/Foldiq';
 const OWNER_EMAILS = new Set((process.env.OWNER_EMAILS || 'enrique.padron853@gmail.com,enriquespangberg@gmail.com')
   .split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
+const DOWNLOAD_TRACKING_STARTED_AT = '2026-08-14T00:00:00.000Z';
+
+function utcDay(unixSeconds) {
+  return new Date(unixSeconds * 1000).toISOString().slice(0, 10);
+}
+
+function paymentEmail(item) {
+  const charge = typeof item.latest_charge === 'object' ? item.latest_charge : null;
+  return String(item.receipt_email || charge?.billing_details?.email || '').toLowerCase();
+}
 
 async function stripeMetrics(stripe) {
   const payments = [];
@@ -13,29 +23,84 @@ async function stripeMetrics(stripe) {
     const page = await stripe.paymentIntents.list({
       limit: 100,
       ...(startingAfter ? { starting_after: startingAfter } : {}),
-      expand: ['data.latest_charge'],
+      expand: ['data.latest_charge.balance_transaction'],
     });
     payments.push(...page.data.filter(item => item.status === 'succeeded'));
     startingAfter = page.has_more ? page.data.at(-1)?.id : undefined;
   } while (startingAfter && payments.length < 1000);
   const paid = payments.filter(item => !item.metadata?.platform || item.metadata.platform === 'windows');
-  const external = paid.filter(item => {
-    const charge = typeof item.latest_charge === 'object' ? item.latest_charge : null;
-    const email = item.receipt_email || charge?.billing_details?.email || '';
-    return !OWNER_EMAILS.has(String(email).toLowerCase());
-  });
+  const external = paid.filter(item => !OWNER_EMAILS.has(paymentEmail(item)));
   const downloaded = paid.filter(item => Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
   const externalDownloaded = external.filter(item => Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const external7d = external.filter(item => item.created >= nowSeconds - 7 * 86400);
+  const external30d = external.filter(item => item.created >= nowSeconds - 30 * 86400);
+  const trackingStartSeconds = Date.parse(DOWNLOAD_TRACKING_STARTED_AT) / 1000;
+  const trackingEligible = external.filter(item => item.created >= trackingStartSeconds);
+  const dailyMap = new Map();
+  const countryMap = new Map();
+  let externalFeesCents = 0;
+  let externalNetCents = 0;
+  let hasNetData = true;
+  let refundedCents = 0;
+  let refundedPurchases = 0;
+  for (const item of external) {
+    const charge = typeof item.latest_charge === 'object' ? item.latest_charge : null;
+    const balance = charge && typeof charge.balance_transaction === 'object' ? charge.balance_transaction : null;
+    const amount = item.amount_received || item.amount || 0;
+    const day = utcDay(item.created);
+    const daily = dailyMap.get(day) || { date: day, purchases: 0, grossCents: 0, netCents: 0 };
+    daily.purchases += 1;
+    daily.grossCents += amount;
+    if (balance) {
+      daily.netCents += balance.net || 0;
+      externalFeesCents += balance.fee || 0;
+      externalNetCents += balance.net || 0;
+    } else {
+      hasNetData = false;
+    }
+    dailyMap.set(day, daily);
+    const country = charge?.billing_details?.address?.country || 'Unknown';
+    countryMap.set(country, (countryMap.get(country) || 0) + 1);
+    if ((charge?.amount_refunded || 0) > 0) {
+      refundedPurchases += 1;
+      refundedCents += charge.amount_refunded;
+    }
+  }
+  const recentPurchases = external.slice(0, 10).map(item => {
+    const charge = typeof item.latest_charge === 'object' ? item.latest_charge : null;
+    const balance = charge && typeof charge.balance_transaction === 'object' ? charge.balance_transaction : null;
+    return {
+      date: new Date(item.created * 1000).toISOString(),
+      country: charge?.billing_details?.address?.country || 'Unknown',
+      grossCents: item.amount_received || item.amount || 0,
+      netCents: balance?.net ?? null,
+      downloadCount: Number.parseInt(item.metadata?.foldiq_download_count, 10) || 0,
+    };
+  });
   return {
     configured: true,
     purchases: paid.length,
     externalCustomers: external.length,
     grossCents: paid.reduce((sum, item) => sum + (item.amount_received || item.amount || 0), 0),
     externalGrossCents: external.reduce((sum, item) => sum + (item.amount_received || item.amount || 0), 0),
+    externalFeesCents: hasNetData ? externalFeesCents : null,
+    externalNetCents: hasNetData ? externalNetCents : null,
+    externalCustomers7d: external7d.length,
+    externalCustomers30d: external30d.length,
+    refundedPurchases,
+    refundedCents,
     buyerDownloads: downloaded.length,
     externalBuyerDownloads: externalDownloaded.length,
     trackedDownloadRequests: downloaded.reduce((sum, item) => sum + (Number.parseInt(item.metadata?.foldiq_download_count, 10) || 0), 0),
-    downloadTrackingSince: '2026-08-14T00:00:00.000Z',
+    trackingEligibleCustomers: trackingEligible.length,
+    downloadConversionRate: trackingEligible.length
+      ? Math.round((externalDownloaded.filter(item => item.created >= trackingStartSeconds).length / trackingEligible.length) * 1000) / 10
+      : null,
+    downloadTrackingSince: DOWNLOAD_TRACKING_STARTED_AT,
+    daily: [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    countries: [...countryMap.entries()].map(([country, customers]) => ({ country, customers })).sort((a, b) => b.customers - a.customers),
+    recentPurchases,
     currency: paid[0]?.currency || 'usd',
   };
 }
@@ -95,9 +160,45 @@ export function createOwnerMetricsHandler({ stripeClient, fetchImpl = globalThis
       product: pick(2, 'Product metrics'),
       apple: {
         configured: false,
-        auditedSnapshot: { period: 'May 15–Aug 12, 2026', downloads: 6, redownloads: 1, updates: 3, impressions: 274, pageViews: 40, conversionRate: 3.98, salesUSD: 36, proceedsUSD: 23 },
+        auditedSnapshot: {
+          period: 'May 15–Aug 12, 2026',
+          capturedAt: '2026-08-13T04:00:00.000Z',
+          downloads: 6,
+          redownloads: 1,
+          updates: 3,
+          impressions: 274,
+          pageViews: 40,
+          conversionRate: 3.98,
+          salesUSD: 36,
+          proceedsUSD: 23,
+          proceedsBySource: [
+            { source: 'App Store Browse', usd: 11 },
+            { source: 'App Store Search', usd: 4 },
+            { source: 'App Referrer', usd: 4 },
+            { source: 'Web Referrer', usd: 4 },
+          ],
+          proceedsByTerritory: [
+            { territory: 'United States', usd: 7 },
+            { territory: 'France', usd: 4 },
+            { territory: 'Germany', usd: 4 },
+            { territory: 'United Kingdom', usd: 4 },
+          ],
+        },
       },
-      website: { configured: true, provider: 'Vercel Web Analytics', note: 'Open Vercel for live cookie-free visitors and page views.' },
+      website: {
+        configured: true,
+        provider: 'Vercel Web Analytics',
+        snapshot: {
+          period: 'Aug 6–12, 2026',
+          visitors: 3,
+          pageViews: 6,
+          bounceRate: 67,
+          referrers: [{ label: 'chatgpt.com', visitors: 1 }, { label: 'vercel.com', visitors: 1 }],
+          countries: [{ label: 'India', visitors: 1 }, { label: 'Saudi Arabia', visitors: 1 }, { label: 'United States', visitors: 1 }],
+          devices: [{ label: 'Desktop', share: 67 }, { label: 'Mobile', share: 33 }],
+        },
+        note: 'Vercel dashboard is the source of truth for current cookie-free visitors and page views.',
+      },
     });
   };
 }

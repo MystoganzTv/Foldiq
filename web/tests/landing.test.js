@@ -7,6 +7,7 @@ const privacy = await readFile(new URL('../privacy-policy.html', import.meta.url
 const analytics = await readFile(new URL('../analytics.js', import.meta.url), 'utf8');
 const contact = await readFile(new URL('../contact.html', import.meta.url), 'utf8');
 const success = await readFile(new URL('../success.html', import.meta.url), 'utf8');
+const owner = await readFile(new URL('../owner.html', import.meta.url), 'utf8');
 const trackedPages = await Promise.all([
   'index.html',
   'contact.html',
@@ -74,4 +75,14 @@ test('support form works without a local email client and strips diagnostic frag
 test('purchase success support link does not require a local email app', () => {
   assert.match(success, /href="\/contact\.html"/);
   assert.doesNotMatch(success, /mailto:support@foldiq\.app/);
+});
+
+test('owner dashboard distinguishes business KPIs from diagnostics and snapshots', () => {
+  assert.match(owner, /Stripe · live/);
+  assert.match(owner, /Apple · snapshot/);
+  assert.match(owner, /Vercel · snapshot/);
+  assert.match(owner, /GitHub installer requests/);
+  assert.match(owner, /Live · not unique/);
+  assert.doesNotMatch(owner, /Active opted-in installs[\s\S]*>Off</);
+  assert.match(owner, /No customer identities, filenames, paths, photo metadata, or media content/);
 });
