@@ -52,15 +52,18 @@ function renderDashboard(data) {
   const downloads = data.downloads || {};
   const product = data.product || {};
   const website = data.website?.snapshot || {};
+  const windowsPurchases = win.externalPurchases ?? win.externalCustomers ?? 0;
+  const macPaidDownloads = apple.downloads ?? 0;
+  const combinedGrossCents = (win.externalGrossCents ?? 0) + (apple.salesUSD ?? 0) * 100;
+  const combinedNetCents = win.externalNetCents == null ? null : win.externalNetCents + (apple.proceedsUSD ?? 0) * 100;
 
   $('#updated').textContent = `Refreshed ${new Date(data.generatedAt).toLocaleString()} · Stripe and GitHub are live`;
 
-  $('#win-customers').textContent = win.externalCustomers ?? '—';
-  $('#win-sales').textContent = `${money(win.externalGrossCents)} gross · all time`;
-  $('#win-net').textContent = win.externalNetCents == null ? 'Pending' : money(win.externalNetCents);
-  $('#win-net-note').textContent = win.externalNetCents == null ? 'Stripe fee detail unavailable' : `${money(win.externalFeesCents)} in Stripe fees`;
-  $('#mac-downloads').textContent = apple.downloads ?? '—';
-  $('#mac-sales').textContent = `${money((apple.salesUSD || 0) * 100)} sales · ${apple.period || 'snapshot'}`;
+  $('#paid-acquisitions').textContent = number(windowsPurchases + macPaidDownloads);
+  $('#paid-acquisitions-note').textContent = `${number(windowsPurchases)} Windows purchases + ${number(macPaidDownloads)} paid Mac downloads`;
+  $('#combined-gross').textContent = money(combinedGrossCents);
+  $('#combined-net').textContent = combinedNetCents == null ? 'Pending' : money(combinedNetCents);
+  $('#combined-net-note').textContent = combinedNetCents == null ? 'Stripe fee detail unavailable' : `${money(win.externalNetCents)} Windows + ${money((apple.proceedsUSD ?? 0) * 100)} Apple`;
   $('#apple-conversion').textContent = apple.conversionRate == null ? '—' : `${apple.conversionRate}%`;
   $('#apple-period').textContent = `${number(apple.pageViews)} page views · ${apple.period || 'snapshot'}`;
   $('#apple-status').textContent = apple.capturedAt ? `Captured ${dateLabel(apple.capturedAt)}` : 'Audited snapshot';
@@ -74,15 +77,15 @@ function renderDashboard(data) {
   ].join('');
 
   $('#windows-movement').innerHTML = [
-    row('External customers · all time', number(win.externalCustomers)),
-    row('New customers · last 30 days', number(win.externalCustomers30d)),
-    row('New customers · last 7 days', number(win.externalCustomers7d)),
+    row('Paid Windows purchases · all time', number(windowsPurchases)),
+    row('New purchases · last 30 days', number(win.externalCustomers30d)),
+    row('New purchases · last 7 days', number(win.externalCustomers7d)),
     row('Verified buyer downloads', number(win.externalBuyerDownloads), 'tracked from Aug 14'),
     row('Purchase → download', win.downloadConversionRate == null ? 'Not enough data' : `${win.downloadConversionRate}%`, `${number(win.trackingEligibleCustomers)} eligible purchases`),
   ].join('');
 
   renderSalesChart(win.daily);
-  renderBars($('#windows-countries'), (win.countries || []).map(item => ({ ...item, country: countryName(item.country) })), 'country', 'customers', value => `${number(value)} customer${value === 1 ? '' : 's'}`);
+  renderBars($('#windows-countries'), (win.countries || []).map(item => ({ ...item, country: countryName(item.country) })), 'country', 'customers', value => `${number(value)} purchase${value === 1 ? '' : 's'}`);
   $('#recent-purchases').innerHTML = win.recentPurchases?.length
     ? win.recentPurchases.map(item => `<tr><td>${escape(dateLabel(item.date))}</td><td>${escape(countryName(item.country))}</td><td>${escape(money(item.grossCents))}</td><td>${escape(money(item.netCents))}</td><td>${number(item.downloadCount)}</td></tr>`).join('')
     : '<tr><td colspan="5" class="empty">No purchase data.</td></tr>';
@@ -134,7 +137,8 @@ function renderDashboard(data) {
     $('#product-status').classList.add('live');
     $('#product-detail').innerHTML = `<div class="mini-metrics"><div><strong>${number(product.activeInstalls)}</strong><span>Active installs · 30 days</span></div><div><strong>${number(product.events)}</strong><span>Measured operations</span></div><div><strong>${product.successRate == null ? '—' : `${product.successRate}%`}</strong><span>Operation success</span></div></div><div class="rows">${Object.entries(product.byEvent || {}).map(([name, value]) => row(name.replaceAll('_', ' '), `${number(value.successful)} / ${number(value.total)} successful`)).join('')}</div>`;
   } else {
-    $('#product-detail').innerHTML = '<div><h3>Not active yet</h3><p class="muted">The app-side measurement is implemented, optional, and off by default. Private storage must be connected before a new Mac and Windows build can report anonymous scan, organization, and Undo health.</p></div><span class="status">No data collected</span>';
+    $('#product-status').textContent = 'Not connected';
+    $('#product-detail').innerHTML = '<div><h3>Worth enabling when we ship the next builds</h3><p class="muted">This would show whether scanning, organization, and Undo succeed; broad duration and item-count ranges; app version; platform; and active opted-in installs. It never includes photos, filenames, paths, dates, locations, or media metadata. To activate it, we connect a private Supabase table to the existing Foldiq API, verify retention and security, then release Mac and Windows builds. Data appears only for users who explicitly opt in.</p></div><span class="status">No data collected</span>';
   }
 
   const errors = [win.error, downloads.error, product.error].filter(Boolean);

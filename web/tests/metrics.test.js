@@ -32,6 +32,7 @@ test('owner metrics calculate detailed external sales without exposing buyer ide
   assert.equal(res.statusCode,200);
   assert.equal(res.body.windows.purchases,2);
   assert.equal(res.body.windows.externalCustomers,1);
+  assert.equal(res.body.windows.externalPurchases,1);
   assert.equal(res.body.windows.externalGrossCents,499);
   assert.equal(res.body.windows.externalFeesCents,44);
   assert.equal(res.body.windows.externalNetCents,455);

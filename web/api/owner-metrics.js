@@ -81,6 +81,7 @@ async function stripeMetrics(stripe) {
   return {
     configured: true,
     purchases: paid.length,
+    externalPurchases: external.length,
     externalCustomers: external.length,
     grossCents: paid.reduce((sum, item) => sum + (item.amount_received || item.amount || 0), 0),
     externalGrossCents: external.reduce((sum, item) => sum + (item.amount_received || item.amount || 0), 0),
