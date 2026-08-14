@@ -91,8 +91,10 @@ test('owner dashboard distinguishes business KPIs from diagnostics and snapshots
   assert.match(owner, /GitHub installer requests/);
   assert.match(owner, /Live · not unique/);
   assert.match(owner, /Purchases and downloads, kept separate/);
-  assert.match(owner, /Estimated payout after platform deductions/);
-  assert.match(owner, /This is not after your business or personal income taxes/);
+  assert.match(owner, /Where the money is now/);
+  assert.match(owner, /Confirmed external bank deposits/);
+  assert.match(owner, /intentionally not added together/);
+  assert.doesNotMatch(owner, /combined-payout|Estimated platform payout|Apple estimate \+ Stripe net/);
   assert.match(owner, /discovery categories, not affiliate payments/);
   assert.doesNotMatch(owner, /Paid platform acquisitions/);
   assert.doesNotMatch(owner, /Combined gross sales/);

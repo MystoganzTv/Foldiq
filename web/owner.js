@@ -58,9 +58,6 @@ function renderDashboard(data) {
   const legacyDirectMacPurchases = win.legacyDirectMacPurchases ?? 0;
   const stripePayoutCents = win.externalNetCents;
   const applePayoutCents = apple.proceedsUSD == null ? null : Math.round(apple.proceedsUSD * 100);
-  const combinedPayoutCents = stripePayoutCents == null || applePayoutCents == null
-    ? null
-    : stripePayoutCents + applePayoutCents;
 
   $('#updated').textContent = `Refreshed ${new Date(data.generatedAt).toLocaleString()} · Stripe and GitHub are live${appleState.live ? ' · Apple is live' : ''}`;
 
@@ -70,7 +67,6 @@ function renderDashboard(data) {
   $('#mac-downloads').textContent = number(apple.downloads);
   $('#apple-conversion').textContent = apple.conversionRate == null ? '—' : `${apple.conversionRate}%`;
   $('#apple-period').textContent = `${number(apple.pageViews)} page views · ${apple.period || 'snapshot'}`;
-  $('#combined-payout').textContent = money(combinedPayoutCents);
   $('#apple-payout').textContent = money(applePayoutCents);
   $('#stripe-payout').textContent = money(stripePayoutCents);
   $('#windows-tax').textContent = money(win.customerTaxCollectedCents ?? 0);
