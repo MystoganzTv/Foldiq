@@ -63,6 +63,7 @@ function renderDashboard(data) {
   $('#mac-sales').textContent = `${money((apple.salesUSD || 0) * 100)} sales · ${apple.period || 'snapshot'}`;
   $('#apple-conversion').textContent = apple.conversionRate == null ? '—' : `${apple.conversionRate}%`;
   $('#apple-period').textContent = `${number(apple.pageViews)} page views · ${apple.period || 'snapshot'}`;
+  $('#apple-status').textContent = apple.capturedAt ? `Captured ${dateLabel(apple.capturedAt)}` : 'Audited snapshot';
 
   $('#windows-finance').innerHTML = [
     row('External gross sales', money(win.externalGrossCents)),
