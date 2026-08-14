@@ -1,6 +1,41 @@
 # Foldiq — Session handoff
 
-Updated: 2026-08-13 16:07 America/New_York
+Updated: 2026-08-14 01:18 America/New_York
+
+Private metrics infrastructure was completed and deployed on 2026-08-14. A
+dedicated free Neon Postgres database named `foldiq-metrics` is connected only
+to the Foldiq Vercel project. It stores an allowlisted anonymous product-event
+schema and aggregate Apple Analytics report rows; no photos, filenames, paths,
+capture dates, coordinates, customer identities, or media metadata are stored.
+Product events are opt-in, disabled by default in both apps, and removed after
+90 days by the daily maintenance job.
+
+App Store Connect now has an ongoing Analytics Reports request and one active
+least-privilege team key named `Foldiq Analytics Daily` with Sales and Reports
+access. The temporary Admin key used to create the request was revoked and its
+private key file was deleted. Vercel runs `/api/apple-metrics-sync` daily at
+08:23 UTC using `CRON_SECRET`; a manual production invocation returned HTTP 200.
+Apple exposed all six selected report families (downloads, purchases, discovery,
+crashes, installations/deletions, and sessions), but had not yet published the
+first daily report instance immediately after setup. Apple can take 24–48 hours
+to publish the initial data. Production deployment `dpl_GpUc8N7gqhRFcEpkNHGJ8XtQWb6w`
+is Ready and aliased to `https://foldiq.app`. The complete web suite passes 37/37.
+
+Windows 1.0.18 was rebuilt after the metrics backend became live. The mandatory
+packaged-runtime verifier passed, all 66 runnable Windows tests passed (the one
+Windows-only RAR test is skipped on macOS), and a controlled production
+telemetry event was accepted, verified in Postgres, then deleted. The final
+installer is `/Users/enrique/Desktop/Foldiq Setup 1.0.18.exe`, SHA-256
+`fa9abd80f59534fc382eaad41c483d125fd177f2e53547986097896a765b60a6`.
+GitHub release `v1.0.18-windows` is public with the required physical asset name
+`Foldiq-Setup.exe`; a fresh remote download matched that SHA-256. Do not contact
+the six prior purchasers; updates remain self-service as instructed.
+
+The current macOS source contains the same disabled-by-default metrics option
+and passes all 34 macOS tests. App Store build 157 already under review does not
+contain the later metrics commit. Do not cancel or replace that review solely
+for telemetry; include it in the next normal Mac binary after 1.0.18 unless the
+owner explicitly decides otherwise.
 
 App Review submission completed 2026-08-13: the macOS 1.0.18 version record was
 created, Xcode Cloud build 157 was selected, customer-facing What's New text and
