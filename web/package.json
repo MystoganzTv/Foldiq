@@ -7,6 +7,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "resend": "^6.19.0",
     "stripe": "^14.0.0"
   }

@@ -48,6 +48,7 @@ function funnelStep(label, value, note, state = '') {
 
 function renderDashboard(data) {
   const win = data.windows || {};
+  const appleState = data.apple || {};
   const apple = data.apple?.auditedSnapshot || {};
   const downloads = data.downloads || {};
   const product = data.product || {};
@@ -56,7 +57,7 @@ function renderDashboard(data) {
   const verifiedWindowsPurchases = win.verifiedWindowsPurchases ?? 0;
   const legacyDirectMacPurchases = win.legacyDirectMacPurchases ?? 0;
 
-  $('#updated').textContent = `Refreshed ${new Date(data.generatedAt).toLocaleString()} · Stripe and GitHub are live`;
+  $('#updated').textContent = `Refreshed ${new Date(data.generatedAt).toLocaleString()} · Stripe and GitHub are live${appleState.live ? ' · Apple is live' : ''}`;
 
   $('#direct-purchases').textContent = number(windowsPurchases);
   $('#direct-purchases-note').textContent = `${number(legacyDirectMacPurchases)} legacy Mac + ${number(verifiedWindowsPurchases)} Windows`;
@@ -64,7 +65,17 @@ function renderDashboard(data) {
   $('#mac-downloads').textContent = number(apple.downloads);
   $('#apple-conversion').textContent = apple.conversionRate == null ? '—' : `${apple.conversionRate}%`;
   $('#apple-period').textContent = `${number(apple.pageViews)} page views · ${apple.period || 'snapshot'}`;
-  $('#apple-status').textContent = apple.capturedAt ? `Captured ${dateLabel(apple.capturedAt)}` : 'Audited snapshot';
+  if (appleState.live) {
+    $('#apple-source').innerHTML = '<i class="dot live-dot"></i>Apple · live';
+    $('#apple-status').textContent = apple.capturedAt ? `Live · processed ${dateLabel(apple.capturedAt)}` : 'Live';
+    $('#apple-status').classList.remove('snapshot');
+    $('#apple-status').classList.add('live');
+  } else if (appleState.awaitingData) {
+    $('#apple-source').innerHTML = '<i class="dot setup-dot"></i>Apple · awaiting first report';
+    $('#apple-status').textContent = 'Connected · awaiting Apple data';
+  } else {
+    $('#apple-status').textContent = apple.capturedAt ? `Captured ${dateLabel(apple.capturedAt)}` : 'Audited snapshot';
+  }
 
   $('#windows-finance').innerHTML = [
     row('Direct gross sales', money(win.externalGrossCents)),
@@ -108,11 +119,19 @@ function renderDashboard(data) {
     row('Redownloads', number(apple.redownloads)),
   ].join('');
   $('#apple-commerce').innerHTML = [
+    ...(apple.purchases == null ? [] : [row('App purchases reported', number(apple.purchases), 'Refunds may appear as negative values')]),
     row('Sales value shown by Apple', money((apple.salesUSD || 0) * 100), 'Not a buyer count'),
     row('Proceeds shown by Apple', money((apple.proceedsUSD || 0) * 100)),
     row('Difference: sales vs. proceeds', money(((apple.salesUSD || 0) - (apple.proceedsUSD || 0)) * 100), 'Apple commission, taxes and adjustments may contribute'),
     row('Updates', number(apple.updates)),
     row('Snapshot period', apple.period || '—'),
+  ].join('');
+  $('#apple-usage').innerHTML = [
+    row('Sessions', apple.sessions == null ? 'Awaiting live reports' : number(apple.sessions), 'Apple opt-in and privacy thresholds apply'),
+    row('Average session duration', apple.averageSessionSeconds == null ? '—' : `${number(apple.averageSessionSeconds)} sec`),
+    row('Crashes', apple.crashes == null ? '—' : number(apple.crashes)),
+    row('Installations', apple.installs == null ? '—' : number(apple.installs)),
+    row('Deletions', apple.deletions == null ? '—' : number(apple.deletions)),
   ].join('');
   renderBars($('#apple-sources'), apple.proceedsBySource, 'source', 'usd', value => money(value * 100));
   renderBars($('#apple-territories'), apple.proceedsByTerritory, 'territory', 'usd', value => money(value * 100));
@@ -138,10 +157,10 @@ function renderDashboard(data) {
     $('#product-detail').innerHTML = `<div class="mini-metrics"><div><strong>${number(product.activeInstalls)}</strong><span>Active installs · 30 days</span></div><div><strong>${number(product.events)}</strong><span>Measured operations</span></div><div><strong>${product.successRate == null ? '—' : `${product.successRate}%`}</strong><span>Operation success</span></div></div><div class="rows">${Object.entries(product.byEvent || {}).map(([name, value]) => row(name.replaceAll('_', ' '), `${number(value.successful)} / ${number(value.total)} successful`)).join('')}</div>`;
   } else {
     $('#product-status').textContent = 'Not connected';
-    $('#product-detail').innerHTML = '<div><h3>Worth enabling when we ship the next builds</h3><p class="muted">This would show whether scanning, organization, and Undo succeed; broad duration and item-count ranges; app version; platform; and active opted-in installs. It never includes photos, filenames, paths, dates, locations, or media metadata. To activate it, we connect a private Supabase table to the existing Foldiq API, verify retention and security, then release Mac and Windows builds. Data appears only for users who explicitly opt in.</p></div><span class="status">No data collected</span>';
+    $('#product-detail').innerHTML = '<div><h3>Worth enabling when we ship the next builds</h3><p class="muted">This would show whether scanning, organization, and Undo succeed; broad duration and item-count ranges; app version; platform; and active opted-in installs. It never includes photos, filenames, paths, dates, locations, or media metadata. To activate it, we connect the private Foldiq metrics database, verify retention and security, then release Mac and Windows builds. Data appears only for users who explicitly opt in.</p></div><span class="status">No data collected</span>';
   }
 
-  const errors = [win.error, downloads.error, product.error].filter(Boolean);
+  const errors = [win.error, downloads.error, product.error, appleState.error].filter(Boolean);
   $('#notice').hidden = !errors.length;
   $('#notice').textContent = errors.join(' · ');
 }

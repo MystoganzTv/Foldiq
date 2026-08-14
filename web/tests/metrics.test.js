@@ -3,8 +3,7 @@ import test from 'node:test';
 
 process.env.OWNER_DASHBOARD_TOKEN = 'correct-horse-battery-staple';
 process.env.TELEMETRY_HASH_SALT = 'test-salt-never-production';
-process.env.SUPABASE_URL = 'https://example.supabase.co';
-process.env.SUPABASE_SECRET_KEY = 'sb_secret_test';
+process.env.DATABASE_URL = 'postgresql://test.invalid/foldiq';
 
 const { normalizeTelemetry } = await import('../lib/telemetry.js');
 const { createTelemetryHandler } = await import('../api/telemetry.js');
@@ -15,8 +14,8 @@ const validEvent={eventId:'11111111-1111-4111-8111-111111111111',installId:'2222
 
 test('anonymous event strips everything outside the fixed privacy schema',()=>{const normalized=normalizeTelemetry({...validEvent,filePath:'C:\\Private\\photo.jpg',filename:'photo.jpg',dateTaken:'2026-01-01'});assert.deepEqual(Object.keys(normalized).sort(),['app_version','duration_bucket','event_id','event_name','install_hash','item_count_bucket','platform','success']);assert.equal(JSON.stringify(normalized).includes('photo.jpg'),false)});
 test('anonymous event rejects unknown event types and identifiers',()=>{assert.equal(normalizeTelemetry({...validEvent,eventName:'photo_opened'}),null);assert.equal(normalizeTelemetry({...validEvent,installId:'person@example.com'}),null)});
-test('telemetry endpoint forwards only normalized data with the server secret',async()=>{let request;const handler=createTelemetryHandler({fetchImpl:async(url,options)=>{request={url,options};return{ok:true,status:201}}});const res=response();await handler({method:'POST',headers:{'content-length':'400'},body:validEvent},res);assert.equal(res.statusCode,202);assert.equal(request.options.headers.apikey,'sb_secret_test');assert.equal(request.options.headers.Authorization,undefined);assert.equal(JSON.parse(request.options.body).event_name,'scan_completed')});
-test('owner metrics require private authentication',async()=>{const handler=createOwnerMetricsHandler({stripeClient:{paymentIntents:{list:async()=>({data:[],has_more:false})}},fetchImpl:async()=>({ok:true,json:async()=>[]})});const res=response();await handler({method:'GET',headers:{}},res);assert.equal(res.statusCode,401)});
+test('telemetry endpoint inserts only normalized data with a parameterized query',async()=>{let query;const handler=createTelemetryHandler({queryImpl:async(text,params)=>{query={text,params}}});const res=response();await handler({method:'POST',headers:{'content-length':'400'},body:validEvent},res);assert.equal(res.statusCode,202);assert.match(query.text,/insert into product_events/i);assert.equal(query.params[2],'scan_completed');assert.equal(query.params.includes('photo.jpg'),false)});
+test('owner metrics require private authentication',async()=>{const handler=createOwnerMetricsHandler({stripeClient:{paymentIntents:{list:async()=>({data:[],has_more:false})}},fetchImpl:async()=>({ok:true,json:async()=>[]}),queryImpl:async()=>[]});const res=response();await handler({method:'GET',headers:{}},res);assert.equal(res.statusCode,401)});
 
 test('owner metrics calculate detailed external sales without exposing buyer identities',async()=>{
   const created=Math.floor(Date.parse('2026-08-14T04:00:00Z')/1000);
@@ -27,7 +26,7 @@ test('owner metrics calculate detailed external sales without exposing buyer ide
     {id:'pi_4',created,status:'succeeded',amount_received:499,currency:'usd',receipt_email:'legacy-mac@example.com',metadata:{},latest_charge:{billing_details:{email:'legacy-mac@example.com',address:{country:'DE'}},balance_transaction:{fee:44,net:455},amount_refunded:0}},
   ]})}};
   const fetchImpl=async()=>({ok:true,json:async()=>[]});
-  const handler=createOwnerMetricsHandler({stripeClient,fetchImpl});
+  const handler=createOwnerMetricsHandler({stripeClient,fetchImpl,queryImpl:async()=>[]});
   const res=response();
   await handler({method:'GET',headers:{authorization:'Bearer correct-horse-battery-staple'}},res);
   assert.equal(res.statusCode,200);

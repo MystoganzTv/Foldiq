@@ -1,11 +1,37 @@
 import Stripe from 'stripe';
 import { isOwnerRequest } from '../lib/owner-auth.js';
 import { aggregateTelemetry } from '../lib/telemetry.js';
+import { aggregateAppleRows } from '../lib/apple-analytics.js';
+import { databaseConfigured, queryDatabase } from '../lib/database.js';
 
 const REPOSITORY = 'MystoganzTv/Foldiq';
 const OWNER_EMAILS = new Set((process.env.OWNER_EMAILS || 'enrique.padron853@gmail.com,enriquespangberg@gmail.com')
   .split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
 const DOWNLOAD_TRACKING_STARTED_AT = '2026-08-14T00:00:00.000Z';
+const APPLE_AUDITED_SNAPSHOT = {
+  period: 'May 15–Aug 12, 2026',
+  capturedAt: '2026-08-13T04:00:00.000Z',
+  downloads: 6,
+  redownloads: 1,
+  updates: 3,
+  impressions: 274,
+  pageViews: 40,
+  conversionRate: 3.98,
+  salesUSD: 36,
+  proceedsUSD: 23,
+  proceedsBySource: [
+    { source: 'App Store Browse', usd: 11 },
+    { source: 'App Store Search', usd: 4 },
+    { source: 'App Referrer', usd: 4 },
+    { source: 'Web Referrer', usd: 4 },
+  ],
+  proceedsByTerritory: [
+    { territory: 'United States', usd: 7 },
+    { territory: 'France', usd: 4 },
+    { territory: 'Germany', usd: 4 },
+    { territory: 'United Kingdom', usd: 4 },
+  ],
+};
 
 function utcDay(unixSeconds) {
   return new Date(unixSeconds * 1000).toISOString().slice(0, 10);
@@ -128,23 +154,24 @@ async function githubMetrics(fetchImpl) {
   };
 }
 
-async function telemetryMetrics(fetchImpl) {
-  const baseURL = process.env.SUPABASE_URL;
-  const secret = process.env.SUPABASE_SECRET_KEY;
-  if (!baseURL || !secret) return { configured: false };
-  const authHeaders = {
-    apikey: secret,
-    ...(secret.startsWith('eyJ') ? { Authorization: `Bearer ${secret}` } : {}),
-  };
+async function telemetryMetrics(queryImpl) {
+  if (!databaseConfigured()) return { configured: false };
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
-  const response = await fetchImpl(`${baseURL}/rest/v1/product_events?select=install_hash,event_name,platform,success&created_at=gte.${encodeURIComponent(since)}&limit=10000`, {
-    headers: authHeaders,
-  });
-  if (!response.ok) throw new Error(`Metrics storage returned ${response.status}`);
-  return { configured: true, periodDays: 30, ...aggregateTelemetry(await response.json()) };
+  const rows = await queryImpl(
+    'select install_hash, event_name, platform, success from product_events where created_at >= $1::timestamptz order by created_at desc limit 10000',
+    [since],
+  );
+  return { configured: true, periodDays: 30, ...aggregateTelemetry(rows) };
 }
 
-export function createOwnerMetricsHandler({ stripeClient, fetchImpl = globalThis.fetch } = {}) {
+async function appleMetrics(queryImpl) {
+  if (!databaseConfigured()) return { configured: false, auditedSnapshot: APPLE_AUDITED_SNAPSHOT };
+  const rows = await queryImpl('select report_name, event_date::text, dimensions, metrics, processing_date::text from apple_analytics_rows order by event_date asc limit 10000');
+  if (!rows.length) return { configured: true, awaitingData: true, auditedSnapshot: APPLE_AUDITED_SNAPSHOT };
+  return { configured: true, live: true, auditedSnapshot: aggregateAppleRows(rows) };
+}
+
+export function createOwnerMetricsHandler({ stripeClient, fetchImpl = globalThis.fetch, queryImpl = queryDatabase } = {}) {
   return async function ownerMetricsHandler(req, res) {
     res.setHeader('Cache-Control', 'private, no-store');
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -153,7 +180,8 @@ export function createOwnerMetricsHandler({ stripeClient, fetchImpl = globalThis
     const settled = await Promise.allSettled([
       stripe ? stripeMetrics(stripe) : Promise.resolve({ configured: false }),
       githubMetrics(fetchImpl),
-      telemetryMetrics(fetchImpl),
+      telemetryMetrics(queryImpl),
+      appleMetrics(queryImpl),
     ]);
     const pick = (index, source) => settled[index].status === 'fulfilled'
       ? settled[index].value
@@ -163,33 +191,7 @@ export function createOwnerMetricsHandler({ stripeClient, fetchImpl = globalThis
       windows: pick(0, 'Stripe'),
       downloads: pick(1, 'GitHub'),
       product: pick(2, 'Product metrics'),
-      apple: {
-        configured: false,
-        auditedSnapshot: {
-          period: 'May 15–Aug 12, 2026',
-          capturedAt: '2026-08-13T04:00:00.000Z',
-          downloads: 6,
-          redownloads: 1,
-          updates: 3,
-          impressions: 274,
-          pageViews: 40,
-          conversionRate: 3.98,
-          salesUSD: 36,
-          proceedsUSD: 23,
-          proceedsBySource: [
-            { source: 'App Store Browse', usd: 11 },
-            { source: 'App Store Search', usd: 4 },
-            { source: 'App Referrer', usd: 4 },
-            { source: 'Web Referrer', usd: 4 },
-          ],
-          proceedsByTerritory: [
-            { territory: 'United States', usd: 7 },
-            { territory: 'France', usd: 4 },
-            { territory: 'Germany', usd: 4 },
-            { territory: 'United Kingdom', usd: 4 },
-          ],
-        },
-      },
+      apple: pick(3, 'Apple metrics'),
       website: {
         configured: true,
         provider: 'Vercel Web Analytics',
