@@ -84,6 +84,9 @@ test('owner dashboard distinguishes business KPIs from diagnostics and snapshots
   assert.match(owner, /GitHub installer requests/);
   assert.match(owner, /Live · not unique/);
   assert.match(owner, /Purchases and downloads, kept separate/);
+  assert.match(owner, /Estimated payout after platform deductions/);
+  assert.match(owner, /This is not after your business or personal income taxes/);
+  assert.match(owner, /discovery categories, not affiliate payments/);
   assert.doesNotMatch(owner, /Paid platform acquisitions/);
   assert.doesNotMatch(owner, /Combined gross sales/);
   assert.doesNotMatch(owner, /Active opted-in installs[\s\S]*>Off</);

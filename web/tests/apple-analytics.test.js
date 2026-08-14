@@ -78,7 +78,7 @@ test('aggregates Apple acquisition, commerce, usage, and reliability without sum
     { report_name: 'downloads', event_date: '2026-08-10', processing_date: '2026-08-12', dimensions: { download_type: 'Redownload' }, metrics: { counts: 1 } },
     { report_name: 'discovery', event_date: '2026-08-10', processing_date: '2026-08-13', dimensions: { event: 'Impression' }, metrics: { counts: 200, unique_counts: 100 } },
     { report_name: 'discovery', event_date: '2026-08-10', processing_date: '2026-08-13', dimensions: { event: 'Page view' }, metrics: { counts: 40, unique_counts: 30 } },
-    { report_name: 'purchases', event_date: '2026-08-11', processing_date: '2026-08-13', dimensions: { source_type: 'App Store search', territory: 'US' }, metrics: { purchases: 2, sales_usd: 12, proceeds_usd: 8, paying_users: 2 } },
+    { report_name: 'purchases', event_date: '2026-08-11', processing_date: '2026-08-13', dimensions: { source_type: 'App Store search', source_info: 'Example Referrer', territory: 'US' }, metrics: { purchases: 2, sales_usd: 12, proceeds_usd: 8, paying_users: 2 } },
     { report_name: 'sessions', event_date: '2026-08-11', processing_date: '2026-08-14', dimensions: {}, metrics: { sessions: 4, total_session_duration: 100, unique_devices: 3 } },
     { report_name: 'crashes', event_date: '2026-08-11', processing_date: '2026-08-14', dimensions: {}, metrics: { crashes: 1, unique_devices: 1 } },
     { report_name: 'installs', event_date: '2026-08-11', processing_date: '2026-08-14', dimensions: { event: 'Install' }, metrics: { counts: 3 } },
@@ -89,6 +89,7 @@ test('aggregates Apple acquisition, commerce, usage, and reliability without sum
   assert.equal(result.conversionRate, 7);
   assert.equal(result.purchases, 2);
   assert.equal(result.proceedsUSD, 8);
+  assert.deepEqual(result.proceedsByReferrer, [{ referrer: 'Example Referrer', usd: 8 }]);
   assert.equal(result.sessions, 4);
   assert.equal(result.averageSessionSeconds, 25);
   assert.equal(result.crashes, 1);

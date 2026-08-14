@@ -6,7 +6,7 @@ const APPLE_API = 'https://api.appstoreconnect.apple.com';
 const MAX_PAGES = 20;
 const REPORTS = [
   { key: 'downloads', match: /^App(?: Store)? Downloads Standard$/i, metrics: { Counts: 'counts' } },
-  { key: 'purchases', match: /^App Store Purchases Standard$/i, metrics: { Purchases: 'purchases', 'Proceeds in USD': 'proceeds_usd', 'Sales in USD': 'sales_usd', 'Paying Users': 'paying_users' } },
+  { key: 'purchases', match: /^App Store Purchases Detailed$/i, metrics: { Purchases: 'purchases', 'Proceeds in USD': 'proceeds_usd', 'Sales in USD': 'sales_usd', 'Paying Users': 'paying_users' } },
   { key: 'discovery', match: /^App Store Discovery and Engagement Standard$/i, metrics: { Counts: 'counts', 'Unique Counts': 'unique_counts' } },
   { key: 'crashes', match: /^App Crashes(?: Standard)?$/i, metrics: { Crashes: 'crashes', 'Unique Devices': 'unique_devices' } },
   { key: 'installs', match: /^App Store Installations? and Deletions? Standard$/i, metrics: { Counts: 'counts', 'Unique Devices': 'unique_devices' } },
@@ -18,6 +18,7 @@ const DIMENSIONS = {
   Device: 'device',
   'Platform Version': 'platform_version',
   'Source Type': 'source_type',
+  'Source Info': 'source_info',
   'Page Type': 'page_type',
   'Pre-Order': 'pre_order',
   Territory: 'territory',
@@ -156,9 +157,10 @@ export function aggregateAppleRows(rows = []) {
     impressions: 0, uniqueImpressions: 0, pageViews: 0, conversionRate: null,
     purchases: 0, salesUSD: 0, proceedsUSD: 0,
     sessions: 0, averageSessionSeconds: null, crashes: 0, installs: 0, deletions: 0,
-    proceedsBySource: [], proceedsByTerritory: [],
+    proceedsBySource: [], proceedsByReferrer: [], proceedsByTerritory: [],
   };
   const sources = {};
+  const referrers = {};
   const territories = {};
   let sessionDuration = 0;
   let minDate = null;
@@ -187,6 +189,7 @@ export function aggregateAppleRows(rows = []) {
       result.salesUSD += Number(metrics.sales_usd) || 0;
       result.proceedsUSD += Number(metrics.proceeds_usd) || 0;
       if (dimensions.source_type) add(sources, dimensions.source_type, metrics.proceeds_usd);
+      if (dimensions.source_info) add(referrers, dimensions.source_info, metrics.proceeds_usd);
       if (dimensions.territory) add(territories, dimensions.territory, metrics.proceeds_usd);
     } else if (row.report_name === 'sessions') {
       result.sessions += Number(metrics.sessions) || 0;
@@ -207,6 +210,7 @@ export function aggregateAppleRows(rows = []) {
   result.salesUSD = Math.round(result.salesUSD * 100) / 100;
   result.proceedsUSD = Math.round(result.proceedsUSD * 100) / 100;
   result.proceedsBySource = Object.entries(sources).map(([source, usd]) => ({ source, usd: Math.round(usd * 100) / 100 })).sort((a, b) => b.usd - a.usd);
+  result.proceedsByReferrer = Object.entries(referrers).map(([referrer, usd]) => ({ referrer, usd: Math.round(usd * 100) / 100 })).sort((a, b) => b.usd - a.usd);
   result.proceedsByTerritory = Object.entries(territories).map(([territory, usd]) => ({ territory, usd: Math.round(usd * 100) / 100 })).sort((a, b) => b.usd - a.usd);
   return result;
 }

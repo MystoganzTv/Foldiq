@@ -3,6 +3,7 @@ import { isOwnerRequest } from '../lib/owner-auth.js';
 import { aggregateTelemetry } from '../lib/telemetry.js';
 import { aggregateAppleRows } from '../lib/apple-analytics.js';
 import { databaseConfigured, queryDatabase } from '../lib/database.js';
+import { WINDOWS_AUTOMATIC_TAX_ENABLED } from '../lib/commerce.js';
 
 const REPOSITORY = 'MystoganzTv/Foldiq';
 const OWNER_EMAILS = new Set((process.env.OWNER_EMAILS || 'enrique.padron853@gmail.com,enriquespangberg@gmail.com')
@@ -25,6 +26,7 @@ const APPLE_AUDITED_SNAPSHOT = {
     { source: 'App Referrer', usd: 4 },
     { source: 'Web Referrer', usd: 4 },
   ],
+  proceedsByReferrer: [],
   proceedsByTerritory: [
     { territory: 'United States', usd: 7 },
     { territory: 'France', usd: 4 },
@@ -133,6 +135,8 @@ async function stripeMetrics(stripe) {
     countries: [...countryMap.entries()].map(([country, customers]) => ({ country, customers })).sort((a, b) => b.customers - a.customers),
     recentPurchases,
     currency: paid[0]?.currency || 'usd',
+    automaticTaxEnabled: WINDOWS_AUTOMATIC_TAX_ENABLED,
+    customerTaxCollectedCents: 0,
   };
 }
 

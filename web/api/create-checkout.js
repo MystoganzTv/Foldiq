@@ -10,6 +10,7 @@
 //   STRIPE_SECRET_KEY — sk_live_...
 
 import Stripe from 'stripe';
+import { WINDOWS_AUTOMATIC_TAX_ENABLED, WINDOWS_PRICE_CENTS } from '../lib/commerce.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -43,11 +44,12 @@ export default async function handler(req, res) {
               description: 'One-time purchase — lifetime license, all future updates included. Windows 10/11 64-bit.',
               images: [`${SITE}/icon.png`],
             },
-            unit_amount: 499, // $4.99
+            unit_amount: WINDOWS_PRICE_CENTS,
           },
           quantity: 1,
         },
       ],
+      automatic_tax: { enabled: WINDOWS_AUTOMATIC_TAX_ENABLED },
       mode: 'payment',
       success_url: `${SITE}/success.html?session_id={CHECKOUT_SESSION_ID}&platform=windows`,
       cancel_url: `${SITE}/`,

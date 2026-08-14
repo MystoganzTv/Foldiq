@@ -56,6 +56,11 @@ function renderDashboard(data) {
   const windowsPurchases = win.externalPurchases ?? win.externalCustomers ?? 0;
   const verifiedWindowsPurchases = win.verifiedWindowsPurchases ?? 0;
   const legacyDirectMacPurchases = win.legacyDirectMacPurchases ?? 0;
+  const stripePayoutCents = win.externalNetCents;
+  const applePayoutCents = apple.proceedsUSD == null ? null : Math.round(apple.proceedsUSD * 100);
+  const combinedPayoutCents = stripePayoutCents == null || applePayoutCents == null
+    ? null
+    : stripePayoutCents + applePayoutCents;
 
   $('#updated').textContent = `Refreshed ${new Date(data.generatedAt).toLocaleString()} · Stripe and GitHub are live${appleState.live ? ' · Apple is live' : ''}`;
 
@@ -65,6 +70,13 @@ function renderDashboard(data) {
   $('#mac-downloads').textContent = number(apple.downloads);
   $('#apple-conversion').textContent = apple.conversionRate == null ? '—' : `${apple.conversionRate}%`;
   $('#apple-period').textContent = `${number(apple.pageViews)} page views · ${apple.period || 'snapshot'}`;
+  $('#combined-payout').textContent = money(combinedPayoutCents);
+  $('#apple-payout').textContent = money(applePayoutCents);
+  $('#stripe-payout').textContent = money(stripePayoutCents);
+  $('#windows-tax').textContent = money(win.customerTaxCollectedCents ?? 0);
+  $('#windows-tax-note').textContent = win.automaticTaxEnabled
+    ? 'Automatic tax is enabled in Checkout'
+    : 'Not currently collected by Checkout';
   if (appleState.live) {
     $('#apple-source').innerHTML = '<i class="dot live-dot"></i>Apple · live';
     $('#apple-status').textContent = apple.capturedAt ? `Live · processed ${dateLabel(apple.capturedAt)}` : 'Live';
@@ -80,7 +92,8 @@ function renderDashboard(data) {
   $('#windows-finance').innerHTML = [
     row('Direct gross sales', money(win.externalGrossCents)),
     row('Stripe fees', money(win.externalFeesCents)),
-    row('External net proceeds', money(win.externalNetCents)),
+    row('Net after Stripe processing fees', money(win.externalNetCents), 'Before your income or business taxes'),
+    row('Customer sales tax collected', money(win.customerTaxCollectedCents ?? 0), win.automaticTaxEnabled ? 'Automatic tax enabled' : 'Automatic tax is not enabled'),
     row('Refunded purchases', number(win.refundedPurchases), money(win.refundedCents)),
     row('Average order value', win.externalCustomers ? money(Math.round(win.externalGrossCents / win.externalCustomers)) : '—'),
   ].join('');
@@ -120,9 +133,10 @@ function renderDashboard(data) {
   ].join('');
   $('#apple-commerce').innerHTML = [
     ...(apple.purchases == null ? [] : [row('App purchases reported', number(apple.purchases), 'Refunds may appear as negative values')]),
-    row('Sales value shown by Apple', money((apple.salesUSD || 0) * 100), 'Not a buyer count'),
-    row('Proceeds shown by Apple', money((apple.proceedsUSD || 0) * 100)),
-    row('Difference: sales vs. proceeds', money(((apple.salesUSD || 0) - (apple.proceedsUSD || 0)) * 100), 'Apple commission, taxes and adjustments may contribute'),
+    row('Customer spending reported by Apple', money((apple.salesUSD || 0) * 100), 'What customers were billed; not a buyer count'),
+    row('Estimated amount Apple owes you', money((apple.proceedsUSD || 0) * 100), 'After Apple commission and applicable transaction taxes'),
+    row('Apple commission, transaction taxes & adjustments', money(((apple.salesUSD || 0) - (apple.proceedsUSD || 0)) * 100), 'Difference between customer spending and your estimated payout'),
+    row('Final bank payout', 'Available after Apple closes the fiscal month', 'May differ because of exchange rates, withholding or bank fees'),
     row('Updates', number(apple.updates)),
     row('Snapshot period', apple.period || '—'),
   ].join('');
@@ -134,6 +148,7 @@ function renderDashboard(data) {
     row('Deletions', apple.deletions == null ? '—' : number(apple.deletions)),
   ].join('');
   renderBars($('#apple-sources'), apple.proceedsBySource, 'source', 'usd', value => money(value * 100));
+  renderBars($('#apple-referrers'), apple.proceedsByReferrer, 'referrer', 'usd', value => money(value * 100));
   renderBars($('#apple-territories'), apple.proceedsByTerritory, 'territory', 'usd', value => money(value * 100));
 
   $('#website-summary').innerHTML = [
