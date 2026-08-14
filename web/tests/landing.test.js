@@ -31,6 +31,13 @@ test('the Foldiq brand icon appears only once on the landing page', () => {
   assert.doesNotMatch(html, /class="footer-logo"/);
 });
 
+test('footer exposes only the private Extranet entry point', () => {
+  assert.match(html, /<a href="\/owner" rel="nofollow" aria-label="Private owner extranet">Extranet<\/a>/);
+  assert.match(owner, /<meta name="robots" content="noindex,nofollow,noarchive">/);
+  assert.match(owner, /PRIVATE EXTRANET/);
+  assert.doesNotMatch(html, /Owner Metrics|Owner Dashboard/);
+});
+
 test('privacy copy covers optional GPS lookup on both platforms', () => {
   assert.match(html, /Windows rounds it to about 1 km before using OpenStreetMap/);
   assert.match(html, /Apple platforms use Apple's system service/);
