@@ -11,6 +11,7 @@ const DEFAULTS = Object.freeze({
   includeVideos: true,
   includeArchives: true,
   useGPSLocation: false,
+  shareAnonymousUsageData: false,
 });
 
 function normalizePreferences(value = {}) {
@@ -33,6 +34,7 @@ function normalizePreferences(value = {}) {
     includeVideos: value.includeVideos !== false,
     includeArchives: value.includeArchives !== false,
     useGPSLocation: value.useGPSLocation === true,
+    shareAnonymousUsageData: value.shareAnonymousUsageData === true,
   };
 }
 

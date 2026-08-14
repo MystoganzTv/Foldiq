@@ -645,12 +645,14 @@ test('preferences persist only validated Windows settings', (t) => {
     includeVideos: false,
     includeArchives: true,
     useGPSLocation: true,
+    shareAnonymousUsageData: true,
     unexpected: 'ignored',
   });
 
   assert.equal(written.organizationMode, 'location');
   assert.equal(written.groupByMonth, false);
   assert.equal(written.useGPSLocation, true);
+  assert.equal(written.shareAnonymousUsageData, true);
   assert.equal('unexpected' in preferences.readPreferences(filePath), false);
 });
 

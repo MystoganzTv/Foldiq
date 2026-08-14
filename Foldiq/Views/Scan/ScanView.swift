@@ -49,6 +49,7 @@ struct ScanView: View {
             return
         }
         guard !nav.selectedFolderURLs.isEmpty else { return }
+        let startedAt = Date()
         taskHandle = Task {
             let session = await coordinator.run(
                 rootURLs: nav.selectedFolderURLs,
@@ -59,6 +60,14 @@ struct ScanView: View {
                 nav.scanSession = session
                 // Store archive temp dirs so ApplyView can clean them up after apply.
                 nav.archiveTempDirs = coordinator.archiveTempDirs
+            }
+            if !Task.isCancelled {
+                AnonymousTelemetry.send(
+                    .scanCompleted,
+                    success: session != nil,
+                    elapsed: Date().timeIntervalSince(startedAt),
+                    itemCount: session?.files.count ?? 0
+                )
             }
             // Errors are shown inside ScanProgressPanel via coordinator.errorMessage
         }

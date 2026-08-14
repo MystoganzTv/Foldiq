@@ -538,6 +538,7 @@ struct ReportView: View {
         manifest.stateRaw = "undoing"
         try? context.save()
         isUndoing = true
+        let startedAt = Date()
         Task {
             let result = await mover.undo(
                 manifest: manifest,
@@ -552,6 +553,12 @@ struct ReportView: View {
             isUndoing    = false
             undoRestoredCount = result.restored
             undoComplete = result.errors.isEmpty
+            AnonymousTelemetry.send(
+                .undoCompleted,
+                success: result.errors.isEmpty,
+                elapsed: Date().timeIntervalSince(startedAt),
+                itemCount: result.restored
+            )
             if let firstError = result.errors.first {
                 exportFeedback = FeedbackMessage(
                     title: "Undo Needs Attention",

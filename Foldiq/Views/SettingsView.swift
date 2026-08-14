@@ -32,6 +32,9 @@ struct SettingsView: View {
     @AppStorage(OrganizationConfig.UDKey.outputFolderName)
     private var outputFolderName = "Organized Media"
 
+    @AppStorage(AnonymousTelemetry.preferenceKey)
+    private var shareAnonymousUsageData = false
+
     // ── Local state ────────────────────────────────────────────────────────────
     @State private var showingResetConfirmation = false
 
@@ -153,11 +156,16 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("100% local processing", systemImage: "icloud.slash")
                         .fontWeight(.medium)
-                    Text("Foldiq never uploads your files or metadata to any server. All organization happens entirely on your Mac.")
+                    Text("Foldiq never uploads your files or metadata. All organization happens entirely on your Mac.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
+
+                Toggle("Help improve Foldiq anonymously", isOn: $shareAnonymousUsageData)
+                Text("Optional and off by default. Sends only operation type, success, app version, and broad ranges for duration and item count — never photos, filenames, paths, dates, locations, or metadata.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Data") {

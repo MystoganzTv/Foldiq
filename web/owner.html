@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Foldiq · Owner Metrics</title>
+  <link rel="icon" href="/icon.png">
+  <link rel="stylesheet" href="/owner.css">
+</head>
+<body>
+  <main>
+    <section id="login" class="login-card">
+      <img src="/icon.png" alt="" width="64" height="64">
+      <div><p class="eyebrow">PRIVATE</p><h1>Foldiq metrics</h1><p>Sales, downloads, traffic, and product health in one place.</p></div>
+      <form id="login-form">
+        <label for="token">Owner access code</label>
+        <div class="login-row"><input id="token" type="password" autocomplete="current-password" required><button>Open dashboard</button></div>
+        <p id="login-error" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="dashboard" hidden>
+      <header><div><p class="eyebrow">FOLDIQ OWNER</p><h1>Product pulse</h1><p id="updated">Loading…</p></div><div class="actions"><button id="refresh" class="secondary">Refresh</button><button id="logout" class="secondary">Sign out</button></div></header>
+      <div id="notice" class="notice" hidden></div>
+      <div class="cards">
+        <article><span>External Windows customers</span><strong id="win-customers">—</strong><small id="win-sales">Stripe</small></article>
+        <article><span>Mac first-time downloads</span><strong id="mac-downloads">—</strong><small id="mac-sales">App Store Connect</small></article>
+        <article><span>Current Windows installer</span><strong id="exe-downloads">—</strong><small id="exe-version">GitHub Releases</small></article>
+        <article><span>Active opted-in installs</span><strong id="active-installs">—</strong><small>Last 30 days</small></article>
+      </div>
+      <div class="grid">
+        <article class="panel"><div class="panel-title"><div><p class="eyebrow">REVENUE</p><h2>Sales</h2></div><span class="status live">Live</span></div><div id="sales-detail" class="rows"></div></article>
+        <article class="panel"><div class="panel-title"><div><p class="eyebrow">PRODUCT</p><h2>Reliability</h2></div><span id="product-status" class="status">Setup</span></div><div id="product-detail" class="rows"></div></article>
+        <article class="panel"><div class="panel-title"><div><p class="eyebrow">DISTRIBUTION</p><h2>Windows downloads</h2></div><span class="status live">Live</span></div><div id="download-detail" class="rows"></div></article>
+        <article class="panel"><div class="panel-title"><div><p class="eyebrow">ACQUISITION</p><h2>Website traffic</h2></div><span class="status live">Live</span></div><p class="muted">Vercel measures visitors without advertising cookies. Its live view remains the source of truth.</p><a class="button-link" href="https://vercel.com/mystodevs-projects/foldiq/analytics" target="_blank" rel="noopener">Open Vercel Analytics ↗</a></article>
+      </div>
+      <footer>No customer identities, filenames, paths, photo metadata, or media content appear here.</footer>
+    </section>
+  </main>
+  <script type="module" src="/owner.js"></script>
+</body>
+</html>

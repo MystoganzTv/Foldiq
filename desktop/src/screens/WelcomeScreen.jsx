@@ -173,6 +173,7 @@ export default function WelcomeScreen({ go, folders, setFolders, config, setConf
         <div className={s.welcomeScanOptions}>
           <label><input type="checkbox" checked={config.includeVideos} onChange={() => setConfig(c => ({ ...c, includeVideos: !c.includeVideos }))} /> Include videos</label>
           <label><input type="checkbox" checked={config.includeArchives} onChange={() => setConfig(c => ({ ...c, includeArchives: !c.includeArchives }))} /> Include ZIP, RAR, and 7z</label>
+          <label title="Sends only anonymous operation counts, duration ranges, app version, and success status. Never photos, filenames, paths, dates, or metadata."><input type="checkbox" checked={config.shareAnonymousUsageData} onChange={() => setConfig(c => ({ ...c, shareAnonymousUsageData: !c.shareAnonymousUsageData }))} /> Help improve Foldiq anonymously</label>
         </div>
 
         <div className={s.welcomeFooterInfo}>

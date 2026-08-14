@@ -74,6 +74,7 @@
 		AA200030 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BB000031 /* PrivacyInfo.xcprivacy */; };
 		AA000032 /* Archive in Frameworks */ = {isa = PBXBuildFile; productRef = FF000002 /* Archive */; };
 		AA000033 /* SevenZip in Frameworks */ = {isa = PBXBuildFile; productRef = FF000004 /* SevenZip */; };
+		AA000034 /* AnonymousTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000032 /* AnonymousTelemetry.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -118,6 +119,7 @@
 		BB000029 /* PhotoLibraryExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryExporter.swift; sourceTree = "<group>"; };
 		BB000030 /* IOSPhotosExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPhotosExportView.swift; sourceTree = "<group>"; };
 		BB000031 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		BB000032 /* AnonymousTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnonymousTelemetry.swift; sourceTree = "<group>"; };
 		BB100001 /* OrganizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationPlannerTests.swift; sourceTree = "<group>"; };
 		BB100002 /* ProbableDuplicateDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbableDuplicateDetectorTests.swift; sourceTree = "<group>"; };
 		BB100003 /* ArchiveExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveExtractorTests.swift; sourceTree = "<group>"; };
@@ -269,6 +271,7 @@
 				BB000023 /* ArchiveExtractor.swift */,
 				BB000026 /* ProbableDuplicateDetector.swift */,
 				BB000029 /* PhotoLibraryExporter.swift */,
+				BB000032 /* AnonymousTelemetry.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -509,6 +512,7 @@
 				AA000026 /* ProbableDuplicateDetector.swift in Sources */,
 				AA000029 /* PhotoLibraryExporter.swift in Sources */,
 				AA000030 /* IOSPhotosExportView.swift in Sources */,
+				AA000034 /* AnonymousTelemetry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

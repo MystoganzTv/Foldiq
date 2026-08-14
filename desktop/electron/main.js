@@ -10,6 +10,7 @@ const { filterSupportedSources } = require('./services/sources');
 const { buildDiagnosticSummary, buildSupportWebURL } = require('./services/diagnostics');
 const geocoder = require('./services/geocoder');
 const preferences = require('./services/preferences');
+const telemetry = require('./services/telemetry');
 
 let mainWindow;
 let activeManifestPaths = [];
@@ -33,6 +34,23 @@ function preferencesPath() {
 
 function locationCachePath() {
   return path.join(app.getPath('userData'), 'location-cache.json');
+}
+
+function telemetryIdPath() {
+  return path.join(app.getPath('userData'), 'anonymous-install-id');
+}
+
+function recordAnonymousOperation(eventName, startedAt, itemCount, success) {
+  const enabled = preferences.readPreferences(preferencesPath()).shareAnonymousUsageData;
+  void telemetry.send({
+    enabled,
+    idPath: telemetryIdPath(),
+    appVersion: app.getVersion(),
+    eventName,
+    success,
+    elapsedMs: Date.now() - startedAt,
+    itemCount,
+  });
 }
 
 function createWindow() {
@@ -134,6 +152,7 @@ ipcMain.handle('dialog:selectOutput', async () => {
 
 // Scan folders — streams progress via webContents.send
 ipcMain.handle('scan:start', async (event, { folders, options = {} }) => {
+  const startedAt = Date.now();
   assertArray(folders, 'folders', 100).forEach(folder => assertString(folder, 'folder'));
   activeScanController?.abort();
   const controller = new AbortController();
@@ -150,7 +169,11 @@ ipcMain.handle('scan:start', async (event, { folders, options = {} }) => {
       [file.path, file.archiveSourcePath].filter(Boolean).map(filePath => path.resolve(filePath))
     )));
     thumbnailCache.clear();
+    recordAnonymousOperation('scan_completed', startedAt, result.files.length, true);
     return result;
+  } catch (error) {
+    if (error?.name !== 'AbortError') recordAnonymousOperation('scan_completed', startedAt, 0, false);
+    throw error;
   } finally {
     if (activeScanController === controller) activeScanController = null;
   }
@@ -204,18 +227,25 @@ ipcMain.handle('plan:build', async (event, { files, config }) => {
 
 // Apply plan — streams progress
 ipcMain.handle('apply:start', async (event, { plan, config }) => {
+  const startedAt = Date.now();
   assertArray(plan, 'plan');
   if (!config || typeof config !== 'object') throw new Error('Invalid apply configuration');
   assertString(config.outputFolder, 'output folder');
   const onProgress = (p) => mainWindow.webContents.send('apply:progress', p);
-  const result = await mover.apply(plan, {
-    ...config,
-    manifestDirectory: undoDirectory(),
-  }, onProgress);
-  activeManifestPaths = result.manifestPaths;
-  activeOutputFolder = path.resolve(config.outputFolder);
-  if (result.errors.length === 0) await scanner.cleanupTempDirs();
-  return result;
+  try {
+    const result = await mover.apply(plan, {
+      ...config,
+      manifestDirectory: undoDirectory(),
+    }, onProgress);
+    activeManifestPaths = result.manifestPaths;
+    activeOutputFolder = path.resolve(config.outputFolder);
+    if (result.errors.length === 0) await scanner.cleanupTempDirs();
+    recordAnonymousOperation('apply_completed', startedAt, plan.length, result.errors.length === 0);
+    return result;
+  } catch (error) {
+    recordAnonymousOperation('apply_completed', startedAt, plan.length, false);
+    throw error;
+  }
 });
 
 ipcMain.handle('apply:retry', async (event, { plan, config }) => {
@@ -233,15 +263,18 @@ ipcMain.handle('apply:retry', async (event, { plan, config }) => {
 
 // Undo last operation
 ipcMain.handle('apply:undo', async (event, { manifestPath }) => {
+  const startedAt = Date.now();
   assertString(manifestPath, 'manifest path');
   const result = await mover.undo(manifestPath, undoDirectory(), progress => {
     mainWindow.webContents.send('undo:progress', progress);
   });
   if (!result.manifestPath) activeManifestPaths = activeManifestPaths.filter(item => item !== manifestPath);
+  recordAnonymousOperation('undo_completed', startedAt, result.restored, result.errors.length === 0);
   return result;
 });
 
 ipcMain.handle('apply:undoMany', async (event, { manifestPaths }) => {
+  const startedAt = Date.now();
   assertArray(manifestPaths, 'manifest paths', 100).forEach(item => assertString(item, 'manifest path'));
   let restored = 0;
   const errors = [];
@@ -258,6 +291,7 @@ ipcMain.handle('apply:undoMany', async (event, { manifestPaths }) => {
     remaining.splice(remaining.indexOf(manifestPath), 1);
     activeManifestPaths = activeManifestPaths.filter(item => item !== manifestPath);
   }
+  recordAnonymousOperation('undo_completed', startedAt, restored, errors.length === 0);
   return { restored, errors, manifestPaths: remaining };
 });
 

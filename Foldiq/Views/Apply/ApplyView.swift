@@ -233,6 +233,7 @@ struct ApplyView: View {
         }
 
         let tempDirs = nav.archiveTempDirs
+        let startedAt = Date()
         Task {
             await mover.apply(plans: plans, manifest: m, checkpoint: {
                 try context.save()
@@ -251,6 +252,12 @@ struct ApplyView: View {
                 nav.archiveTempDirs = []
             }
             let completedWithoutErrors = progress.errors.isEmpty && m.entries.count == plans.count
+            AnonymousTelemetry.send(
+                .applyCompleted,
+                success: completedWithoutErrors,
+                elapsed: Date().timeIntervalSince(startedAt),
+                itemCount: plans.count
+            )
             if completedWithoutErrors && nav.organizationConfig.fileOperation == .move {
                 reviewShelvedFiles = await mover.shelveResidualFilesForReview(
                     under: nav.selectedFolderURLs,
