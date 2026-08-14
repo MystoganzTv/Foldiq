@@ -53,23 +53,21 @@ function renderDashboard(data) {
   const product = data.product || {};
   const website = data.website?.snapshot || {};
   const windowsPurchases = win.externalPurchases ?? win.externalCustomers ?? 0;
-  const macPaidDownloads = apple.downloads ?? 0;
-  const combinedGrossCents = (win.externalGrossCents ?? 0) + (apple.salesUSD ?? 0) * 100;
-  const combinedNetCents = win.externalNetCents == null ? null : win.externalNetCents + (apple.proceedsUSD ?? 0) * 100;
+  const verifiedWindowsPurchases = win.verifiedWindowsPurchases ?? 0;
+  const legacyDirectMacPurchases = win.legacyDirectMacPurchases ?? 0;
 
   $('#updated').textContent = `Refreshed ${new Date(data.generatedAt).toLocaleString()} · Stripe and GitHub are live`;
 
-  $('#paid-acquisitions').textContent = number(windowsPurchases + macPaidDownloads);
-  $('#paid-acquisitions-note').textContent = `${number(windowsPurchases)} Windows purchases + ${number(macPaidDownloads)} paid Mac downloads`;
-  $('#combined-gross').textContent = money(combinedGrossCents);
-  $('#combined-net').textContent = combinedNetCents == null ? 'Pending' : money(combinedNetCents);
-  $('#combined-net-note').textContent = combinedNetCents == null ? 'Stripe fee detail unavailable' : `${money(win.externalNetCents)} Windows + ${money((apple.proceedsUSD ?? 0) * 100)} Apple`;
+  $('#direct-purchases').textContent = number(windowsPurchases);
+  $('#direct-purchases-note').textContent = `${number(legacyDirectMacPurchases)} legacy Mac + ${number(verifiedWindowsPurchases)} Windows`;
+  $('#windows-purchases').textContent = number(verifiedWindowsPurchases);
+  $('#mac-downloads').textContent = number(apple.downloads);
   $('#apple-conversion').textContent = apple.conversionRate == null ? '—' : `${apple.conversionRate}%`;
   $('#apple-period').textContent = `${number(apple.pageViews)} page views · ${apple.period || 'snapshot'}`;
   $('#apple-status').textContent = apple.capturedAt ? `Captured ${dateLabel(apple.capturedAt)}` : 'Audited snapshot';
 
   $('#windows-finance').innerHTML = [
-    row('External gross sales', money(win.externalGrossCents)),
+    row('Direct gross sales', money(win.externalGrossCents)),
     row('Stripe fees', money(win.externalFeesCents)),
     row('External net proceeds', money(win.externalNetCents)),
     row('Refunded purchases', number(win.refundedPurchases), money(win.refundedCents)),
@@ -77,7 +75,9 @@ function renderDashboard(data) {
   ].join('');
 
   $('#windows-movement').innerHTML = [
-    row('Paid Windows purchases · all time', number(windowsPurchases)),
+    row('Direct purchases · all time', number(windowsPurchases)),
+    row('Legacy direct Mac purchases', number(legacyDirectMacPurchases), 'Later fulfilled with App Store promo codes'),
+    row('Verified Windows purchases', number(verifiedWindowsPurchases)),
     row('New purchases · last 30 days', number(win.externalCustomers30d)),
     row('New purchases · last 7 days', number(win.externalCustomers7d)),
     row('Verified buyer downloads', number(win.externalBuyerDownloads), 'tracked from Aug 14'),
@@ -108,8 +108,8 @@ function renderDashboard(data) {
     row('Redownloads', number(apple.redownloads)),
   ].join('');
   $('#apple-commerce').innerHTML = [
-    row('Sales', money((apple.salesUSD || 0) * 100)),
-    row('Proceeds', money((apple.proceedsUSD || 0) * 100)),
+    row('Sales value shown by Apple', money((apple.salesUSD || 0) * 100), 'Not a buyer count'),
+    row('Proceeds shown by Apple', money((apple.proceedsUSD || 0) * 100)),
     row('Difference: sales vs. proceeds', money(((apple.salesUSD || 0) - (apple.proceedsUSD || 0)) * 100), 'Apple commission, taxes and adjustments may contribute'),
     row('Updates', number(apple.updates)),
     row('Snapshot period', apple.period || '—'),

@@ -21,25 +21,28 @@ test('owner metrics require private authentication',async()=>{const handler=crea
 test('owner metrics calculate detailed external sales without exposing buyer identities',async()=>{
   const created=Math.floor(Date.parse('2026-08-14T04:00:00Z')/1000);
   const stripeClient={paymentIntents:{list:async()=>({has_more:false,data:[
-    {id:'pi_1',created,status:'succeeded',amount_received:499,currency:'usd',receipt_email:'buyer@example.com',metadata:{foldiq_download_count:'2'},latest_charge:{billing_details:{email:'buyer@example.com',address:{country:'US'}},balance_transaction:{fee:44,net:455},amount_refunded:0}},
-    {id:'pi_2',created,status:'succeeded',amount_received:499,currency:'usd',receipt_email:'enrique.padron853@gmail.com',metadata:{foldiq_download_count:'1'},latest_charge:{billing_details:{email:'enrique.padron853@gmail.com',address:{country:'US'}},balance_transaction:{fee:44,net:455},amount_refunded:0}},
+    {id:'pi_1',created,status:'succeeded',amount_received:499,currency:'usd',receipt_email:'buyer@example.com',metadata:{platform:'windows',foldiq_download_count:'2'},latest_charge:{billing_details:{email:'buyer@example.com',address:{country:'US'}},balance_transaction:{fee:44,net:455},amount_refunded:0}},
+    {id:'pi_2',created,status:'succeeded',amount_received:499,currency:'usd',receipt_email:'enrique.padron853@gmail.com',metadata:{platform:'windows',foldiq_download_count:'1'},latest_charge:{billing_details:{email:'enrique.padron853@gmail.com',address:{country:'US'}},balance_transaction:{fee:44,net:455},amount_refunded:0}},
     {id:'pi_3',created,status:'requires_payment_method',amount:499,currency:'usd',metadata:{}},
+    {id:'pi_4',created,status:'succeeded',amount_received:499,currency:'usd',receipt_email:'legacy-mac@example.com',metadata:{},latest_charge:{billing_details:{email:'legacy-mac@example.com',address:{country:'DE'}},balance_transaction:{fee:44,net:455},amount_refunded:0}},
   ]})}};
   const fetchImpl=async()=>({ok:true,json:async()=>[]});
   const handler=createOwnerMetricsHandler({stripeClient,fetchImpl});
   const res=response();
   await handler({method:'GET',headers:{authorization:'Bearer correct-horse-battery-staple'}},res);
   assert.equal(res.statusCode,200);
-  assert.equal(res.body.windows.purchases,2);
-  assert.equal(res.body.windows.externalCustomers,1);
-  assert.equal(res.body.windows.externalPurchases,1);
-  assert.equal(res.body.windows.externalGrossCents,499);
-  assert.equal(res.body.windows.externalFeesCents,44);
-  assert.equal(res.body.windows.externalNetCents,455);
+  assert.equal(res.body.windows.purchases,3);
+  assert.equal(res.body.windows.externalCustomers,2);
+  assert.equal(res.body.windows.externalPurchases,2);
+  assert.equal(res.body.windows.verifiedWindowsPurchases,1);
+  assert.equal(res.body.windows.legacyDirectMacPurchases,1);
+  assert.equal(res.body.windows.externalGrossCents,998);
+  assert.equal(res.body.windows.externalFeesCents,88);
+  assert.equal(res.body.windows.externalNetCents,910);
   assert.equal(res.body.windows.externalBuyerDownloads,1);
   assert.equal(res.body.windows.trackedDownloadRequests,3);
-  assert.deepEqual(res.body.windows.countries,[{country:'US',customers:1}]);
-  assert.equal(res.body.windows.daily[0].purchases,1);
+  assert.deepEqual(res.body.windows.countries,[{country:'US',customers:1},{country:'DE',customers:1}]);
+  assert.equal(res.body.windows.daily[0].purchases,2);
   assert.equal(res.body.windows.recentPurchases[0].country,'US');
   assert.equal(JSON.stringify(res.body).includes('buyer@example.com'),false);
 });

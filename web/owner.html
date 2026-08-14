@@ -36,22 +36,22 @@
       </div>
 
       <section class="section-block">
-        <div class="section-heading"><div><p class="eyebrow">OVERVIEW</p><h2>Paid activity across both platforms</h2></div><p>Mac and Windows cannot be deduplicated into unique people.</p></div>
+        <div class="section-heading"><div><p class="eyebrow">OVERVIEW</p><h2>Purchases and downloads, kept separate</h2></div><p>App Store downloads are not added to Stripe purchases.</p></div>
         <div class="cards hero-cards">
-          <article><span>Paid platform acquisitions</span><strong id="paid-acquisitions">—</strong><small id="paid-acquisitions-note">Windows + Mac</small></article>
-          <article><span>Combined gross sales</span><strong id="combined-gross">—</strong><small>Stripe gross + Apple sales</small></article>
-          <article><span>Combined net proceeds</span><strong id="combined-net">—</strong><small id="combined-net-note">After platform fees</small></article>
+          <article><span>Direct purchases through Stripe</span><strong id="direct-purchases">—</strong><small id="direct-purchases-note">Historical Mac + Windows</small></article>
+          <article><span>Verified Windows purchases</span><strong id="windows-purchases">—</strong><small>Stripe transactions labeled Windows</small></article>
+          <article><span>Mac first-time downloads</span><strong id="mac-downloads">—</strong><small>May include purchases and promo codes</small></article>
           <article><span>Apple store conversion</span><strong id="apple-conversion">—</strong><small id="apple-period">Snapshot period</small></article>
         </div>
-        <p class="footnote">“Paid platform acquisitions” means successful Windows payments plus paid first-time Mac downloads. It is not a count of guaranteed unique people.</p>
+        <p class="footnote">These numbers overlap: legacy Mac buyers paid through Stripe and were later given App Store promo codes. A first-time download does not prove a new sale.</p>
       </section>
 
       <section class="section-block">
-        <div class="section-heading"><div><p class="eyebrow">WINDOWS · STRIPE</p><h2>Sales performance</h2></div><span class="status live">Live</span></div>
+        <div class="section-heading"><div><p class="eyebrow">DIRECT SALES · STRIPE</p><h2>Historical direct purchases</h2></div><span class="status live">Live</span></div>
         <div class="grid sales-grid">
           <article class="panel"><h3>Financial summary</h3><div id="windows-finance" class="rows"></div></article>
           <article class="panel"><h3>Purchase activity</h3><div id="windows-movement" class="rows"></div></article>
-          <article class="panel span-2"><div class="panel-title"><h3>External purchases over time</h3><span class="caption">No customer identities</span></div><div id="sales-chart" class="bar-chart"></div></article>
+          <article class="panel span-2"><div class="panel-title"><h3>Direct purchases over time</h3><span class="caption">No customer identities</span></div><div id="sales-chart" class="bar-chart"></div></article>
           <article class="panel"><h3>Purchase countries</h3><div id="windows-countries" class="rank-list"></div></article>
           <article class="panel"><h3>Recent external purchases</h3><div class="table-wrap"><table><thead><tr><th>Date</th><th>Country</th><th>Gross</th><th>Net</th><th>Downloads</th></tr></thead><tbody id="recent-purchases"></tbody></table></div></article>
         </div>
@@ -69,11 +69,11 @@
         <div class="section-heading"><div><p class="eyebrow">APPLE STORE</p><h2>Discovery, downloads & revenue</h2></div><span id="apple-status" class="status snapshot">Audited snapshot</span></div>
         <div class="grid">
           <article class="panel"><h3>Store funnel</h3><div id="apple-funnel" class="rows"></div></article>
-          <article class="panel"><h3>Commerce & usage</h3><div id="apple-commerce" class="rows"></div></article>
+          <article class="panel"><h3>Reported commerce snapshot</h3><div id="apple-commerce" class="rows"></div></article>
           <article class="panel"><h3>Proceeds by source</h3><div id="apple-sources" class="rank-list"></div></article>
           <article class="panel"><h3>Top captured territories</h3><div id="apple-territories" class="rank-list"></div></article>
         </div>
-        <p class="footnote">Captured territory rows may not add up to total proceeds. Apple usage metrics can also be absent at this volume because Apple applies opt-in and privacy thresholds.</p>
+        <p class="footnote">Apple’s reported sales value and first-time downloads are separate metrics; neither is added to Stripe or converted into a buyer count. Captured territory rows may not add up to total proceeds. Apple usage metrics can also be absent at this volume because Apple applies opt-in and privacy thresholds.</p>
       </section>
 
       <section class="section-block">

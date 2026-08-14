@@ -83,6 +83,9 @@ test('owner dashboard distinguishes business KPIs from diagnostics and snapshots
   assert.match(owner, /Vercel · snapshot/);
   assert.match(owner, /GitHub installer requests/);
   assert.match(owner, /Live · not unique/);
+  assert.match(owner, /Purchases and downloads, kept separate/);
+  assert.doesNotMatch(owner, /Paid platform acquisitions/);
+  assert.doesNotMatch(owner, /Combined gross sales/);
   assert.doesNotMatch(owner, /Active opted-in installs[\s\S]*>Off</);
   assert.match(owner, /No customer identities, filenames, paths, photo metadata, or media content/);
 });

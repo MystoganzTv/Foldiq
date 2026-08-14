@@ -30,13 +30,15 @@ async function stripeMetrics(stripe) {
   } while (startingAfter && payments.length < 1000);
   const paid = payments.filter(item => !item.metadata?.platform || item.metadata.platform === 'windows');
   const external = paid.filter(item => !OWNER_EMAILS.has(paymentEmail(item)));
-  const downloaded = paid.filter(item => Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
-  const externalDownloaded = external.filter(item => Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
+  const explicitWindows = external.filter(item => item.metadata?.platform === 'windows');
+  const legacyUnlabeled = external.filter(item => !item.metadata?.platform);
+  const downloaded = paid.filter(item => item.metadata?.platform === 'windows' && Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
+  const externalDownloaded = explicitWindows.filter(item => Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
   const nowSeconds = Math.floor(Date.now() / 1000);
   const external7d = external.filter(item => item.created >= nowSeconds - 7 * 86400);
   const external30d = external.filter(item => item.created >= nowSeconds - 30 * 86400);
   const trackingStartSeconds = Date.parse(DOWNLOAD_TRACKING_STARTED_AT) / 1000;
-  const trackingEligible = external.filter(item => item.created >= trackingStartSeconds);
+  const trackingEligible = explicitWindows.filter(item => item.created >= trackingStartSeconds);
   const dailyMap = new Map();
   const countryMap = new Map();
   let externalFeesCents = 0;
@@ -83,6 +85,8 @@ async function stripeMetrics(stripe) {
     purchases: paid.length,
     externalPurchases: external.length,
     externalCustomers: external.length,
+    verifiedWindowsPurchases: explicitWindows.length,
+    legacyDirectMacPurchases: legacyUnlabeled.length,
     grossCents: paid.reduce((sum, item) => sum + (item.amount_received || item.amount || 0), 0),
     externalGrossCents: external.reduce((sum, item) => sum + (item.amount_received || item.amount || 0), 0),
     externalFeesCents: hasNetData ? externalFeesCents : null,
