@@ -24,6 +24,8 @@ Configure these only in Vercel Production; never place their values in the repos
 
 Apple metrics currently show the audited 90-day snapshot. To automate App Store Connect, create a read-only Sales and Reports API key and store its issuer ID, key ID, and private key only in Vercel.
 
+Windows download fulfillment is counted on each verified Stripe transaction beginning August 14, 2026. This distinguishes unique purchases that requested the installer from repeat requests. GitHub asset counts remain useful only as a total request counter and cannot identify historical unique buyers.
+
 ## Before the next app release
 
 1. Apply the Supabase migration in `supabase/migrations/` and schedule daily deletion of rows older than 90 days.

@@ -3,7 +3,7 @@ import test from 'node:test';
 
 process.env.STRIPE_SECRET_KEY ||= 'sk_test_placeholder';
 
-const { createDownloadHandler, isAllowedGitHubRedirect } = await import('../api/download.js');
+const { createDownloadHandler, isAllowedGitHubRedirect, recordPurchaseDownload } = await import('../api/download.js');
 
 function response() {
   return {
@@ -81,6 +81,28 @@ test('redirects a verified purchase to GitHub short-lived asset storage', async 
   assert.equal(res.headers.location, 'https://release-assets.githubusercontent.com/private/signed');
   assert.equal(requests[1].options.redirect, 'manual');
   assert.equal(requests[1].options.headers.Authorization, 'Bearer github-token');
+});
+
+test('records unique purchase fulfillment and repeat requests in Stripe metadata', async () => {
+  const updates = [];
+  const stripe = { paymentIntents: { update: async (id, value) => { updates.push({ id, value }); } } };
+  const now = new Date('2026-08-14T01:02:03.000Z');
+  const first = await recordPurchaseDownload(stripe, {
+    payment_intent: { id: 'pi_paid', metadata: {} },
+  }, now);
+  const repeat = await recordPurchaseDownload(stripe, {
+    payment_intent: {
+      id: 'pi_paid',
+      metadata: { foldiq_download_count: '2', foldiq_first_download_at: '2026-08-14T00:00:00.000Z' },
+    },
+  }, now);
+
+  assert.equal(first, true);
+  assert.equal(repeat, true);
+  assert.equal(updates[0].value.metadata.foldiq_download_count, '1');
+  assert.equal(updates[1].value.metadata.foldiq_download_count, '3');
+  assert.equal(updates[1].value.metadata.foldiq_first_download_at, '2026-08-14T00:00:00.000Z');
+  assert.equal(updates[1].value.metadata.foldiq_last_download_at, '2026-08-14T01:02:03.000Z');
 });
 
 test('refuses an unexpected redirect host', () => {

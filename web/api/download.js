@@ -17,6 +17,27 @@ function githubHeaders(token, accept = 'application/vnd.github+json') {
   };
 }
 
+function parseDownloadCount(value) {
+  const count = Number.parseInt(value, 10);
+  return Number.isSafeInteger(count) && count >= 0 ? count : 0;
+}
+
+export async function recordPurchaseDownload(stripe, session, now = new Date()) {
+  const paymentIntent = session?.payment_intent;
+  if (!paymentIntent || typeof paymentIntent !== 'object' || !paymentIntent.id) return false;
+  const timestamp = now.toISOString();
+  const metadata = paymentIntent.metadata || {};
+  await stripe.paymentIntents.update(paymentIntent.id, {
+    metadata: {
+      ...metadata,
+      foldiq_download_count: String(parseDownloadCount(metadata.foldiq_download_count) + 1),
+      foldiq_first_download_at: metadata.foldiq_first_download_at || timestamp,
+      foldiq_last_download_at: timestamp,
+    },
+  });
+  return true;
+}
+
 export function isAllowedGitHubRedirect(value) {
   try {
     const url = new URL(value);
@@ -63,7 +84,9 @@ export function createDownloadHandler({
 
     let session;
     try {
-      session = await stripe.checkout.sessions.retrieve(sessionId);
+      session = await stripe.checkout.sessions.retrieve(sessionId, {
+        expand: ['payment_intent'],
+      });
     } catch (error) {
       console.error('Checkout session validation failed:', error.message);
       send(res, 403, 'Purchase could not be verified');
@@ -98,6 +121,13 @@ export function createDownloadHandler({
       const location = assetResponse.headers.get('location');
       if (![301, 302, 303, 307, 308].includes(assetResponse.status) || !isAllowedGitHubRedirect(location)) {
         throw new Error(`GitHub asset request returned an unsafe response (${assetResponse.status})`);
+      }
+
+      try {
+        await recordPurchaseDownload(stripe, session);
+      } catch (error) {
+        // Fulfillment must still work if Stripe has a temporary metadata error.
+        console.error('Purchase download tracking failed:', error.message);
       }
 
       res.status(302);

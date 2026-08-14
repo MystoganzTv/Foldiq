@@ -24,12 +24,18 @@ async function stripeMetrics(stripe) {
     const email = item.receipt_email || charge?.billing_details?.email || '';
     return !OWNER_EMAILS.has(String(email).toLowerCase());
   });
+  const downloaded = paid.filter(item => Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
+  const externalDownloaded = external.filter(item => Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
   return {
     configured: true,
     purchases: paid.length,
     externalCustomers: external.length,
     grossCents: paid.reduce((sum, item) => sum + (item.amount_received || item.amount || 0), 0),
     externalGrossCents: external.reduce((sum, item) => sum + (item.amount_received || item.amount || 0), 0),
+    buyerDownloads: downloaded.length,
+    externalBuyerDownloads: externalDownloaded.length,
+    trackedDownloadRequests: downloaded.reduce((sum, item) => sum + (Number.parseInt(item.metadata?.foldiq_download_count, 10) || 0), 0),
+    downloadTrackingSince: '2026-08-14T00:00:00.000Z',
     currency: paid[0]?.currency || 'usd',
   };
 }
