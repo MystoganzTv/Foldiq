@@ -286,6 +286,7 @@ struct WelcomeView: View {
     }
 
     private static func restoreSecurityScope(from json: String) -> [URL] {
+        #if os(macOS)
         guard let data = json.data(using: .utf8),
               let records = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] else { return [] }
         return records.compactMap { record in
@@ -299,6 +300,9 @@ struct WelcomeView: View {
             ), url.startAccessingSecurityScopedResource() else { return nil }
             return url
         }
+        #else
+        return []
+        #endif
     }
 
     @ViewBuilder

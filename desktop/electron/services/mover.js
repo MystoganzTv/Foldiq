@@ -142,6 +142,9 @@ async function apply(plan, config, onProgress, hooks = {}) {
       dest: item.destPath,
       action: item.action,
       name: item.name,
+      // Undo needs to know an extracted file came from an archive: its source is
+      // a temp directory that cleanupTempDirs() removes after a successful Apply.
+      archiveSourcePath: item.archiveSourcePath || null,
       status: 'pending',
     })),
     skipped,
@@ -187,6 +190,7 @@ async function apply(plan, config, onProgress, hooks = {}) {
         src: item.path,
         dest: item.destPath,
         action: item.action,
+        archiveSourcePath: item.archiveSourcePath || null,
         sha256: sourceHash,
         size: sourceSize,
       });
@@ -305,6 +309,21 @@ async function undo(mPath, manifestDirectory = null, onProgress = () => {}) {
       }
 
       if (entry.action === 'copy') {
+        // Undoing a copy deletes the organized duplicate, which is only safe
+        // while a recoverable source still exists. Extracted archive media is
+        // always recoverable by reopening the untouched archive. A plain copy is
+        // not: if the user deleted or replaced the originals after organizing,
+        // this copy is the last surviving version, so refuse instead of
+        // destroying it.
+        if (!entry.archiveSourcePath) {
+          if (!(await exists(entry.src))) {
+            throw new Error(`The original is missing, so this organized copy is the only version left; automatic Undo was refused: ${entry.dest}`);
+          }
+          const originalHash = await hashFile(entry.src);
+          if (originalHash !== entry.sha256) {
+            throw new Error(`The original changed after organization; automatic Undo was refused: ${entry.dest}`);
+          }
+        }
         await fs.promises.unlink(entry.dest);
       } else {
         if (await exists(entry.src)) {

@@ -9,9 +9,15 @@ import UniformTypeIdentifiers
 
 #if !os(macOS)
 struct IOSPhotosExportView: View {
+    private enum DestinationPickerPurpose: Equatable {
+        case export
+        case undo
+    }
+
     @Environment(\.requestReview) private var requestReview
     @StateObject private var exporter = PhotoLibraryExporter()
     @State private var showingDestinationPicker = false
+    @State private var destinationPickerPurpose: DestinationPickerPurpose = .export
     @State private var destinationFolder: URL?
     @State private var organizationMode: OrganizationMode = .smartHybrid
     @State private var includeLocation = true
@@ -20,6 +26,11 @@ struct IOSPhotosExportView: View {
     @State private var activeTask: Task<Void, Never>?
     @State private var showingSystemPicker = false
     @State private var pickedPhotoItems: [PhotosPickerItem] = []
+    @State private var showingExportPlan = true
+    @State private var showingUndoConfirmation = false
+
+    @AppStorage("mobileOutputFolderName") private var outputFolderName = "Foldiq Export"
+    @AppStorage(AnonymousTelemetry.preferenceKey) private var shareAnonymousUsageData = false
 
     // What's New / update news
     @State private var showingWhatsNew = false
@@ -49,6 +60,7 @@ struct IOSPhotosExportView: View {
                     statusCard
                     configurationPanel
                     selectionPanel
+                    previewPanel
                     actionArea
                     safetyNotes
                     privacyNote
@@ -91,6 +103,14 @@ struct IOSPhotosExportView: View {
                         return
                     }
                     destinationFolder = url
+                    if destinationPickerPurpose == .undo {
+                        exporter.undoLastExport(
+                            in: url,
+                            outputFolderName: safeOutputFolderName
+                        )
+                    } else {
+                        exporter.invalidatePreview()
+                    }
                 case .failure(let error):
                     let nsError = error as NSError
                     guard nsError.domain != NSCocoaErrorDomain || nsError.code != NSUserCancelledError else {
@@ -116,6 +136,18 @@ struct IOSPhotosExportView: View {
             .onDisappear {
                 activeTask?.cancel()
                 activeTask = nil
+            }
+            .confirmationDialog(
+                "Undo the last export?",
+                isPresented: $showingUndoConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Exported Copies", role: .destructive) {
+                    startUndo()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Foldiq will delete only the copies recorded in its last-export manifest. Your Photos Library originals are never changed.")
             }
         }
     }
@@ -166,6 +198,10 @@ struct IOSPhotosExportView: View {
                 exportProgress
             case .completed(let folder, let count, let skipped, let failures):
                 completionSummary(folder: folder, exportedCount: count, skippedCount: skipped, failures: failures)
+            case .undoing:
+                ProgressView("Undoing the last export…")
+            case .undone(let folder, let removed, let failures):
+                undoSummary(folder: folder, removedCount: removed, failures: failures)
             case .failed(let message):
                 Label("Needs attention", systemImage: "exclamationmark.triangle.fill")
                     .font(.title3.bold())
@@ -179,6 +215,37 @@ struct IOSPhotosExportView: View {
         .padding(20)
         .frame(maxWidth: .infinity)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func undoSummary(
+        folder: URL,
+        removedCount: Int,
+        failures: [PhotoLibraryExporter.FailedUndo]
+    ) -> some View {
+        VStack(spacing: 12) {
+            Label(
+                failures.isEmpty ? "Undo complete" : "Undo needs attention",
+                systemImage: failures.isEmpty ? "arrow.uturn.backward.circle.fill" : "exclamationmark.triangle.fill"
+            )
+            .font(.title3.bold())
+            .foregroundStyle(failures.isEmpty ? .green : .orange)
+
+            Text("Removed \(removedCount) exported cop\(removedCount == 1 ? "y" : "ies"). Photos Library originals were not changed.")
+                .font(.callout)
+                .multilineTextAlignment(.center)
+
+            Text(folder.path)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+                .multilineTextAlignment(.center)
+
+            ForEach(failures.prefix(3)) { failure in
+                Text("\(failure.relativePath): \(failure.reason)")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+        }
     }
 
     private var idleState: some View {
@@ -223,6 +290,7 @@ struct IOSPhotosExportView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                .onChange(of: organizationMode) { _, _ in exporter.invalidatePreview() }
 
                 Text(organizationMode.description)
                     .font(.caption)
@@ -231,11 +299,111 @@ struct IOSPhotosExportView: View {
                 if organizationMode == .smartHybrid {
                     Toggle("Use location when available", isOn: $includeLocation)
                         .toggleStyle(.switch)
+                        .onChange(of: includeLocation) { _, _ in exporter.invalidatePreview() }
+
+                    if includeLocation {
+                        Text("Folder names use Apple's geocoding service to turn saved GPS coordinates into city/state names. Turn this off for a fully offline export.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+
+                TextField("Export folder name", text: $outputFolderName)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: outputFolderName) { _, _ in exporter.invalidatePreview() }
+
+                Text("Foldiq creates this folder inside the destination you choose. Names are cleaned automatically for Files.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
+    @ViewBuilder
+    private var previewPanel: some View {
+        if case .ready = exporter.phase, let destinationFolder {
+            let isCurrent = exporter.previewIsCurrent(
+                destinationFolder: destinationFolder,
+                mode: organizationMode,
+                includeLocation: includeLocation,
+                outputFolderName: safeOutputFolderName
+            )
+
+            if exporter.isBuildingPreview || isCurrent {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Label("Export Plan", systemImage: "list.bullet.rectangle")
+                            .font(.headline)
+                        Spacer()
+                        if isCurrent {
+                            Text("\(exporter.previewItems.count) files")
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(.green)
+                        }
+                    }
+
+                    if exporter.isBuildingPreview {
+                        ProgressView(
+                            value: Double(exporter.previewProgress.done),
+                            total: Double(max(exporter.previewProgress.total, 1))
+                        )
+                        Text("Planning \(exporter.previewProgress.done) of \(exporter.previewProgress.total)…")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    } else {
+                        let unknownDates = exporter.previewItems.filter(\.hasUnknownDate).count
+                        if unknownDates > 0 {
+                            Label(
+                                "\(unknownDates) item\(unknownDates == 1 ? "" : "s") will go to Unknown Date.",
+                                systemImage: "calendar.badge.exclamationmark"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        }
+
+                        DisclosureGroup(isExpanded: $showingExportPlan) {
+                            LazyVStack(alignment: .leading, spacing: 9) {
+                                ForEach(Array(exporter.previewItems.prefix(250))) { item in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack {
+                                            Text(item.filename)
+                                                .font(.caption.weight(.semibold))
+                                                .lineLimit(1)
+                                                .truncationMode(.middle)
+                                            if item.isAlreadyExported {
+                                                Text("Already exported")
+                                                    .font(.caption2.weight(.semibold))
+                                                    .foregroundStyle(.green)
+                                            }
+                                        }
+                                        Label(item.relativePath, systemImage: "arrow.turn.down.right")
+                                            .font(.caption2.monospaced())
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+
+                                if exporter.previewItems.count > 250 {
+                                    Text("…and \(exporter.previewItems.count - 250) more in the CSV report generated after export.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.top, 8)
+                        } label: {
+                            Text("Review every planned destination")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                    }
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.blue.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+            }
         }
     }
 
@@ -390,6 +558,13 @@ struct IOSPhotosExportView: View {
                 .padding(12)
                 .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
             }
+
+            if let reportURL = exporter.reportURL {
+                ShareLink(item: reportURL) {
+                    Label("Share Detailed Report (.CSV)", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.bordered)
+            }
         }
     }
 
@@ -415,6 +590,15 @@ struct IOSPhotosExportView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
+
+                Button {
+                    destinationPickerPurpose = .undo
+                    showingDestinationPicker = true
+                } label: {
+                    Label("Undo a Previous Export", systemImage: "arrow.uturn.backward")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
             }
         case .requestingAccess, .scanning:
             VStack(spacing: 12) {
@@ -430,6 +614,12 @@ struct IOSPhotosExportView: View {
         case .ready:
             VStack(spacing: 12) {
                 if let destinationFolder {
+                    let previewIsCurrent = exporter.previewIsCurrent(
+                        destinationFolder: destinationFolder,
+                        mode: organizationMode,
+                        includeLocation: includeLocation,
+                        outputFolderName: safeOutputFolderName
+                    )
                     VStack(spacing: 4) {
                         Text(destinationFolder.path)
                             .font(.caption2)
@@ -444,18 +634,31 @@ struct IOSPhotosExportView: View {
                         }
                     }
 
-                    Button {
-                        startExport(to: destinationFolder)
-                    } label: {
-                        Label("Export \(exporter.selectedCount) Organized Copies", systemImage: "square.and.arrow.down")
-                            .frame(maxWidth: .infinity)
+                    if previewIsCurrent {
+                        Button {
+                            startExport(to: destinationFolder)
+                        } label: {
+                            Label("Export \(exporter.selectedCount) Organized Copies", systemImage: "square.and.arrow.down")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .disabled(exporter.selectedCount == 0)
+                    } else {
+                        Button {
+                            startPreview(to: destinationFolder)
+                        } label: {
+                            Label("Review Export Plan", systemImage: "list.bullet.rectangle")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .disabled(exporter.selectedCount == 0 || exporter.isBuildingPreview)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(exporter.selectedCount == 0)
 
                     HStack(spacing: 20) {
                         Button {
+                            destinationPickerPurpose = .export
                             showingDestinationPicker = true
                         } label: {
                             Text("Change folder")
@@ -476,6 +679,7 @@ struct IOSPhotosExportView: View {
                     .padding(.top, 2)
                 } else {
                     Button {
+                        destinationPickerPurpose = .export
                         showingDestinationPicker = true
                     } label: {
                         Label("Choose Export Folder", systemImage: "folder.badge.plus")
@@ -497,6 +701,15 @@ struct IOSPhotosExportView: View {
             }
         case .completed:
             VStack(spacing: 12) {
+                Button(role: .destructive) {
+                    showingUndoConfirmation = true
+                } label: {
+                    Label("Undo Last Export", systemImage: "arrow.uturn.backward")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
                 Button {
                     returnToStart()
                 } label: {
@@ -506,6 +719,17 @@ struct IOSPhotosExportView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             }
+        case .undoing:
+            EmptyView()
+        case .undone:
+            Button {
+                returnToStart()
+            } label: {
+                Label("Done", systemImage: "checkmark")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         case .exporting:
             VStack(spacing: 12) {
                 Button {
@@ -575,7 +799,8 @@ struct IOSPhotosExportView: View {
             await exporter.export(
                 to: destinationFolder,
                 mode: organizationMode,
-                includeLocation: includeLocation
+                includeLocation: includeLocation,
+                outputFolderName: safeOutputFolderName
             )
 
             var shouldRequestReview = false
@@ -598,6 +823,30 @@ struct IOSPhotosExportView: View {
             }
             activeTask = nil
         }
+    }
+
+    private func startPreview(to destinationFolder: URL) {
+        activeTask?.cancel()
+        activeTask = Task {
+            await exporter.buildPreview(
+                to: destinationFolder,
+                mode: organizationMode,
+                includeLocation: includeLocation,
+                outputFolderName: safeOutputFolderName
+            )
+            activeTask = nil
+        }
+    }
+
+    private func startUndo() {
+        guard let destinationFolder else {
+            exporter.fail("The export destination is no longer available. Choose it again to undo.")
+            return
+        }
+        exporter.undoLastExport(
+            in: destinationFolder,
+            outputFolderName: safeOutputFolderName
+        )
     }
 
     private func cancelActiveOperation(resetToStart: Bool) {
@@ -658,6 +907,12 @@ struct IOSPhotosExportView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
+            Toggle("Help improve Foldiq anonymously", isOn: $shareAnonymousUsageData)
+                .font(.caption)
+            Text("Optional and off by default. Sends only operation type, success, app version, and broad duration/item-count ranges — never photos, filenames, paths, dates, locations, or metadata.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
             HStack(spacing: 16) {
                 if let privacy = URL(string: "https://foldiq.app/privacy") {
                     Link("Privacy Policy", destination: privacy)
@@ -672,6 +927,10 @@ struct IOSPhotosExportView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var safeOutputFolderName: String {
+        MobileExportPlanner.safeOutputFolderName(outputFolderName)
     }
 
     private var versionFooter: some View {
@@ -855,8 +1114,12 @@ extension FoldiqRelease {
     static let all: [FoldiqRelease] = [
         FoldiqRelease(
             version: AppInfo.version,   // tracks the real bundle version, always matches the footer
-            date: "June 2026",
+            date: "August 2026",
             highlights: [
+                ("list.bullet.rectangle", "Preview before export — review each planned folder and filename before Foldiq writes a copy."),
+                ("doc.text", "Detailed local reports — every export creates a spreadsheet-compatible CSV with destinations, results, and errors."),
+                ("bolt.horizontal.circle", "Crash-safe resume — progress is checkpointed after every completed file, so large exports can continue safely."),
+                ("arrow.uturn.backward.circle", "Safe Undo — remove only the copies created by the last export while Photos Library originals remain untouched."),
                 ("livephoto", "Live Photos stay whole — they export as a matching pair, the still and its motion video together, so nothing is lost."),
                 ("arrow.triangle.2.circlepath", "Smarter re-exports — Foldiq remembers what it already saved and skips it, so running an export again is fast and never re-downloads from iCloud."),
                 ("icloud.and.arrow.down", "Reliable iCloud downloads — full-resolution photos stored in iCloud now download correctly during export, with clearer messages if iCloud isn't ready."),

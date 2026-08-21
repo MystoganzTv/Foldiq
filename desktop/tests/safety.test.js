@@ -320,6 +320,89 @@ test('Undo refuses to delete a file changed after organization', async (t) => {
   assert.equal(fs.existsSync(applied.manifestPath), true);
 });
 
+test('Undo refuses to delete a copy whose original no longer exists', async (t) => {
+  const dir = tempDir(t);
+  const source = path.join(dir, 'source.jpg');
+  const destination = path.join(dir, 'output', 'source.jpg');
+  fs.writeFileSync(source, 'original');
+
+  const applied = await mover.apply([
+    { name: 'source.jpg', path: source, destPath: destination, action: 'copy' },
+  ], applyConfig(dir), () => {});
+  fs.unlinkSync(source);
+  const undone = await mover.undo(applied.manifestPath);
+
+  assert.equal(undone.restored, 0);
+  assert.equal(undone.errors.length, 1);
+  assert.equal(fs.readFileSync(destination, 'utf8'), 'original');
+  assert.equal(fs.existsSync(applied.manifestPath), true);
+});
+
+test('Undo refuses to delete a copy whose original was replaced', async (t) => {
+  const dir = tempDir(t);
+  const source = path.join(dir, 'source.jpg');
+  const destination = path.join(dir, 'output', 'source.jpg');
+  fs.writeFileSync(source, 'original');
+
+  const applied = await mover.apply([
+    { name: 'source.jpg', path: source, destPath: destination, action: 'copy' },
+  ], applyConfig(dir), () => {});
+  fs.writeFileSync(source, 'different content now');
+  const undone = await mover.undo(applied.manifestPath);
+
+  assert.equal(undone.restored, 0);
+  assert.equal(undone.errors.length, 1);
+  assert.equal(fs.readFileSync(destination, 'utf8'), 'original');
+  assert.equal(fs.existsSync(applied.manifestPath), true);
+});
+
+test('Undo still removes extracted archive media after its temporary copy is gone', async (t) => {
+  const dir = tempDir(t);
+  const extracted = path.join(dir, 'extracted', 'source.jpg');
+  const destination = path.join(dir, 'output', 'source.jpg');
+  fs.mkdirSync(path.dirname(extracted), { recursive: true });
+  fs.writeFileSync(extracted, 'original');
+
+  const applied = await mover.apply([
+    {
+      name: 'source.jpg',
+      path: extracted,
+      destPath: destination,
+      action: 'copy',
+      archiveSourcePath: path.join(dir, 'photos.zip'),
+    },
+  ], applyConfig(dir), () => {});
+  fs.rmSync(path.dirname(extracted), { recursive: true, force: true });
+  const undone = await mover.undo(applied.manifestPath);
+
+  assert.equal(undone.restored, 1);
+  assert.deepEqual(undone.errors, []);
+  assert.equal(fs.existsSync(destination), false);
+  assert.equal(fs.existsSync(applied.manifestPath), false);
+});
+
+test('Apply journals the archive origin of extracted media', async (t) => {
+  const dir = tempDir(t);
+  const extracted = path.join(dir, 'extracted', 'source.jpg');
+  const archive = path.join(dir, 'photos.zip');
+  fs.mkdirSync(path.dirname(extracted), { recursive: true });
+  fs.writeFileSync(extracted, 'original');
+
+  const applied = await mover.apply([
+    {
+      name: 'source.jpg',
+      path: extracted,
+      destPath: path.join(dir, 'output', 'source.jpg'),
+      action: 'copy',
+      archiveSourcePath: archive,
+    },
+  ], applyConfig(dir), () => {});
+  const manifest = JSON.parse(fs.readFileSync(applied.manifestPath, 'utf8'));
+
+  assert.equal(manifest.moves[0].archiveSourcePath, archive);
+  assert.equal(manifest.operations[0].archiveSourcePath, archive);
+});
+
 test('moving files keeps empty folders until the user confirms cleanup', async (t) => {
   const dir = tempDir(t);
   const sourceRoot = path.join(dir, 'source');

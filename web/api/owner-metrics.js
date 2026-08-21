@@ -4,6 +4,7 @@ import { aggregateTelemetry } from '../lib/telemetry.js';
 import { aggregateAppleRows } from '../lib/apple-analytics.js';
 import { databaseConfigured, queryDatabase } from '../lib/database.js';
 import { WINDOWS_AUTOMATIC_TAX_ENABLED } from '../lib/commerce.js';
+import { channelFromMetadata } from '../lib/attribution.js';
 
 const REPOSITORY = 'MystoganzTv/Foldiq';
 const OWNER_EMAILS = new Set((process.env.OWNER_EMAILS || 'enrique.padron853@gmail.com,enriquespangberg@gmail.com')
@@ -69,6 +70,7 @@ async function stripeMetrics(stripe) {
   const trackingEligible = explicitWindows.filter(item => item.created >= trackingStartSeconds);
   const dailyMap = new Map();
   const countryMap = new Map();
+  const channelMap = new Map();
   let externalFeesCents = 0;
   let externalNetCents = 0;
   let hasNetData = true;
@@ -92,6 +94,8 @@ async function stripeMetrics(stripe) {
     dailyMap.set(day, daily);
     const country = charge?.billing_details?.address?.country || 'Unknown';
     countryMap.set(country, (countryMap.get(country) || 0) + 1);
+    const channel = channelFromMetadata(item.metadata);
+    channelMap.set(channel, (channelMap.get(channel) || 0) + 1);
     if ((charge?.amount_refunded || 0) > 0) {
       refundedPurchases += 1;
       refundedCents += charge.amount_refunded;
@@ -106,6 +110,7 @@ async function stripeMetrics(stripe) {
       grossCents: item.amount_received || item.amount || 0,
       netCents: balance?.net ?? null,
       downloadCount: Number.parseInt(item.metadata?.foldiq_download_count, 10) || 0,
+      channel: channelFromMetadata(item.metadata),
     };
   });
   return {
@@ -133,6 +138,7 @@ async function stripeMetrics(stripe) {
     downloadTrackingSince: DOWNLOAD_TRACKING_STARTED_AT,
     daily: [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
     countries: [...countryMap.entries()].map(([country, customers]) => ({ country, customers })).sort((a, b) => b.customers - a.customers),
+    channels: [...channelMap.entries()].map(([channel, customers]) => ({ channel, customers })).sort((a, b) => b.customers - a.customers),
     recentPurchases,
     currency: paid[0]?.currency || 'usd',
     automaticTaxEnabled: WINDOWS_AUTOMATIC_TAX_ENABLED,

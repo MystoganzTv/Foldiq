@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export const EVENT_NAMES = new Set(['scan_completed', 'apply_completed', 'undo_completed']);
-export const PLATFORMS = new Set(['macos', 'windows']);
+export const PLATFORMS = new Set(['ios', 'macos', 'windows']);
 export const DURATION_BUCKETS = new Set(['under_30s', '30s_2m', '2m_5m', '5m_15m', 'over_15m']);
 export const ITEM_BUCKETS = new Set(['0', '1_49', '50_199', '200_999', '1000_4999', '5000_plus']);
 

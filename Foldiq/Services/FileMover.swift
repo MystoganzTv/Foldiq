@@ -336,7 +336,25 @@ final class FileMover {
             throw NSError(domain: "Foldiq.Undo", code: 2, userInfo: [NSLocalizedDescriptionKey: "The organized file changed after organization; Undo was refused."])
         }
 
-        if operation == .copy || isFromArchive {
+        if isFromArchive {
+            // Archive-sourced files have no lasting original on disk: the entry's
+            // original path points into a temp extraction directory that Foldiq
+            // deletes after Apply. Removing the organized copy stays recoverable
+            // because the archive the file came from was never modified.
+            try fm.removeItem(at: organizedURL)
+        } else if operation == .copy {
+            // Undoing a Copy deletes the organized duplicate instead of moving it
+            // back, which is only safe while the original is still on disk and
+            // still byte-identical. If the user deleted or replaced the originals
+            // after organizing — trusting the organized copy as the canonical one —
+            // this copy is the last surviving version of the file, so deleting it
+            // would destroy user data. Refuse and let the user remove it manually.
+            guard originalExists else {
+                throw NSError(domain: "Foldiq.Undo", code: 4, userInfo: [NSLocalizedDescriptionKey: "The original file is missing, so this organized copy is the only version left. Foldiq will not delete it — remove it yourself if you no longer need it."])
+            }
+            guard originalURL.sha256() == expectedHash else {
+                throw NSError(domain: "Foldiq.Undo", code: 5, userInfo: [NSLocalizedDescriptionKey: "The original file changed after organization, so Foldiq will not delete this organized copy."])
+            }
             try fm.removeItem(at: organizedURL)
         } else if originalExists {
             guard originalURL.sha256() == expectedHash else {

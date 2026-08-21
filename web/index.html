@@ -831,6 +831,51 @@
   // signed and notarized by Apple. Stripe checkout is Windows-only.
   const MAC_APP_STORE_URL = 'https://apps.apple.com/us/app/foldiq/id6772513569';
 
+  // ── Purchase attribution ────────────────────────────────────────────────────
+  // Remembers how this visitor arrived so a completed sale can be credited to a
+  // channel — Apple reports this for App Store sales, Stripe reports nothing.
+  // Only coarse labels are kept: campaign tags and the referring host, never a
+  // full URL, a path, or anything identifying the visitor. Captured once on the
+  // landing page so it survives navigation to the FAQ and back.
+  const ATTRIBUTION_KEY = 'foldiq-attribution';
+
+  function captureAttribution() {
+    try {
+      const stored = sessionStorage.getItem(ATTRIBUTION_KEY);
+      if (stored) return JSON.parse(stored);
+    } catch (_) {
+      // Private mode or blocked storage — fall through and recapture.
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    let referrerHost = '';
+    try {
+      if (document.referrer) {
+        const referrerUrl = new URL(document.referrer);
+        // Internal navigation is not a channel.
+        if (referrerUrl.host !== window.location.host) referrerHost = referrerUrl.host;
+      }
+    } catch (_) {
+      referrerHost = '';
+    }
+
+    const attribution = {
+      source: params.get('utm_source') || params.get('ref') || '',
+      medium: params.get('utm_medium') || '',
+      campaign: params.get('utm_campaign') || '',
+      referrer: referrerHost,
+    };
+
+    try {
+      sessionStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(attribution));
+    } catch (_) {
+      // Nothing to do — the sale is simply recorded as direct.
+    }
+    return attribution;
+  }
+
+  const visitAttribution = captureAttribution();
+
   async function startCheckout(platform) {
     const btn = document.getElementById('buy-btn');
     const label = document.getElementById('buy-label');
@@ -848,7 +893,7 @@
       const res = await fetch('/api/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: plat }),
+        body: JSON.stringify({ platform: plat, attribution: visitAttribution }),
       });
       const data = await res.json();
       if (data.url) {

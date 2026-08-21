@@ -17,7 +17,7 @@ enum AnonymousTelemetry {
             "eventId": UUID().uuidString.lowercased(),
             "installId": installID,
             "eventName": event.rawValue,
-            "platform": "macos",
+            "platform": platform,
             "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0",
             "success": success,
             "durationBucket": durationBucket(elapsed),
@@ -29,6 +29,14 @@ enum AnonymousTelemetry {
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         URLSession.shared.dataTask(with: request).resume()
+    }
+
+    private static var platform: String {
+        #if os(macOS)
+        "macos"
+        #else
+        "ios"
+        #endif
     }
 
     private static var installID: String {

@@ -13,6 +13,7 @@
 
 import Stripe from 'stripe';
 import { Resend } from 'resend';
+import { channelFromMetadata } from '../lib/attribution.js';
 
 // Disable Vercel's automatic body parsing — Stripe needs the raw bytes.
 export const config = {
@@ -234,6 +235,7 @@ export default async function handler(req, res) {
   const customerEmail = session.customer_details?.email || session.customer_email;
   const customerName  = session.customer_details?.name || '';
   const platform      = session.metadata?.platform === 'mac' ? 'mac' : 'windows';
+  const channel       = channelFromMetadata(session.metadata);
   const amountTotal   = session.amount_total ?? 499;
   const currency      = (session.currency || 'usd').toUpperCase();
   const amount        = new Intl.NumberFormat('en-US', {
@@ -278,9 +280,12 @@ export default async function handler(req, res) {
       const ownerResult = await resend.emails.send({
         from: RECEIPTS_FROM_EMAIL,
         to: OWNER_EMAIL,
-        subject: `[New Sale] Foldiq ${platform} ${amount} — ${customerEmail.replace(/[\r\n]/g, ' ')}`,
+        subject: `[New Sale] Foldiq ${platform} ${amount} · ${channel} — ${customerEmail.replace(/[\r\n]/g, ' ')}`,
         html: `<p style="font-family:monospace;font-size:13px;color:#475569;">
                  platform: ${escapeHTML(platform)}<br/>
+                 channel: ${escapeHTML(channel)}<br/>
+                 campaign: ${escapeHTML(session.metadata?.attribution_campaign || '—')}<br/>
+                 referrer: ${escapeHTML(session.metadata?.attribution_referrer || '—')}<br/>
                  payment_intent: ${escapeHTML(session.payment_intent || '—')}<br/>
                  checkout_session: ${escapeHTML(session.id)}<br/>
                  country: ${escapeHTML(session.customer_details?.address?.country || '—')}

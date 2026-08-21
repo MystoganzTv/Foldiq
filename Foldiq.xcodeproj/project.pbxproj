@@ -75,6 +75,9 @@
 		AA000032 /* Archive in Frameworks */ = {isa = PBXBuildFile; productRef = FF000002 /* Archive */; };
 		AA000033 /* SevenZip in Frameworks */ = {isa = PBXBuildFile; productRef = FF000004 /* SevenZip */; };
 		AA000034 /* AnonymousTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000032 /* AnonymousTelemetry.swift */; };
+		AA200031 /* AnonymousTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000032 /* AnonymousTelemetry.swift */; };
+		AA200032 /* MobileExportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000033 /* MobileExportSupport.swift */; };
+		AA300001 /* MobileExportSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB300001 /* MobileExportSupportTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -84,6 +87,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = FoldiqTarget;
 			remoteInfo = Foldiq;
+		};
+		DD300001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FoldiqProject /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FoldiqiPadTarget;
+			remoteInfo = "Foldiq-iOS";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -120,15 +130,18 @@
 		BB000030 /* IOSPhotosExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPhotosExportView.swift; sourceTree = "<group>"; };
 		BB000031 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		BB000032 /* AnonymousTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnonymousTelemetry.swift; sourceTree = "<group>"; };
+		BB000033 /* MobileExportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileExportSupport.swift; sourceTree = "<group>"; };
 		BB100001 /* OrganizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationPlannerTests.swift; sourceTree = "<group>"; };
 		BB100002 /* ProbableDuplicateDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbableDuplicateDetectorTests.swift; sourceTree = "<group>"; };
 		BB100003 /* ArchiveExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveExtractorTests.swift; sourceTree = "<group>"; };
 		BB100004 /* archive-media.7z */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fixtures/archive-media.7z"; sourceTree = "<group>"; };
 		BB100005 /* archive-media.rar */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fixtures/archive-media.rar"; sourceTree = "<group>"; };
 		BB100006 /* FileMoverSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileMoverSafetyTests.swift; sourceTree = "<group>"; };
+		BB300001 /* MobileExportSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileExportSupportTests.swift; sourceTree = "<group>"; };
 		CC000001 /* Foldiq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foldiq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC100001 /* FoldiqTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FoldiqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC200001 /* Foldiq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foldiq.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC300001 /* FoldiqIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FoldiqIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -149,6 +162,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		FrameworksPhaseiPad /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FrameworksPhaseIOSTests /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -205,11 +225,20 @@
 			path = FoldiqTests;
 			sourceTree = "<group>";
 		};
+		FoldiqIOSTestsGroup /* FoldiqIOSTests */ = {
+			isa = PBXGroup;
+			children = (
+				BB300001 /* MobileExportSupportTests.swift */,
+			);
+			path = FoldiqIOSTests;
+			sourceTree = "<group>";
+		};
 		MainGroup = {
 			isa = PBXGroup;
 			children = (
 				FoldiqGroup /* Foldiq */,
 				FoldiqTestsGroup /* FoldiqTests */,
+				FoldiqIOSTestsGroup /* FoldiqIOSTests */,
 				ProductsGroup /* Products */,
 			);
 			sourceTree = "<group>";
@@ -237,6 +266,7 @@
 				CC000001 /* Foldiq.app */,
 				CC200001 /* Foldiq.app */,
 				CC100001 /* FoldiqTests.xctest */,
+				CC300001 /* FoldiqIOSTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -272,6 +302,7 @@
 				BB000026 /* ProbableDuplicateDetector.swift */,
 				BB000029 /* PhotoLibraryExporter.swift */,
 				BB000032 /* AnonymousTelemetry.swift */,
+				BB000033 /* MobileExportSupport.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -370,6 +401,24 @@
 			productReference = CC200001 /* Foldiq.app */;
 			productType = "com.apple.product-type.application";
 		};
+		FoldiqIOSTestsTarget /* FoldiqIOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = IOSTestTargetConfigList /* Build configuration list for PBXNativeTarget "FoldiqIOSTests" */;
+			buildPhases = (
+				SourcesPhaseIOSTests /* Sources */,
+				ResourcesPhaseIOSTests /* Resources */,
+				FrameworksPhaseIOSTests /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EE300001 /* PBXTargetDependency */,
+			);
+			name = FoldiqIOSTests;
+			productName = FoldiqIOSTests;
+			productReference = CC300001 /* FoldiqIOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -389,6 +438,10 @@
 					};
 					FoldiqiPadTarget = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					FoldiqIOSTestsTarget = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = FoldiqiPadTarget;
 					};
 				};
 			};
@@ -412,6 +465,7 @@
 				FoldiqTarget /* Foldiq */,
 				FoldiqiPadTarget /* Foldiq-iOS */,
 				FoldiqTestsTarget /* FoldiqTests */,
+				FoldiqIOSTestsTarget /* FoldiqIOSTests */,
 			);
 		};
 /* End PBXProject section */
@@ -441,6 +495,13 @@
 			files = (
 				AA200027 /* Assets.xcassets in Resources */,
 				AA200030 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ResourcesPhaseIOSTests /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -558,6 +619,16 @@
 				AA200026 /* ProbableDuplicateDetector.swift in Sources */,
 				AA200028 /* PhotoLibraryExporter.swift in Sources */,
 				AA200029 /* IOSPhotosExportView.swift in Sources */,
+				AA200031 /* AnonymousTelemetry.swift in Sources */,
+				AA200032 /* MobileExportSupport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		SourcesPhaseIOSTests /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA300001 /* MobileExportSupportTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -568,6 +639,11 @@
 			isa = PBXTargetDependency;
 			target = FoldiqTarget /* Foldiq */;
 			targetProxy = DD100001 /* PBXContainerItemProxy */;
+		};
+		EE300001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FoldiqiPadTarget /* Foldiq-iOS */;
+			targetProxy = DD300001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -700,7 +776,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 83;
+				CURRENT_PROJECT_VERSION = 84;
 				DEVELOPMENT_TEAM = V6F97AK8AD;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Foldiq;
@@ -710,7 +786,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 1.0.18;
 				OTHER_LDFLAGS = "-lz";
 				PRODUCT_BUNDLE_IDENTIFIER = com.MystoganzTv.Foldiq.iOS;
 				PRODUCT_NAME = Foldiq;
@@ -730,7 +806,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 83;
+				CURRENT_PROJECT_VERSION = 84;
 				DEVELOPMENT_TEAM = V6F97AK8AD;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Foldiq;
@@ -740,7 +816,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 1.0.18;
 				OTHER_LDFLAGS = "-lz";
 				PRODUCT_BUNDLE_IDENTIFIER = com.MystoganzTv.Foldiq.iOS;
 				PRODUCT_NAME = Foldiq;
@@ -752,6 +828,44 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Foldiq/Foldiq-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		IOSTestDebugConfig /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = V6F97AK8AD;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.MystoganzTv.Foldiq.iOSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Foldiq.app/Foldiq";
+			};
+			name = Debug;
+		};
+		IOSTestReleaseConfig /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = V6F97AK8AD;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.MystoganzTv.Foldiq.iOSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Foldiq.app/Foldiq";
 			};
 			name = Release;
 		};
@@ -790,6 +904,15 @@
 			buildConfigurations = (
 				iPadTargetDebugConfig /* Debug */,
 				iPadTargetReleaseConfig /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		IOSTestTargetConfigList /* Build configuration list for PBXNativeTarget "FoldiqIOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				IOSTestDebugConfig /* Debug */,
+				IOSTestReleaseConfig /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

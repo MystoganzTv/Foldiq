@@ -11,6 +11,7 @@
 
 import Stripe from 'stripe';
 import { WINDOWS_AUTOMATIC_TAX_ENABLED, WINDOWS_PRICE_CENTS } from '../lib/commerce.js';
+import { attributionMetadata } from '../lib/attribution.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -53,7 +54,9 @@ export default async function handler(req, res) {
       mode: 'payment',
       success_url: `${SITE}/success.html?session_id={CHECKOUT_SESSION_ID}&platform=windows`,
       cancel_url: `${SITE}/`,
-      metadata: { platform: 'windows' },
+      // Records which channel produced the sale. Sanitized server-side, so a
+      // crafted request cannot put arbitrary text into Stripe metadata.
+      metadata: { platform: 'windows', ...attributionMetadata(body.attribution) },
     });
 
     res.status(200).json({ url: session.url });

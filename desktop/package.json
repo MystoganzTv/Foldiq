@@ -62,6 +62,13 @@
         }
       ],
       "icon": "assets/icon.ico",
+      "_comment_azureSignOptions": "Azure Artifact Signing (formerly Trusted Signing). publisherName MUST match the certificate Common Name exactly as entered in the Identity Validation request or signing fails. endpoint is the region of the Trusted Signing account (eus = East US). Credentials come from AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET in the environment, never from this file. Local builds without those variables stay unsigned on purpose.",
+      "azureSignOptions": {
+        "publisherName": "REPLACE_WITH_CERTIFICATE_COMMON_NAME",
+        "endpoint": "https://eus.codesigning.azure.net/",
+        "codeSigningAccountName": "REPLACE_WITH_TRUSTED_SIGNING_ACCOUNT",
+        "certificateProfileName": "REPLACE_WITH_CERTIFICATE_PROFILE"
+      },
       "extraResources": [
         {
           "from": ".vendor/7zip-win",

@@ -106,9 +106,10 @@ function renderDashboard(data) {
 
   renderSalesChart(win.daily);
   renderBars($('#windows-countries'), (win.countries || []).map(item => ({ ...item, country: countryName(item.country) })), 'country', 'customers', value => `${number(value)} purchase${value === 1 ? '' : 's'}`);
+  renderBars($('#windows-channels'), win.channels, 'channel', 'customers', value => `${number(value)} purchase${value === 1 ? '' : 's'}`);
   $('#recent-purchases').innerHTML = win.recentPurchases?.length
-    ? win.recentPurchases.map(item => `<tr><td>${escape(dateLabel(item.date))}</td><td>${escape(countryName(item.country))}</td><td>${escape(money(item.grossCents))}</td><td>${escape(money(item.netCents))}</td><td>${number(item.downloadCount)}</td></tr>`).join('')
-    : '<tr><td colspan="5" class="empty">No purchase data.</td></tr>';
+    ? win.recentPurchases.map(item => `<tr><td>${escape(dateLabel(item.date))}</td><td>${escape(countryName(item.country))}</td><td>${escape(item.channel || 'unknown')}</td><td>${escape(money(item.grossCents))}</td><td>${escape(money(item.netCents))}</td><td>${number(item.downloadCount)}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="empty">No purchase data.</td></tr>';
 
   const eligible = win.trackingEligibleCustomers || 0;
   const buyerDownloads = win.externalBuyerDownloads || 0;

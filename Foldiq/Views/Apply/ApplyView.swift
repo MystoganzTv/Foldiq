@@ -285,6 +285,7 @@ struct ApplyView: View {
     }
 
     private static func securityBookmarksJSON(for urls: [URL]) -> String {
+        #if os(macOS)
         let encoded = urls.compactMap { url -> [String: String]? in
             guard let data = try? url.bookmarkData(
                 options: .withSecurityScope,
@@ -296,5 +297,11 @@ struct ApplyView: View {
         guard let data = try? JSONSerialization.data(withJSONObject: encoded),
               let json = String(data: data, encoding: .utf8) else { return "[]" }
         return json
+        #else
+        // iOS document-picker URLs are scoped for the active operation. The native
+        // Photos export flow keeps its own resumable manifest at the destination and
+        // does not use macOS security-scoped bookmarks.
+        return "[]"
+        #endif
     }
 }

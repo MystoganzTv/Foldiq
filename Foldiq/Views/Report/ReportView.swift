@@ -51,6 +51,45 @@ struct ReportView: View {
     var skipped: [OrganizationPlan] { plans.filter { $0.status == .skipped } }
     var errors:  [OrganizationPlan] { plans.filter { $0.status == .error } }
 
+    /// Undo moves files back in Move mode, but *deletes* the organized duplicates
+    /// in Copy mode. Every label below has to match what actually happens on disk.
+    private var undoDeletesCopies: Bool { nav.organizationConfig.fileOperation == .copy }
+
+    private var undoSectionCaption: String {
+        undoDeletesCopies
+        ? "An undo record was created for this session. Undo deletes the organized copies — your original files stay exactly where they are."
+        : "An undo manifest was created for this session. You can reverse every file movement."
+    }
+
+    private var undoButtonTitle: String {
+        undoDeletesCopies ? "Undo — Delete Organized Copies" : "Undo — Move Files Back"
+    }
+
+    private var undoConfirmTitle: String {
+        undoDeletesCopies ? "Yes, Delete the Copies" : "Yes, Move Files Back"
+    }
+
+    private var undoConfirmMessage: String {
+        undoDeletesCopies
+        ? "The \(done.count) organized copies will be permanently deleted. Your original files are left untouched, and Foldiq will skip any copy whose original is missing or has changed since organizing."
+        : "All \(done.count) organized files will be moved back to their original locations."
+    }
+
+    private var undoCompleteHeadline: String {
+        if undoDeletesCopies {
+            let subject = undoRestoredCount == 1 ? "copy was" : "copies were"
+            return "\(undoRestoredCount) organized \(subject) deleted. Your originals were left untouched."
+        }
+        let subject = undoRestoredCount == 1 ? "file" : "files"
+        return "\(undoRestoredCount) \(subject) moved back to their original locations."
+    }
+
+    private var undoCompleteFootnote: String {
+        undoDeletesCopies
+        ? "The organized copies were removed. Your original library was never modified."
+        : "The organized folder has been cleared. Your library is back to its original state."
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if isUndoing {
@@ -294,25 +333,25 @@ struct ReportView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Undo Organization", systemImage: "arrow.uturn.backward.circle")
                             .font(.headline)
-                        Text("An undo manifest was created for this session. You can reverse every file movement.")
+                        Text(undoSectionCaption)
                             .font(.caption).foregroundStyle(.secondary)
 
                         Button(role: .destructive) {
                             showUndoConfirm = true
                         } label: {
-                            Label("Undo — Move Files Back", systemImage: "arrow.uturn.backward")
+                            Label(undoButtonTitle, systemImage: "arrow.uturn.backward")
                         }
                         .buttonStyle(.bordered)
                         .tint(.orange)
                     }
                     .confirmationDialog("Undo Organization?", isPresented: $showUndoConfirm,
                                         titleVisibility: .visible) {
-                        Button("Yes, Move Files Back", role: .destructive) {
+                        Button(undoConfirmTitle, role: .destructive) {
                             performUndo()
                         }
                         Button("Cancel", role: .cancel) {}
                     } message: {
-                        Text("All \(done.count) organized files will be moved back to their original locations.")
+                        Text(undoConfirmMessage)
                     }
                 }
 
@@ -393,7 +432,7 @@ struct ReportView: View {
                 VStack(spacing: 8) {
                     Text("Undo Complete")
                         .font(.largeTitle).fontWeight(.bold)
-                    Text("\(undoRestoredCount) file\(undoRestoredCount == 1 ? "" : "s") moved back to their original locations.")
+                    Text(undoCompleteHeadline)
                         .font(.body).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -402,7 +441,7 @@ struct ReportView: View {
                 HStack(spacing: 16) {
                     UndoSummaryCard(
                         icon: "arrow.uturn.backward.circle.fill",
-                        label: "Restored",
+                        label: undoDeletesCopies ? "Removed" : "Restored",
                         value: undoRestoredCount,
                         color: .orange
                     )
@@ -418,7 +457,7 @@ struct ReportView: View {
                 }
                 .frame(maxWidth: 460)
 
-                Text("The organized folder has been cleared. Your library is back to its original state.")
+                Text(undoCompleteFootnote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
