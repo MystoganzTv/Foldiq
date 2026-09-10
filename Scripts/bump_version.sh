@@ -20,8 +20,12 @@ B=""
 CONFIG_KEY="MAC_CURRENT_PROJECT_VERSION"
 ALLOW_CI_BUILD_NUMBER="NO"
 
-case "${PRODUCT_BUNDLE_IDENTIFIER:-}" in
-  com.MystoganzTv.Foldiq.iOS)
+# Detect the platform from PLATFORM_NAME, NOT from the bundle identifier: iOS and
+# macOS deliberately share com.MystoganzTv.Foldiq so that App Store Connect treats
+# them as one app record (universal purchase), so the bundle id can no longer tell
+# the two apart.
+case "${PLATFORM_NAME:-}" in
+  iphoneos|iphonesimulator)
     CONFIG_KEY="IOS_CURRENT_PROJECT_VERSION"
     ALLOW_CI_BUILD_NUMBER="YES"
     ;;
