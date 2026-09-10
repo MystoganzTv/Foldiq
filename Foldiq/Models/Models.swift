@@ -122,6 +122,7 @@ final class MediaFile {
         self.isUserSetAside = false
         self.isUserExcluded = false
         self.probableMatchScore = 0
+        self.session = nil
     }
 
     // MARK: Convenience
@@ -294,6 +295,7 @@ final class UndoEntry {
         self.isFromArchive = isFromArchive
         self.wasCompleted = false
         self.timestamp = Date()
+        self.manifest = nil
     }
 
     var operation: FileOperation { FileOperation(rawValue: operationRaw) ?? .move }

@@ -104,11 +104,18 @@ final class FileMover {
                     operation: op,
                     isFromArchive: plan.archiveSourcePath != nil
                 )
-                manifest.entries.append(entry)
+                // Register the entry with the model context BEFORE linking it to
+                // the manifest. Writing a relationship from a model that is still
+                // on SwiftData's default backing to one that is already managed
+                // traps inside _DefaultBackingData.setRelationship. Setting the
+                // to-one side keeps the manifest's `entries` in sync via the
+                // declared inverse, without materialising the whole array.
+                manifest.modelContext?.insert(entry)
+                entry.manifest = manifest
                 do {
                     try checkpoint()
                 } catch {
-                    manifest.entries.removeAll { $0.id == entry.id }
+                    Self.discard(entry, from: manifest)
                     throw error
                 }
 
@@ -143,7 +150,7 @@ final class FileMover {
                    let last = manifest.entries.last,
                    last.originalPath == srcPath,
                    last.newPath == destPath {
-                    manifest.entries.removeLast()
+                    Self.discard(last, from: manifest)
                     try? checkpoint()
                 }
             }
@@ -185,6 +192,17 @@ final class FileMover {
         }
     }
 
+    // MARK: - Journal maintenance
+
+    /// Remove a journal entry from the manifest *and* from the store.
+    /// Detaching it from the relationship alone only nullifies the inverse and
+    /// leaves an orphaned UndoEntry row behind; nothing else ever fetches
+    /// UndoEntry directly, so the row would never be reachable again.
+    private static func discard(_ entry: UndoEntry, from manifest: UndoManifest) {
+        manifest.entries.removeAll { $0.id == entry.id }
+        manifest.modelContext?.delete(entry)
+    }
+
     // MARK: - Undo
 
     /// Reverse every entry in the manifest without overwriting or deleting a
@@ -197,6 +215,10 @@ final class FileMover {
     ) async -> UndoResult {
         let entries = manifest.entries.reversed() as [UndoEntry]
         let total   = entries.count
+        // Captured before the loop: each entry is deleted from the store as it is
+        // reversed, and a deleted model must not be read from afterwards.
+        let lastFilename = entries.last
+            .map { URL(fileURLWithPath: $0.newPath).lastPathComponent } ?? ""
         var done    = 0
         var restored = 0
         var errors: [String] = []
@@ -229,7 +251,7 @@ final class FileMover {
                     )
                 }.value
                 restored += 1
-                manifest.entries.removeAll { $0.id == entry.id }
+                Self.discard(entry, from: manifest)
                 try checkpoint()
             } catch {
                 errors.append("\(newURL.lastPathComponent): \(Self.humanizeError(error))")
@@ -241,7 +263,7 @@ final class FileMover {
         onProgress(ApplyProgress(
             done: done,
             total: total,
-            currentFile: entries.last.map { URL(fileURLWithPath: $0.newPath).lastPathComponent } ?? "",
+            currentFile: lastFilename,
             errors: errors
         ))
         return UndoResult(restored: restored, errors: errors)
