@@ -976,7 +976,10 @@ final class PhotoLibraryExporter: ObservableObject {
         let reportURL = outputRoot.appendingPathComponent("Foldiq Export Report \(stamp).csv")
         guard let data = MobileExportPlanner.buildCSV(rows: rows).data(using: .utf8) else { return nil }
         do {
-            try data.write(to: reportURL, options: [.atomic, .withoutOverwriting])
+            // `.atomic` and `.withoutOverwriting` must never be combined: Foundation
+            // traps (SIGTRAP inside Data.write) instead of throwing. The timestamped
+            // name already avoids collisions, so refusing to overwrite is enough.
+            try data.write(to: reportURL, options: [.withoutOverwriting])
             return reportURL
         } catch {
             return nil

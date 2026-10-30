@@ -265,53 +265,62 @@ struct PreviewView: View {
 
             // ── Table + Inspector ─────────────────────────────────────────
             HStack(spacing: 0) {
-                if displayedPlans.isEmpty {
-                    ContentUnavailableView {
-                        Label("No matching files", systemImage: "line.3.horizontal.decrease.circle")
-                    } description: {
-                        Text("No files match the current filters or search. Clear the filters or go back to adjust the organization rules.")
+                // The Table stays mounted even when nothing matches. Swapping it for the
+                // empty state in the same update that removes its last row (or clears
+                // its selection) crashed SwiftUI's table coordinator on macOS 27
+                // (AttributeGraph precondition in AGGraphGetAttributeSubgraph).
+                Table(displayedPlans, selection: $selectedPlanID) {
+                    TableColumn("") { plan in
+                        PlanInclusionButton(plan: plan) {
+                            setIncluded(plan, plan.status == .skipped)
+                        }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    Table(displayedPlans, selection: $selectedPlanID) {
-                        TableColumn("") { plan in
-                            PlanInclusionButton(plan: plan) {
-                                setIncluded(plan, plan.status == .skipped)
-                            }
-                        }
-                        .width(28)
+                    .width(28)
 
-                        TableColumn("Photo") { plan in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(URL(fileURLWithPath: plan.sourceAbsPath).lastPathComponent)
-                                    .fontWeight(.medium)
-                                    .lineLimit(1)
-                                    .foregroundStyle(plan.status == .skipped ? .secondary : .primary)
-                            }
+                    TableColumn("Photo") { plan in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(URL(fileURLWithPath: plan.sourceAbsPath).lastPathComponent)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                                .foregroundStyle(plan.status == .skipped ? .secondary : .primary)
                         }
-                        .width(min: 180, ideal: 240)
+                    }
+                    .width(min: 180, ideal: 240)
 
-                        TableColumn("Will go to") { plan in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(friendlyDestination(for: plan))
-                                    .foregroundStyle(plan.status == .skipped ? .secondary : .primary)
-                                    .lineLimit(1).truncationMode(.middle)
-                            }
+                    TableColumn("Will go to") { plan in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(friendlyDestination(for: plan))
+                                .foregroundStyle(plan.status == .skipped ? .secondary : .primary)
+                                .lineLimit(1).truncationMode(.middle)
                         }
-                        .width(min: 220, ideal: 340)
+                    }
+                    .width(min: 220, ideal: 340)
 
-                        TableColumn("") { plan in
-                            if plan.destinationAbsPath.contains("/Duplicates/") {
-                                Label("Duplicate", systemImage: "square.on.square")
-                                    .font(.caption2).foregroundStyle(.orange)
-                            } else if plan.destinationAbsPath.contains("/Unknown Date/") {
-                                Label("No date", systemImage: "questionmark.circle")
-                                    .font(.caption2).foregroundStyle(.yellow)
-                            } else if plan.destinationAbsPath.contains("/Screenshots/") {
-                                Label("Screenshot", systemImage: "camera.viewfinder")
-                                    .font(.caption2).foregroundStyle(.purple)
-                            }
+                    TableColumn("") { plan in
+                        if plan.destinationAbsPath.contains("/Duplicates/") {
+                            Label("Duplicate", systemImage: "square.on.square")
+                                .font(.caption2).foregroundStyle(.orange)
+                        } else if plan.destinationAbsPath.contains("/Unknown Date/") {
+                            Label("No date", systemImage: "questionmark.circle")
+                                .font(.caption2).foregroundStyle(.yellow)
+                        } else if plan.destinationAbsPath.contains("/Screenshots/") {
+                            Label("Screenshot", systemImage: "camera.viewfinder")
+                                .font(.caption2).foregroundStyle(.purple)
                         }
+                    }
+                }
+                // Row inserts/removals are never animated: the inspector animation
+                // below must not leak into the table's diff.
+                .transaction { $0.animation = nil }
+                .overlay {
+                    if displayedPlans.isEmpty {
+                        ContentUnavailableView {
+                            Label("No matching files", systemImage: "line.3.horizontal.decrease.circle")
+                        } description: {
+                            Text("No files match the current filters or search. Clear the filters or go back to adjust the organization rules.")
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(.background)
                     }
                 }
 
@@ -421,24 +430,33 @@ struct PreviewView: View {
     }
 
     private func setIncluded(_ plan: OrganizationPlan, _ included: Bool) {
-        plan.status = included ? .pending : .skipped
-        try? context.save()
-        // SwiftData models are reference types. Reassigning the array makes the
-        // aggregate counts and filters update immediately as well.
-        plans = Array(plans)
-        if filterStatus == .included && !included || filterStatus == .excluded && included {
-            selectedPlanID = nil
+        let rowWillDisappear = filterStatus == .included && !included
+            || filterStatus == .excluded && included
+        guard rowWillDisappear else {
+            applyStatus(included, to: [plan.id])
+            return
         }
+        // Drop the selection in its own update and remove the row in the next one.
+        // Doing both in one update (often from the row's own inclusion button) is
+        // the pattern that crashed SwiftUI's table coordinator on macOS 27.
+        selectedPlanID = nil
+        Task { @MainActor in applyStatus(included, to: [plan.id]) }
     }
 
     private func setDisplayedIncluded(_ included: Bool) {
         let ids = Set(displayedPlans.map(\.id))
+        selectedPlanID = nil
+        Task { @MainActor in applyStatus(included, to: ids) }
+    }
+
+    private func applyStatus(_ included: Bool, to ids: Set<UUID>) {
         for plan in plans where ids.contains(plan.id) {
             plan.status = included ? .pending : .skipped
         }
         try? context.save()
+        // SwiftData models are reference types. Reassigning the array makes the
+        // aggregate counts and filters update immediately as well.
         plans = Array(plans)
-        selectedPlanID = nil
     }
 
     private func friendlyDestination(for plan: OrganizationPlan) -> String {
