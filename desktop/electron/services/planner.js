@@ -39,7 +39,59 @@ function locationDaySuffix(file) {
   return city || stateLabel || country || null;
 }
 
-function buildDestPath(file, config) {
+function validCaptureDate(file) {
+  if (!file.date) return null;
+  const date = new Date(file.date);
+  const latest = Date.now() + 24 * 60 * 60 * 1000;
+  if (Number.isNaN(date.getTime()) || date.getFullYear() < 1900 || date.getTime() > latest) return null;
+  return date;
+}
+
+function routedToDuplicates(file, config) {
+  return Boolean(file.userSetAside)
+    || (config.duplicateHandling === 'separate' && (file.isDuplicate || file.isProbableDuplicate));
+}
+
+/** "2024-08-14 15.32.10" in local time — safe on every file system. */
+function dateFileStem(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+    + `${pad(date.getHours())}.${pad(date.getMinutes())}.${pad(date.getSeconds())}`;
+}
+
+function sourceGroupKey(file) {
+  const source = String(file.path || file.name || '');
+  return path.join(path.dirname(source), path.basename(source, path.extname(source))).toLowerCase();
+}
+
+const VIDEO_EXTENSIONS = new Set(['.mov', '.mp4', '.m4v', '.avi', '.mkv']);
+
+/**
+ * New file names for "Rename files by capture date". Files that share a source
+ * folder and name (IMG_1234.HEIC + IMG_1234.MOV for a Live Photo, or a RAW +
+ * JPEG pair) all take the photo's date, so the pair stays recognisable.
+ * Duplicates, set-aside files and files without a date keep their names.
+ */
+function plannedFileNames(files, config) {
+  const names = new Map();
+  if (!config.renameByDate) return names;
+
+  const eligible = files.filter(file => (
+    !file.userExcluded && !routedToDuplicates(file, config) && validCaptureDate(file)
+  ));
+  const isVideo = file => VIDEO_EXTENSIONS.has(String(file.ext || path.extname(file.name || '')).toLowerCase());
+  const leadDates = new Map();
+  for (const file of [...eligible].sort((a, b) => Number(isVideo(a)) - Number(isVideo(b)))) {
+    const key = sourceGroupKey(file);
+    if (!leadDates.has(key)) leadDates.set(key, validCaptureDate(file));
+  }
+  for (const file of eligible) {
+    const extension = path.extname(file.name || '');
+    names.set(file, `${dateFileStem(leadDates.get(sourceGroupKey(file)))}${extension}`);
+  }
+  return names;
+}
+
+function buildDestPath(file, config, fileName = file.name) {
   if (file.userSetAside) {
     return path.join(config.outputFolder, 'Duplicates', 'To Review', file.name);
   }
@@ -49,14 +101,8 @@ function buildDestPath(file, config) {
   if (config.duplicateHandling === 'separate' && file.isProbableDuplicate) {
     return path.join(config.outputFolder, 'Duplicates', 'To Review', file.name);
   }
-  const date = new Date(file.date);
-  const latest = Date.now() + 24 * 60 * 60 * 1000;
-  const hasValidDate = !(
-    !file.date ||
-    Number.isNaN(date.getTime()) ||
-    date.getFullYear() < 1900 ||
-    date.getTime() > latest
-  );
+  const date = validCaptureDate(file) || new Date(NaN);
+  const hasValidDate = validCaptureDate(file) != null;
 
   if (config.organizationMode === 'location') {
     const { country, state, city } = locationParts(file);
@@ -65,13 +111,13 @@ function buildDestPath(file, config) {
         config.outputFolder,
         'Unknown Location',
         hasValidDate ? String(date.getFullYear()) : 'Unknown Date',
-        file.name,
+        fileName,
       );
     }
     const parts = [config.outputFolder, country || 'Unknown Country'];
     if (state) parts.push(state);
     if (city && city !== state) parts.push(city);
-    parts.push(file.name);
+    parts.push(fileName);
     return path.join(...parts);
   }
 
@@ -94,7 +140,7 @@ function buildDestPath(file, config) {
       : null;
     parts.push(location ? `${dayFolder} ${location}` : dayFolder);
   }
-  parts.push(file.name);
+  parts.push(fileName);
 
   return path.join(...parts);
 }
@@ -121,6 +167,7 @@ function resolveCollision(destPath, usedPaths) {
 function buildPlan(files, config) {
   const usedPaths = new Set();
   const moves = [];
+  const fileNames = plannedFileNames(files, config);
 
   for (const file of files) {
     if (file.userExcluded) {
@@ -147,7 +194,7 @@ function buildPlan(files, config) {
       continue;
     }
 
-    const rawDest = buildDestPath(file, config);
+    const rawDest = buildDestPath(file, config, fileNames.get(file) || file.name);
     const destPath = resolveCollision(rawDest, usedPaths);
 
     moves.push({
@@ -164,4 +211,12 @@ function buildPlan(files, config) {
   return moves;
 }
 
-module.exports = { buildPlan, buildDestPath, resolveCollision, locationParts, locationDaySuffix };
+module.exports = {
+  buildPlan,
+  buildDestPath,
+  resolveCollision,
+  locationParts,
+  locationDaySuffix,
+  plannedFileNames,
+  dateFileStem,
+};

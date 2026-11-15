@@ -47,6 +47,13 @@ contextBridge.exposeInMainWorld('foldiq', {
   dismissReviewInvite: ()      => ipcRenderer.invoke('rating:dismissInvite'),
   openReviewForm: ()           => ipcRenderer.invoke('rating:openReviewForm'),
 
+  // Auto-organize
+  getWatchState:  ()           => ipcRenderer.invoke('watch:get'),
+  chooseWatchFolder: ()        => ipcRenderer.invoke('watch:chooseFolder'),
+  configureWatch: (enabled, folder) => ipcRenderer.invoke('watch:configure', { enabled, folder }),
+  undoWatchRun:   (manifest)   => ipcRenderer.invoke('watch:undo', { manifestPath: manifest }),
+  onWatchEvent:   (cb)         => ipcRenderer.on('watch:event', (_, event) => cb(event)),
+
   // Report
   exportCSV:      (rows)       => ipcRenderer.invoke('report:exportCSV', { rows }),
 
