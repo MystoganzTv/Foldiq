@@ -524,3 +524,9 @@
   .modalCard, .applyStatusIcon, .scanStatusIcon, .applySpinner { animation: none; }
   .fileRow { opacity: 1; }
 }
+
+.reviewCard { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 16px; border: 1px solid #FDE68A; border-radius: 12px; background: #FFFBEB; }
+.reviewCard strong { color: #78350F; font-size: 13px; }
+.reviewCard p { margin-top: 3px; color: #475569; font-size: 11px; line-height: 1.45; }
+.reviewCardActions { display: flex; flex-shrink: 0; gap: 8px; }
+.reviewCardActions button { padding: 7px 12px; font-size: 11px; }

@@ -42,6 +42,11 @@ contextBridge.exposeInMainWorld('foldiq', {
   openDiagnosticsForm: ()    => ipcRenderer.invoke('support:openDiagnosticsForm'),
   copyDiagnostics: ()        => ipcRenderer.invoke('support:copyDiagnostics'),
 
+  // Review invitation
+  recordOrganizationSuccess: (itemCount) => ipcRenderer.invoke('rating:recordSuccess', { itemCount }),
+  dismissReviewInvite: ()      => ipcRenderer.invoke('rating:dismissInvite'),
+  openReviewForm: ()           => ipcRenderer.invoke('rating:openReviewForm'),
+
   // Report
   exportCSV:      (rows)       => ipcRenderer.invoke('report:exportCSV', { rows }),
 

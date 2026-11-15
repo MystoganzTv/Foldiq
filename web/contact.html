@@ -82,9 +82,9 @@
   </a>
 
   <div class="card">
-    <span class="label">Contact</span>
-    <h1>Get in touch</h1>
-    <p class="sub">Have a question, found a bug, or just want to say hi?<br>We read every message.</p>
+    <span class="label" id="page-label">Contact</span>
+    <h1 id="page-title">Get in touch</h1>
+    <p class="sub" id="page-sub">Have a question, found a bug, or just want to say hi?<br>We read every message.</p>
 
     <form class="form" id="support-form">
       <input type="hidden" name="source" id="source" value="website" />
@@ -100,8 +100,8 @@
 
     <div class="success" id="success">
       <div class="check">✓</div>
-      <h2>Message sent!</h2>
-      <p>We'll get back to you as soon as possible.</p>
+      <h2 id="success-title">Message sent!</h2>
+      <p id="success-body">We'll get back to you as soon as possible.</p>
     </div>
 
     <a class="back" href="/">← Back to foldiq</a>
@@ -115,7 +115,21 @@
       const diagnosticNote = document.getElementById('diagnostic-note');
       const source = document.getElementById('source');
       const params = new URLSearchParams(window.location.search);
-      if (params.get('source') === 'foldiq-windows') source.value = 'foldiq-windows';
+      const knownSources = ['foldiq-windows', 'foldiq-windows-review'];
+      const requestedSource = params.get('source');
+      if (knownSources.includes(requestedSource)) source.value = requestedSource;
+
+      // The Windows app has no store listing to deep-link into, so its review
+      // ask lands here with the copy reworded for a review rather than a bug.
+      if (params.get('kind') === 'review') {
+        document.getElementById('page-label').textContent = 'Review';
+        document.getElementById('page-title').textContent = 'Tell us how it went';
+        document.getElementById('page-sub').innerHTML = 'Foldiq is built by one person.<br>A few honest lines — good or bad — genuinely help.';
+        form.elements.message.placeholder = 'What did you organize, and how did it go?';
+        button.textContent = 'Send review';
+        document.getElementById('success-title').textContent = 'Thank you!';
+        document.getElementById('success-body').textContent = 'Your review went straight to the person who builds Foldiq.';
+      }
 
       if (window.location.hash.startsWith('#diagnostic=')) {
         try {

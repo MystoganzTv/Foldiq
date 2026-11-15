@@ -10,6 +10,7 @@ const { filterSupportedSources } = require('./services/sources');
 const { buildDiagnosticSummary, buildSupportWebURL } = require('./services/diagnostics');
 const geocoder = require('./services/geocoder');
 const preferences = require('./services/preferences');
+const rating = require('./services/rating');
 const telemetry = require('./services/telemetry');
 
 let mainWindow;
@@ -22,6 +23,10 @@ const thumbnailCache = new Map();
 
 function undoDirectory() {
   return path.join(app.getPath('userData'), 'undo');
+}
+
+function ratingStatePath() {
+  return path.join(app.getPath('userData'), 'rating.json');
 }
 
 function diagnosticsPath() {
@@ -339,6 +344,27 @@ ipcMain.handle('shell:revealFile', async (event, { filePath }) => {
 
 ipcMain.handle('shell:openAttribution', async () => {
   await shell.openExternal('https://www.openstreetmap.org/copyright');
+  return true;
+});
+
+// Review invitation. Windows has no store listing to deep-link into, so the
+// ask lands on the contact form in review mode.
+ipcMain.handle('rating:recordSuccess', async (event, { itemCount } = {}) => {
+  const updated = rating.recordSuccessfulOrganization(rating.readRatingState(ratingStatePath()), itemCount);
+  rating.writeRatingState(ratingStatePath(), updated);
+  return rating.shouldShowInvite(updated);
+});
+
+ipcMain.handle('rating:dismissInvite', async () => {
+  const current = rating.readRatingState(ratingStatePath());
+  rating.writeRatingState(ratingStatePath(), { ...current, dismissedAt: Date.now() });
+  return true;
+});
+
+ipcMain.handle('rating:openReviewForm', async () => {
+  const current = rating.readRatingState(ratingStatePath());
+  rating.writeRatingState(ratingStatePath(), { ...current, reviewOpened: true });
+  await shell.openExternal(rating.REVIEW_URL);
   return true;
 });
 

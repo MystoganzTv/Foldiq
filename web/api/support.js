@@ -4,6 +4,11 @@ const OWNER_EMAIL = 'enrique.padron853@gmail.com';
 const FROM_EMAIL = process.env.SUPPORT_FROM_EMAIL || 'Foldiq Support <support@foldiq.app>';
 const recentRequests = new Map();
 
+const SUBJECT_BY_SOURCE = {
+  'foldiq-windows': 'Windows diagnostic',
+  'foldiq-windows-review': 'Windows review',
+};
+
 function text(value, maxLength) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
@@ -47,7 +52,7 @@ export function createSupportHandler({ resendClient, ownerEmail = OWNER_EMAIL } 
         from: FROM_EMAIL,
         to: ownerEmail,
         replyTo: email,
-        subject: `Foldiq support — ${source === 'foldiq-windows' ? 'Windows diagnostic' : 'website message'}`,
+        subject: `Foldiq support — ${SUBJECT_BY_SOURCE[source] || 'website message'}`,
         text: `Name: ${name}\nEmail: ${email}\nSource: ${source}\n\n${message}`,
         html: `<h2>Foldiq support</h2><p><strong>Name:</strong> ${escapeHTML(name)}<br><strong>Email:</strong> ${escapeHTML(email)}<br><strong>Source:</strong> ${escapeHTML(source)}</p><pre style="white-space:pre-wrap;font:14px/1.5 system-ui">${escapeHTML(message)}</pre>`,
       });

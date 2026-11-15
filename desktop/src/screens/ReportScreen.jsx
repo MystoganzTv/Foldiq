@@ -12,6 +12,7 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
   const [emptyFolderCount, setEmptyFolderCount] = useState(0);
   const [cleaning, setCleaning] = useState(false);
   const [foldersRemoved, setFoldersRemoved] = useState(null);
+  const [showReviewInvite, setShowReviewInvite] = useState(false);
   const completed = result?.completed || [];
   const copied = completed.filter(file => file.action === 'copy').length;
   const moved = completed.filter(file => file.action === 'move').length;
@@ -20,6 +21,17 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
     if (!result || config.copyMode) return;
     window.foldiq.countEmptyFolders().then(setEmptyFolderCount).catch(() => {});
   }, [config.copyMode, result]);
+
+  // Counted once per finished run, and only when nothing failed. The invitation
+  // sits at the bottom of the report so it is read after Undo, not before it.
+  useEffect(() => {
+    if (!result || result.errors.length > 0 || completed.length === 0) return;
+    let cancelled = false;
+    window.foldiq.recordOrganizationSuccess(completed.length)
+      .then(shouldShow => { if (!cancelled) setShowReviewInvite(shouldShow === true); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [result]);
 
   useEffect(() => {
     if (!retrying) return undefined;
@@ -246,6 +258,23 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
                 {cleaning ? 'Removing…' : 'Remove Empty Folders'}
               </button>
             )}
+          </div>
+        )}
+
+        {showReviewInvite && !undone && (
+          <div className={s.reviewCard}>
+            <div>
+              <strong>Did Foldiq get this right?</strong>
+              <p>Foldiq is built by one person. A few honest lines about how it went is the main way other people hear about it.</p>
+            </div>
+            <div className={s.reviewCardActions}>
+              <button className={s.btnOutline} onClick={() => { setShowReviewInvite(false); window.foldiq.dismissReviewInvite().catch(() => {}); }}>
+                Not now
+              </button>
+              <button className={s.btnPrimary} onClick={() => { setShowReviewInvite(false); window.foldiq.openReviewForm().catch(() => {}); }}>
+                ★ Leave a Review
+              </button>
+            </div>
           </div>
         )}
 
