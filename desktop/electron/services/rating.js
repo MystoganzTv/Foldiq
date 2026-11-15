@@ -21,6 +21,13 @@ const DAYS_HIDDEN_AFTER_DISMISSAL = 60;
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
 const REVIEW_URL = 'https://foldiq.app/contact?source=foldiq-windows-review&kind=review';
+/// Copies installed from the Microsoft Store can be rated in the Store itself.
+const STORE_PRODUCT_ID = '9N7XKX8G0M2P';
+const STORE_REVIEW_URL = `ms-windows-store://review/?ProductId=${STORE_PRODUCT_ID}`;
+
+function reviewURL(isWindowsStore = process.windowsStore === true) {
+  return isWindowsStore ? STORE_REVIEW_URL : REVIEW_URL;
+}
 
 function positiveInteger(value) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
@@ -78,6 +85,8 @@ module.exports = {
   MINIMUM_SUCCESSFUL_ORGANIZATIONS,
   DAYS_HIDDEN_AFTER_DISMISSAL,
   REVIEW_URL,
+  STORE_REVIEW_URL,
+  reviewURL,
   normalizeRatingState,
   recordSuccessfulOrganization,
   shouldShowInvite,

@@ -10,6 +10,7 @@
     "prepare:win-runtimes": "npm run prepare:7zip && npm run prepare:exiftool-win",
     "build": "npm run prepare:win-runtimes && vite build && electron-builder",
     "build:win": "npm run prepare:win-runtimes && vite build && electron-builder --win && node scripts/verify-win-package.js",
+    "build:store": "npm run prepare:win-runtimes && vite build && electron-builder --win appx --x64 && node scripts/verify-win-package.js",
     "build:mac": "vite build && electron-builder --mac",
     "test": "node --test tests/*.test.js",
     "preview": "vite preview"
@@ -40,7 +41,8 @@
     "copyright": "© 2026 Foldiq",
     "icon": "assets/icon",
     "directories": {
-      "output": "dist-electron"
+      "output": "dist-electron",
+      "buildResources": "store-resources"
     },
     "asarUnpack": [
       "electron/services/visual-hash.js",
@@ -98,6 +100,17 @@
       "installerHeaderIcon": "assets/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
+    },
+    "appx": {
+      "applicationId": "Foldiq",
+      "displayName": "Foldiq Photo & Video Organizer",
+      "backgroundColor": "transparent",
+      "languages": [
+        "en-US"
+      ],
+      "identityName": "Mystodev.FoldiqPhotoVideoOrganizer",
+      "publisher": "CN=40266193-F765-424C-8E74-B50758ADB2D2",
+      "publisherDisplayName": "Mystodev"
     },
     "files": [
       "dist/**/*",

@@ -364,7 +364,7 @@ ipcMain.handle('rating:dismissInvite', async () => {
 ipcMain.handle('rating:openReviewForm', async () => {
   const current = rating.readRatingState(ratingStatePath());
   rating.writeRatingState(ratingStatePath(), { ...current, reviewOpened: true });
-  await shell.openExternal(rating.REVIEW_URL);
+  await shell.openExternal(rating.reviewURL());
   return true;
 });
 
