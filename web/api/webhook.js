@@ -236,7 +236,7 @@ export default async function handler(req, res) {
   const customerName  = session.customer_details?.name || '';
   const platform      = session.metadata?.platform === 'mac' ? 'mac' : 'windows';
   const channel       = channelFromMetadata(session.metadata);
-  const amountTotal   = session.amount_total ?? 499;
+  const amountTotal   = session.amount_total ?? 999;
   const currency      = (session.currency || 'usd').toUpperCase();
   const amount        = new Intl.NumberFormat('en-US', {
     style: 'currency',

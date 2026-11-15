@@ -15,7 +15,7 @@ The Mac app that finally organizes your photo library
 `Productivity` `Mac` `Photography` `Utilities` `Developer Tools`
 
 ### Short description (for the card)
-Foldiq scans your messy photo and video folders, reads real EXIF metadata, and builds a clean Year → Month → Date structure automatically. On-device media processing. One-time $4.99. Full undo included.
+Foldiq scans your messy photo and video folders, reads real EXIF metadata, and builds a clean Year → Month → Date structure automatically. On-device media processing. One-time $9.99. Full undo included.
 
 ### Full description
 You have thousands of photos scattered across folders named "New Folder (2)", "IMG_downloads_FINAL", and "misc". You've meant to organize them for years.
@@ -36,7 +36,7 @@ Foldiq does it in minutes.
 - Photos stay on-device — no Foldiq cloud, account, or subscription
 - Safe by design — never overwrites files, full undo manifest
 
-One-time $4.99. Runs on macOS 14 Sonoma or later.
+One-time $9.99. Runs on macOS 14 Sonoma or later.
 
 ---
 
@@ -53,7 +53,7 @@ So I built the app I actually wanted:
 → Has a one-click undo that restores your entire library if you change your mind
 → Photos never upload to Foldiq; optional location naming uses Apple's geocoding service
 
-It's $4.99, one-time, no subscription ever.
+It's $9.99, one-time, no subscription ever.
 
 Happy to answer any questions about how it works or what's next. Building this solo, so all feedback is gold. 🙏
 
@@ -66,7 +66,7 @@ Happy to answer any questions about how it works or what's next. Building this s
 ### r/MacApps
 
 **Title:**
-I built a Mac app that organizes your photo library by real EXIF date — with full undo ($4.99, one-time)
+I built a Mac app that organizes your photo library by real EXIF date — with full undo ($9.99, one-time)
 
 **Body:**
 Hey r/MacApps,
@@ -85,7 +85,7 @@ The thing I cared most about: **nothing happens until you've reviewed it.** You 
 - Full undo with manifest log
 - Cleans up empty folders after organizing
 
-macOS 14+, Apple Silicon & Intel. $4.99 one-time at **foldiq.app**
+macOS 14+, Apple Silicon & Intel. $9.99 one-time at **foldiq.app**
 
 Happy to answer questions!
 
@@ -127,14 +127,14 @@ After:
 
 Supports JPG, HEIC, RAW (CR2, NEF, ARW, DNG), MOV, MP4. Completely local — your photos never leave your Mac.
 
-$4.99 one-time at foldiq.app
+$9.99 one-time at foldiq.app
 
 ---
 
 ### r/apple
 
 **Title:**
-Show r/apple: Foldiq — organize your photo library into clean folders on your Mac ($4.99)
+Show r/apple: Foldiq — organize your photo library into clean folders on your Mac ($9.99)
 
 **Body:**
 Long-time lurker, first time posting something I made.
@@ -146,7 +146,7 @@ The key thing: it shows you a complete preview of every planned file move before
 Works with JPG, HEIC, PNG, RAW formats, MOV, MP4. Runs locally — no iCloud required, no account, no subscription.
 
 macOS 14 Sonoma or later · Apple Silicon & Intel
-$4.99 one-time → foldiq.app
+$9.99 one-time → foldiq.app
 
 ---
 
@@ -163,7 +163,7 @@ It reads the real EXIF capture date from every photo (not the file modification 
 Before: 23 folders with random names, 11,000 files with no order
 After: clean 2016–2024 year folders, each broken down by month and shooting date
 
-$4.99 one-time at foldiq.app — no subscription. Photos stay on-device; optional location naming uses Apple's geocoding service.
+$9.99 one-time at foldiq.app — no subscription. Photos stay on-device; optional location naming uses Apple's geocoding service.
 
 ---
 

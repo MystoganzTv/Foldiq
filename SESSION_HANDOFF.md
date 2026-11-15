@@ -243,7 +243,7 @@ change the separate purchase-receipt sender caveat above.
   SmartScreen may warn. Do not start a Windows certificate purchase/signing
   workflow unless explicitly requested.
 - macOS 1.0.8 is publicly listed in the US Mac App Store at
-  `https://apps.apple.com/us/app/foldiq/id6772513569` for $4.99 and requires
+  `https://apps.apple.com/us/app/foldiq/id6772513569` for $9.99 and requires
   macOS 14.0 or later. App Store Connect build 116 was the known good submitted
   build in the prior work.
 - Obsolete Netlify references were removed in commit `c7cb0e8`; do not restore
