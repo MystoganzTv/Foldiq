@@ -15,7 +15,7 @@ permissions:
 jobs:
   screenshots:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: desktop
@@ -38,8 +38,21 @@ jobs:
 
       - name: Capture screenshots
         run: |
-          npm i --no-save playwright-core
+          npm i --no-save playwright-core ffmpeg-static
           node scripts/store-screenshots/capture.js store-screenshots-out
+
+      - name: Record trailer
+        run: |
+          node scripts/store-screenshots/trailer.js trailer-out
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: store-trailer
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            desktop/trailer-out/*.mp4
+            desktop/trailer-out/*.png
 
       - uses: actions/upload-artifact@v7
         with:
