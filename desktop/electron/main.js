@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, clipboard, Notification } = require('electron');
 const path = require('path');
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -12,6 +12,7 @@ const geocoder = require('./services/geocoder');
 const preferences = require('./services/preferences');
 const rating = require('./services/rating');
 const telemetry = require('./services/telemetry');
+const watcher = require('./services/watcher');
 const crashReporter = require('./services/crash-reporter');
 
 let mainWindow;
@@ -21,6 +22,14 @@ let activeScanController = null;
 let allowedPreviewPaths = new Set();
 let allowedSourceRoots = [];
 const thumbnailCache = new Map();
+let manualOperations = 0;
+let folderWatcher = null;
+let lastWatchEvent = null;
+
+async function trackManualOperation(work) {
+  manualOperations++;
+  try { return await work(); } finally { manualOperations--; }
+}
 
 function undoDirectory() {
   return path.join(app.getPath('userData'), 'undo');
@@ -40,6 +49,10 @@ function preferencesPath() {
 
 function locationCachePath() {
   return path.join(app.getPath('userData'), 'location-cache.json');
+}
+
+function watchStatePath() {
+  return path.join(app.getPath('userData'), 'auto-organize.json');
 }
 
 function telemetryIdPath() {
@@ -155,14 +168,93 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'win32') app.setAppUserModelId('app.foldiq.desktop');
   scanner.configureDiagnostics(diagnosticsPath());
   createWindow();
+  const watchState = watcher.readState(watchStatePath());
+  if (watchState.enabled) startFolderWatcher(watchState.folder);
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 app.on('before-quit', () => {
+  folderWatcher?.stop();
   scanner.end();
 });
+
+// ── Auto-organize ────────────────────────────────────────────────────────────
+
+async function organizeWatchedFiles(filePaths, config) {
+  const scanResult = await scanner.scan(filePaths, () => {}, {
+    includeVideos: config.includeVideos !== false,
+    includeArchives: false,
+    keepTempDirs: true,
+  });
+  if (scanResult.files.length === 0) return { moved: 0, errors: [], manifestPath: null };
+  const useLocations = config.useGPSLocation === true && ['smart', 'location'].includes(config.organizationMode);
+  const located = await geocoder.enrichFiles(scanResult.files, {
+    enabled: useLocations,
+    cachePath: locationCachePath(),
+    appVersion: app.getVersion(),
+  });
+  const plan = planner.buildPlan(located.files, config);
+  return mover.apply(plan, { ...config, manifestDirectory: undoDirectory() }, () => {});
+}
+
+function sendWatchEvent(event) {
+  lastWatchEvent = { ...event, at: event.at ?? Date.now() };
+  mainWindow?.webContents.send('watch:event', lastWatchEvent);
+  if (event.type === 'organized' && event.organized > 0 && Notification.isSupported()) {
+    const notification = new Notification({
+      title: `Foldiq organized ${event.organized.toLocaleString()} new file${event.organized === 1 ? '' : 's'}`,
+      body: event.errors > 0
+        ? `${event.errors} file${event.errors === 1 ? '' : 's'} could not be organized. Open Foldiq for details.`
+        : 'Open Foldiq to see them or undo.',
+    });
+    notification.on('click', () => { mainWindow?.show(); mainWindow?.focus(); });
+    notification.show();
+  }
+}
+
+function startFolderWatcher(folder) {
+  folderWatcher?.stop();
+  folderWatcher = null;
+  const problem = watcher.validateWatch({
+    folder,
+    outputFolder: preferences.readPreferences(preferencesPath()).outputFolder,
+  });
+  if (problem) {
+    sendWatchEvent({ type: 'error', message: problem });
+    return problem;
+  }
+  folderWatcher = new watcher.FolderWatcher({
+    folder,
+    statePath: watchStatePath(),
+    getConfig: () => preferences.readPreferences(preferencesPath()),
+    organize: organizeWatchedFiles,
+    isBusy: () => manualOperations > 0 || activeScanController != null,
+    onEvent: sendWatchEvent,
+    discardManifest: manifestPath => mover.discardManifest(manifestPath, undoDirectory()),
+  });
+  try {
+    folderWatcher.start();
+  } catch (error) {
+    folderWatcher = null;
+    sendWatchEvent({ type: 'error', message: error.message });
+    return error.message;
+  }
+  return null;
+}
+
+function publicWatchState() {
+  const state = watcher.readState(watchStatePath());
+  return {
+    enabled: state.enabled,
+    folder: state.folder,
+    active: folderWatcher != null,
+    history: state.history.slice(0, 5),
+    lastEvent: lastWatchEvent,
+  };
+}
 
 function assertString(value, label) {
   if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
@@ -224,6 +316,60 @@ ipcMain.handle('dialog:selectOutput', async () => {
     title: 'Select output folder',
   });
   return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('watch:get', async () => publicWatchState());
+
+ipcMain.handle('watch:chooseFolder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+    title: 'Choose a folder to auto-organize',
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('watch:configure', async (event, { enabled, folder }) => {
+  const current = watcher.readState(watchStatePath());
+  const nextFolder = typeof folder === 'string' && folder ? path.resolve(assertString(folder, 'watched folder')) : current.folder;
+  if (enabled === true) {
+    const problem = watcher.validateWatch({
+      folder: nextFolder,
+      outputFolder: preferences.readPreferences(preferencesPath()).outputFolder,
+    });
+    if (problem) return { ...publicWatchState(), error: problem };
+    const restarting = !current.enabled || current.folder !== nextFolder;
+    watcher.writeState(watchStatePath(), {
+      ...current,
+      enabled: true,
+      folder: nextFolder,
+      // Only files that arrive from now on are organized automatically.
+      enabledAt: restarting ? Date.now() : current.enabledAt,
+      ledger: current.folder === nextFolder ? current.ledger : [],
+    });
+    const startProblem = startFolderWatcher(nextFolder);
+    if (startProblem) return { ...publicWatchState(), error: startProblem };
+  } else {
+    folderWatcher?.stop();
+    folderWatcher = null;
+    watcher.writeState(watchStatePath(), { ...current, enabled: false, folder: nextFolder });
+  }
+  return publicWatchState();
+});
+
+ipcMain.handle('watch:undo', async (event, { manifestPath }) => {
+  assertString(manifestPath, 'manifest path');
+  const state = watcher.readState(watchStatePath());
+  if (!state.history.some(item => item.manifestPath === manifestPath)) {
+    throw new Error('That auto-organize run is no longer available to undo');
+  }
+  const result = await trackManualOperation(() => mover.undo(manifestPath, undoDirectory()));
+  if (result.errors.length === 0) {
+    state.history = state.history.map(item => (
+      item.manifestPath === manifestPath ? { ...item, undone: true } : item
+    ));
+    watcher.writeState(watchStatePath(), state);
+  }
+  return { restored: result.restored, errors: result.errors, state: publicWatchState() };
 });
 
 // Scan folders — streams progress via webContents.send
@@ -309,10 +455,10 @@ ipcMain.handle('apply:start', async (event, { plan, config }) => {
   assertString(config.outputFolder, 'output folder');
   const onProgress = (p) => mainWindow.webContents.send('apply:progress', p);
   try {
-    const result = await mover.apply(plan, {
+    const result = await trackManualOperation(() => mover.apply(plan, {
       ...config,
       manifestDirectory: undoDirectory(),
-    }, onProgress);
+    }, onProgress));
     activeManifestPaths = result.manifestPaths;
     activeOutputFolder = path.resolve(config.outputFolder);
     if (result.errors.length === 0) await scanner.cleanupTempDirs();
@@ -329,10 +475,10 @@ ipcMain.handle('apply:retry', async (event, { plan, config }) => {
   if (!config || typeof config !== 'object') throw new Error('Invalid retry configuration');
   assertString(config.outputFolder, 'output folder');
   const onProgress = progress => mainWindow.webContents.send('apply:progress', progress);
-  const result = await mover.apply(plan, {
+  const result = await trackManualOperation(() => mover.apply(plan, {
     ...config,
     manifestDirectory: undoDirectory(),
-  }, onProgress);
+  }, onProgress));
   activeManifestPaths.push(...result.manifestPaths);
   return result;
 });
@@ -341,9 +487,9 @@ ipcMain.handle('apply:retry', async (event, { plan, config }) => {
 ipcMain.handle('apply:undo', async (event, { manifestPath }) => {
   const startedAt = Date.now();
   assertString(manifestPath, 'manifest path');
-  const result = await mover.undo(manifestPath, undoDirectory(), progress => {
+  const result = await trackManualOperation(() => mover.undo(manifestPath, undoDirectory(), progress => {
     mainWindow.webContents.send('undo:progress', progress);
-  });
+  }));
   if (!result.manifestPath) activeManifestPaths = activeManifestPaths.filter(item => item !== manifestPath);
   recordAnonymousOperation('undo_completed', startedAt, result.restored, result.errors.length === 0);
   return result;
@@ -356,9 +502,9 @@ ipcMain.handle('apply:undoMany', async (event, { manifestPaths }) => {
   const errors = [];
   const remaining = [...manifestPaths];
   for (const manifestPath of [...manifestPaths].reverse()) {
-    const result = await mover.undo(manifestPath, undoDirectory(), progress => {
+    const result = await trackManualOperation(() => mover.undo(manifestPath, undoDirectory(), progress => {
       mainWindow.webContents.send('undo:progress', progress);
-    });
+    }));
     restored += result.restored;
     if (result.errors.length > 0) {
       errors.push(...result.errors);

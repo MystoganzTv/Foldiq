@@ -23,6 +23,7 @@ export default function App() {
     includeVideos: true,
     includeArchives: true,
     useGPSLocation: false,
+    renameByDate: false,
     shareAnonymousUsageData: false,
   });
   const [result, setResult] = useState(null);

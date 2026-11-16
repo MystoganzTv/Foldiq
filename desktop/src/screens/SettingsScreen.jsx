@@ -118,6 +118,11 @@ export default function SettingsScreen({ go, files, config, setConfig }) {
           <div className={s.sectionTitle}>Options</div>
           {[
             { key: 'copyMode', label: 'Copy instead of Move', sub: 'Keep originals in place (uses more disk space)' },
+            {
+              key: 'renameByDate',
+              label: 'Rename files by capture date',
+              sub: 'IMG_4821.jpg becomes 2024-08-14 15.32.10.jpg. Live Photos and RAW+JPEG pairs keep matching names. Duplicates and files without a date keep their names, and Undo restores the originals.',
+            },
             ...(['smart', 'location'].includes(mode) ? [{
               key: 'useGPSLocation',
               label: 'Use GPS location in folder names',

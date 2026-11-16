@@ -38,6 +38,7 @@ function dateSourceLabel(source) {
     'video metadata': 'Video metadata',
     'embedded metadata': 'Embedded creation metadata',
     filename: 'Date encoded in filename',
+    'Google Takeout': 'Google Photos export (Takeout .json)',
     manual: 'Corrected by you',
   };
   return labels[source] || 'No reliable capture date';

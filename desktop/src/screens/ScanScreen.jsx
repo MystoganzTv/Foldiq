@@ -50,9 +50,13 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
         probDupes: files.filter(f => f.probableMatchKind === 'same').length,
         similar:   files.filter(f => f.probableDuplicateGroupID && f.probableMatchKind !== 'same').length,
         noDate:    files.filter(f => !f.date).length,
-        embeddedDates: files.filter(f => f.date && f.dateSource !== 'filename').length,
+        embeddedDates: files.filter(f => f.date && f.dateSource !== 'filename' && f.dateSource !== 'Google Takeout').length,
+        takeoutDates: files.filter(f => f.date && f.dateSource === 'Google Takeout').length,
         filenameDates: files.filter(f => f.date && f.dateSource === 'filename').length,
         total:     files.length,
+        duplicateBytes: files
+          .filter(f => f.isDuplicate || f.isProbableDuplicate)
+          .reduce((sum, f) => sum + (Number(f.size) || 0), 0),
       });
       setWarnings(Array.isArray(result) ? [] : result.warnings);
       setDone(true);
@@ -193,9 +197,15 @@ export default function ScanScreen({ go, folders, setFiles, config }) {
             <div className={s.dateEvidenceSummary}>
               <strong>Date evidence</strong>
               <span>{stats.embeddedDates.toLocaleString()} embedded</span>
+              {stats.takeoutDates > 0 && <span>{stats.takeoutDates.toLocaleString()} from Google Takeout</span>}
               <span>{stats.filenameDates.toLocaleString()} from filenames</span>
               <span>{stats.noDate.toLocaleString()} missing</span>
             </div>
+            {stats.duplicateBytes > 0 && (
+              <div className={s.spaceSummary}>
+                <strong>{formatBytes(stats.duplicateBytes)}</strong> in duplicate copies. Foldiq sets them aside in Duplicates — delete that folder once you've checked it to get the space back.
+              </div>
+            )}
           </>
         )}
         {done && error && (
@@ -596,7 +606,8 @@ function formatBytes(value) {
   const bytes = Number(value) || 0;
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function formatDuration(milliseconds) {

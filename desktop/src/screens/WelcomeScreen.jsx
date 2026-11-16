@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import s from './Screen.module.css';
+import AutoOrganizeCard from '../components/AutoOrganizeCard';
 
 export default function WelcomeScreen({ go, folders, setFolders, config, setConfig }) {
   const [dragging, setDragging] = useState(false);
@@ -175,6 +176,8 @@ export default function WelcomeScreen({ go, folders, setFolders, config, setConf
           <label><input type="checkbox" checked={config.includeArchives} onChange={() => setConfig(c => ({ ...c, includeArchives: !c.includeArchives }))} /> Include ZIP, RAR, and 7z</label>
           <label title="Sends only anonymous operation counts, duration ranges, app version, and success status. Never photos, filenames, paths, dates, or metadata."><input type="checkbox" checked={config.shareAnonymousUsageData} onChange={() => setConfig(c => ({ ...c, shareAnonymousUsageData: !c.shareAnonymousUsageData }))} /> Help improve Foldiq anonymously</label>
         </div>
+
+        {!hasFolders && <AutoOrganizeCard config={config} setConfig={setConfig} />}
 
         <div className={s.welcomeFooterInfo}>
           <span>Nothing is deleted without your permission.</span>

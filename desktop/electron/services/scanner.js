@@ -7,6 +7,7 @@ const { exiftoolPath } = require('exiftool-vendored');
 const { extractArchive } = require('./archive');
 const { isArchive } = require('./sources');
 const { VisualHashWorker } = require('./visual-hash');
+const { SidecarIndex, isSidecarPath } = require('./takeout');
 const {
   detectSmartDuplicates,
   markExactDuplicates,
@@ -76,6 +77,11 @@ function isMedia(filePath) {
   return SUPPORTED.has(path.extname(filePath).toLowerCase());
 }
 
+// Archives also release Google Takeout sidecars so dates survive ZIP exports.
+function isMediaOrSidecar(filePath) {
+  return isMedia(filePath) || isSidecarPath(filePath);
+}
+
 function hashFile(filePath) {
   return new Promise((resolve) => {
     const hash = crypto.createHash('sha256');
@@ -89,7 +95,7 @@ function hashFile(filePath) {
 
 const tempDirectories = new Set();
 
-async function walkDir(root, mediaPaths, archivePaths, signal, onDirectory = () => {}) {
+async function walkDir(root, mediaPaths, archivePaths, signal, onDirectory = () => {}, sidecarPaths = null) {
   const pending = [root];
   while (pending.length > 0) {
     throwIfAborted(signal);
@@ -104,18 +110,19 @@ async function walkDir(root, mediaPaths, archivePaths, signal, onDirectory = () 
       if (entry.isDirectory()) pending.push(full);
       else if (entry.isFile() && isMedia(full)) mediaPaths.add(full);
       else if (entry.isFile() && isArchive(full)) archivePaths.add(full);
+      else if (sidecarPaths && entry.isFile() && isSidecarPath(full)) sidecarPaths.add(full);
     }
     // Yield between folders so Electron can paint progress and process Cancel.
     await new Promise(resolve => setImmediate(resolve));
   }
 }
 
-async function collectSource(sourcePath, mediaPaths, archivePaths, signal, onDirectory) {
+async function collectSource(sourcePath, mediaPaths, archivePaths, signal, onDirectory, sidecarPaths = null) {
   let stat;
   try { stat = await fs.promises.stat(sourcePath); } catch { return; }
 
   if (stat.isDirectory()) {
-    await walkDir(sourcePath, mediaPaths, archivePaths, signal, onDirectory);
+    await walkDir(sourcePath, mediaPaths, archivePaths, signal, onDirectory, sidecarPaths);
   } else if (stat.isFile() && isMedia(sourcePath)) {
     mediaPaths.add(sourcePath);
   } else if (stat.isFile() && isArchive(sourcePath)) {
@@ -216,19 +223,33 @@ function resolveDateCandidates(metadataInfo, filenameDate) {
   return metadataInfo;
 }
 
-function metadataResult(filePath, tags = {}, now = new Date()) {
+const TAKEOUT_DATE_SOURCE = 'Google Takeout';
+
+function metadataResult(filePath, tags = {}, now = new Date(), sidecar = null) {
   const metadataInfo = dateFromTrustedMetadata(tags, now);
   const filenameDate = dateFromFilename(filePath, now);
-  const dateInfo = resolveDateCandidates(metadataInfo, filenameDate);
-  const number = value => Number.isFinite(Number(value)) ? Number(value) : null;
+  // A Google Takeout sidecar records the capture time Google Photos kept for
+  // the item. It is preferred over a filename guess, but embedded camera
+  // metadata still wins when the file has it.
+  const sidecarDate = sidecar?.date && isPlausibleDate(sidecar.date, now) ? sidecar.date : null;
+  const dateInfo = !metadataInfo && sidecarDate
+    ? { date: sidecarDate, source: TAKEOUT_DATE_SOURCE, tag: null }
+    : resolveDateCandidates(metadataInfo, filenameDate);
+  const number = value => (value != null && value !== '' && Number.isFinite(Number(value))) ? Number(value) : null;
+  let latitude = number(tags.GPSLatitude);
+  let longitude = number(tags.GPSLongitude);
+  if ((latitude == null || longitude == null) && sidecar?.latitude != null && sidecar?.longitude != null) {
+    latitude = sidecar.latitude;
+    longitude = sidecar.longitude;
+  }
   return {
     dateInfo,
     cameraMake: typeof tags.Make === 'string' ? tags.Make : null,
     cameraModel: typeof tags.Model === 'string' ? tags.Model : null,
     pixelWidth: number(tags.ImageWidth),
     pixelHeight: number(tags.ImageHeight),
-    latitude: number(tags.GPSLatitude),
-    longitude: number(tags.GPSLongitude),
+    latitude,
+    longitude,
     durationSeconds: number(tags.Duration),
   };
 }
@@ -384,20 +405,25 @@ async function mapWithConcurrency(items, concurrency, worker) {
 }
 
 async function scan(folders, onProgress, options = {}) {
-  const { signal, includeVideos = true, includeArchives = true } = options;
+  const { signal, includeVideos = true, includeArchives = true, keepTempDirs = false } = options;
   const progress = typeof onProgress === 'function' ? onProgress : () => {};
   const startedAt = Date.now();
   diagnostic('scan-start', { sourceCount: folders.length, includeVideos, includeArchives });
   throwIfAborted(signal);
   progress({ phase: 'cleanup', current: 0, total: 0, file: 'Preparing temporary workspace…' });
-  await cleanupTempDirs();
+  // Auto-organize runs alongside a manual session; it must not delete the
+  // archive extractions that session still needs.
+  if (!keepTempDirs) await cleanupTempDirs();
   const mediaPaths = new Set();
   const archivePaths = new Set();
+  const sidecarPaths = new Set();
   for (const folder of folders) {
     await collectSource(folder, mediaPaths, archivePaths, signal, directory => {
       progress({ phase: 'discovering', current: mediaPaths.size, total: 0, file: `Looking in ${path.basename(directory)}…` });
-    });
+    }, sidecarPaths);
   }
+  const sidecars = new SidecarIndex();
+  for (const sidecarPath of sidecarPaths) sidecars.add(sidecarPath);
   if (!includeArchives) archivePaths.clear();
   if (!includeVideos) {
     for (const filePath of mediaPaths) {
@@ -421,7 +447,7 @@ async function scan(folders, onProgress, options = {}) {
       file: `Reading ${archiveName}…`,
     });
     try {
-      const extracted = await extractArchive(archivePath, isMedia, archiveProgress => {
+      const extracted = await extractArchive(archivePath, isMediaOrSidecar, archiveProgress => {
         const messages = {
           listing: `Reading the contents of ${archiveName}…`,
           extracting: archiveProgress.file
@@ -439,6 +465,10 @@ async function scan(folders, onProgress, options = {}) {
       tempDirectories.add(extracted.tempDirectory);
       archivesExtracted++;
       for (const filePath of extracted.mediaPaths) {
+        if (isSidecarPath(filePath)) {
+          sidecars.add(filePath, extracted.tempDirectory);
+          continue;
+        }
         allFiles.push({
           filePath,
           archiveSourcePath: archivePath,
@@ -514,10 +544,14 @@ async function scan(folders, onProgress, options = {}) {
       const byPath = new Map(rows.map(row => [
         path.resolve(row.SourceFile || '').toLowerCase(), row,
       ]));
-      const result = batch.map(item => metadataResult(
-        item.candidate.filePath,
-        byPath.get(path.resolve(item.candidate.filePath).toLowerCase()) || {}
-      ));
+      const result = [];
+      for (const item of batch) {
+        const tags = byPath.get(path.resolve(item.candidate.filePath).toLowerCase()) || {};
+        const sidecar = sidecars.size > 0
+          ? await sidecars.lookup(item.candidate.filePath, item.candidate.archiveTempDirectory ?? null)
+          : null;
+        result.push(metadataResult(item.candidate.filePath, tags, new Date(), sidecar));
+      }
       metadataCompleted += batch.length;
       progress({
         phase: 'metadata',
@@ -655,7 +689,13 @@ async function scan(folders, onProgress, options = {}) {
     warnings: warnings.length,
     elapsedMs: Date.now() - startedAt,
   });
-  return { files, archivesExtracted, warnings, diagnosticsAvailable: Boolean(diagnosticsLogPath) };
+  return {
+    files,
+    archivesExtracted,
+    warnings,
+    takeoutSidecarsFound: sidecars.size,
+    diagnosticsAvailable: Boolean(diagnosticsLogPath),
+  };
 }
 
 function detectProbableDuplicates(files) {
@@ -678,6 +718,8 @@ module.exports = {
   extractDateInfo,
   extractDate,
   metadataResult,
+  isMediaOrSidecar,
+  TAKEOUT_DATE_SOURCE,
   resolveExiftoolExecutable,
   runMetadataBatch,
   readMetadataWithRecovery,
