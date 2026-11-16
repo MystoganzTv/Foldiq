@@ -15,7 +15,7 @@ const { chromium } = require('playwright-core');
 const { buildFixture } = require('./fixture');
 
 const DIST = path.join(__dirname, '..', '..', 'dist');
-const ICON = path.join(__dirname, '..', '..', 'assets', 'icon.png');
+const ICON = path.join(__dirname, 'brand-icon.png');
 const OUT = path.resolve(process.argv[2] || 'trailer-out');
 const FRAMES = path.join(OUT, 'frames');
 const FPS = 30;
