@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import s from './Screen.module.css';
+import useLicense from '../useLicense';
+import TrialCard from '../components/TrialCard';
 
 export default function ReportScreen({ go, result, config, plan, setFolders, setFiles, setPlan, setResult }) {
   const [undoing, setUndoing] = useState(false);
@@ -13,6 +15,8 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
   const [cleaning, setCleaning] = useState(false);
   const [foldersRemoved, setFoldersRemoved] = useState(null);
   const [showReviewInvite, setShowReviewInvite] = useState(false);
+  const license = useLicense();
+  const trialHeld = result?.trialHeld || 0;
   const completed = result?.completed || [];
   const copied = completed.filter(file => file.action === 'copy').length;
   const moved = completed.filter(file => file.action === 'move').length;
@@ -273,6 +277,18 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
               </button>
             )}
           </div>
+        )}
+
+        {license?.isTrial && trialHeld > 0 && !undone && (
+          <TrialCard title={`${trialHeld.toLocaleString()} files were left where they are`}>
+            The free trial organizes up to {license.limit.toLocaleString()} files. Buy Foldiq, scan the same folders again, and the rest will be organized the same way.
+          </TrialCard>
+        )}
+
+        {license?.isTrial && trialHeld === 0 && license.remaining === 0 && !undone && (
+          <TrialCard title="That was the last of your free files">
+            Thanks for trying Foldiq. Buy it to organize the rest of your library, with no file limit.
+          </TrialCard>
         )}
 
         {showReviewInvite && !undone && (

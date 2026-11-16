@@ -63,6 +63,19 @@ jobs:
       - name: Test ZIP, RAR, 7z, drag/drop sources, and file safety
         run: npm test
 
+      # The free-trial licence check runs Windows PowerShell against the WinRT
+      # Store API. Outside a Store package the Store has no licence to give, so
+      # an error from the Store itself is expected here; a script, type-loading
+      # or reflection error is not, and fails the build.
+      - name: Check the Store licence script runs on Windows
+        shell: pwsh
+        run: |
+          $out = node -e "require('./electron/services/trial').runLicenseScript().then(o => console.log('OUTPUT ' + o.trim()), e => console.log('ERROR ' + String(e.stderr || e.message)))"
+          $out
+          if ($out -match 'ParserError|ParseException|null-valued expression|Unable to find type|MakeGenericMethod|CommandNotFound') {
+            throw 'The Store licence script itself is broken'
+          }
+
       - name: Build renderer
         run: npx vite build
 

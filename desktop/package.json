@@ -1,7 +1,7 @@
 {
   "name": "foldiq-desktop",
-  "version": "1.0.19",
-  "description": "Foldiq — Photo & Video Organizer for Windows",
+  "version": "1.0.20",
+  "description": "Foldiq — Photo and Video Organizer for Windows",
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
@@ -103,7 +103,7 @@
     },
     "appx": {
       "applicationId": "Foldiq",
-      "displayName": "Foldiq Photo & Video Organizer",
+      "displayName": "Foldiq Photo &amp; Video Organizer",
       "backgroundColor": "transparent",
       "languages": [
         "en-US"

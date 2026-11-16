@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import s from './Screen.module.css';
 import AutoOrganizeCard from '../components/AutoOrganizeCard';
+import TrialCard, { trialSummary } from '../components/TrialCard';
+import useLicense from '../useLicense';
 
 export default function WelcomeScreen({ go, folders, setFolders, config, setConfig }) {
   const [dragging, setDragging] = useState(false);
@@ -11,6 +13,7 @@ export default function WelcomeScreen({ go, folders, setFolders, config, setConf
   const [undoProgress, setUndoProgress] = useState({ current: 0, total: 0, file: '' });
   const [recoveryMessage, setRecoveryMessage] = useState('');
   const listRef = useRef(null);
+  const license = useLicense();
 
   useEffect(() => {
     if (!window.foldiq?.getAppInfo) {
@@ -178,6 +181,14 @@ export default function WelcomeScreen({ go, folders, setFolders, config, setConf
         </div>
 
         {!hasFolders && <AutoOrganizeCard config={config} setConfig={setConfig} />}
+
+        {license?.isTrial && (
+          <div style={{ width: '100%', maxWidth: 620, margin: '4px auto 0' }}>
+            <TrialCard title={`Free trial · ${trialSummary(license)}`}>
+              Scan and preview as much as you like. The trial organizes up to {license.limit.toLocaleString()} files, and Undo always works.
+            </TrialCard>
+          </div>
+        )}
 
         <div className={s.welcomeFooterInfo}>
           <span>Nothing is deleted without your permission.</span>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import s from './Screen.module.css';
+import useLicense, { buyFullVersion } from '../useLicense';
+import { trialSummary } from '../components/TrialCard';
 
 const FILTERS = [
   ['all', 'All'],
@@ -116,6 +118,7 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
   const [dateUpdatingKey, setDateUpdatingKey] = useState(null);
   const [planProgress, setPlanProgress] = useState(null);
   const [locationWarning, setLocationWarning] = useState('');
+  const license = useLicense();
 
   useEffect(() => {
     let active = true;
@@ -152,6 +155,11 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
   const unknown = useMemo(() => plan.filter(isUnknownDate), [plan]);
   const moves = useMemo(() => included.filter(file => file.action === 'move'), [included]);
   const copies = useMemo(() => included.filter(file => file.action === 'copy'), [included]);
+  // Free trial: only the first `remaining` files are organized; the rest stay put.
+  const trialRemaining = license?.isTrial ? (license.remaining ?? 0) : null;
+  const willOrganize = trialRemaining == null ? included.length : Math.min(included.length, trialRemaining);
+  const trialHeld = included.length - willOrganize;
+  const trialUsedUp = trialRemaining === 0;
   const selected = useMemo(
     () => plan.find(file => fileKey(file) === selectedKey) || null,
     [plan, selectedKey],
@@ -393,10 +401,17 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
             <div className={s.previewFooterSummary}>
               <strong>{included.length.toLocaleString()} photos ready</strong>
               <span>{excluded.length.toLocaleString()} left alone</span>
+              {license?.isTrial && <span>Free trial · {trialSummary(license)}</span>}
             </div>
-            <button className={s.btnPrimary} disabled={included.length === 0} onClick={() => setShowPreflight(true)}>
-              Organize {included.length.toLocaleString()} Files →
-            </button>
+            {trialUsedUp ? (
+              <button className={s.btnPrimary} onClick={buyFullVersion}>
+                Buy Foldiq to Organize →
+              </button>
+            ) : (
+              <button className={s.btnPrimary} disabled={included.length === 0} onClick={() => setShowPreflight(true)}>
+                Organize {willOrganize.toLocaleString()} Files →
+              </button>
+            )}
           </div>
 
           {showTree && (
@@ -426,6 +441,12 @@ export default function PreviewScreen({ go, files, config, plan, setPlan }) {
                     ? 'Foldiq will move the selected originals and create an internal undo manifest so the operation can be reversed.'
                     : `Foldiq will move ${moves.length.toLocaleString()} originals and copy ${copies.length.toLocaleString()} files extracted from archives. The compressed archives stay untouched.`}
               </p>
+              {trialHeld > 0 && (
+                <p className={s.trialNote}>
+                  Free trial: Foldiq will organize the first {willOrganize.toLocaleString()} files.
+                  The other {trialHeld.toLocaleString()} stay exactly where they are. Buy Foldiq to organize everything.
+                </p>
+              )}
               <div className={s.modalActions}>
                 <button className={s.btnSecondary} onClick={() => setShowPreflight(false)}>Cancel</button>
                 <button className={s.btnPrimary} onClick={() => go('apply')}>

@@ -42,7 +42,7 @@ The Stripe/NSIS build and its GitHub release are untouched. The Store package is
 
 | Section | Value |
 |---|---|
-| Pricing | Paid, **$19.99** (base price, all markets), the same as the Stripe installer and the App Store. Microsoft commerce, 15 % fee. No free trial: the app has no Store license check, so a trial would be the full product. |
+| Pricing | Paid, **$19.99** (base price, all markets), the same as the Stripe installer and the App Store. Microsoft commerce, 15 % fee. **Free trial: Unlimited** (no time limit). From 1.0.20 the app reads the Store licence (`desktop/electron/services/trial.js`): a trial can scan and preview everything but organizes at most 100 files in total; Undo always works. If the licence can't be read, the app behaves as the full version. |
 | Markets | All |
 | Category | Photo & video |
 | Privacy policy URL | https://foldiq.app/privacy-policy.html |

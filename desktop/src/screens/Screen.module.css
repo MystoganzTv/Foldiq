@@ -533,6 +533,13 @@
 .reviewCardActions { display: flex; flex-shrink: 0; gap: 8px; }
 .reviewCardActions button { padding: 7px 12px; font-size: 11px; }
 
+/* ── Free trial (Microsoft Store) ── */
+.trialCard { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 16px; border: 1px solid #BFDBFE; border-radius: 12px; background: #EFF6FF; }
+.trialCard strong { color: #1E3A8A; font-size: 13px; }
+.trialCard p { margin-top: 3px; color: #475569; font-size: 11px; line-height: 1.45; }
+.trialCard button { flex-shrink: 0; padding: 7px 14px; font-size: 11px; }
+.trialNote { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #EFF6FF; color: #1E3A8A; font-size: 12px; line-height: 1.45; }
+
 /* ── Auto-organize (welcome) ── */
 .autoOrganizeCard { width: 100%; max-width: 620px; margin: 4px auto 0; padding: 16px 18px; border: 1px solid var(--slate-200); border-radius: 14px; background: #fff; display: flex; flex-direction: column; gap: 10px; text-align: left; }
 .autoOrganizeHeader { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }

@@ -1,0 +1,62 @@
+name: Store Screenshots
+
+# Renders Microsoft Store screenshots of the Windows UI in Edge on Windows, so
+# text uses Segoe UI as customers see it. Sample library only; see
+# desktop/scripts/store-screenshots.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [store-screenshots]
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer
+        run: npx vite build
+
+      - name: Capture screenshots
+        run: |
+          npm i --no-save playwright-core ffmpeg-static
+          node scripts/store-screenshots/capture.js store-screenshots-out
+
+      - name: Record trailer
+        run: |
+          node scripts/store-screenshots/trailer.js trailer-out
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: store-trailer
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            desktop/trailer-out/*.mp4
+            desktop/trailer-out/*.png
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: store-screenshots
+          retention-days: 14
+          if-no-files-found: error
+          path: desktop/store-screenshots-out/*.png
