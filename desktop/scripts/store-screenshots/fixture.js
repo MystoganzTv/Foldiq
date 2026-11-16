@@ -83,7 +83,7 @@ function buildFiles() {
       dateSource: missingDate ? null : source === 'takeout' ? 'Google Takeout' : isVideo ? 'video metadata' : 'camera metadata',
       dateTag: missingDate ? null : isVideo ? 'MediaCreateDate' : 'DateTimeOriginal',
       cameraMake: source === 'laptop' ? 'Canon' : 'Google',
-      cameraModel: source === 'laptop' ? 'Canon EOS Rebel T6' : 'Pixel 8',
+      cameraModel: source === 'laptop' ? 'EOS Rebel T6' : 'Pixel 8',
       pixelWidth: isVideo ? 1920 : 4032,
       pixelHeight: isVideo ? 1080 : 3024,
       durationSeconds: isVideo ? Math.floor(4 + random() * 90) : null,
