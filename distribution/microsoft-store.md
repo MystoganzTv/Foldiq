@@ -42,7 +42,7 @@ The Stripe/NSIS build and its GitHub release are untouched. The Store package is
 
 | Section | Value |
 |---|---|
-| Pricing | Paid, **$9.99** (same as Stripe). Microsoft commerce, 15 % fee. No free trial: the app has no Store license check, so a trial would be the full product. |
+| Pricing | Paid, **$19.99** (base price, all markets). The Stripe installer and the Mac App Store are still $9.99. Microsoft commerce, 15 % fee. No free trial: the app has no Store license check, so a trial would be the full product. |
 | Markets | All |
 | Category | Photo & video |
 | Privacy policy URL | https://foldiq.app/privacy-policy.html |
