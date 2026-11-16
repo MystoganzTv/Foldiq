@@ -3,6 +3,7 @@
 # and notarized by Apple, so Gatekeeper opens it without warnings.
 #
 # Run from the project root on your Mac:   bash notarize.sh
+# To reuse the archive from the previous run: bash notarize.sh --skip-archive
 #
 # Needs, once:
 #   • A "Developer ID Application" certificate in your keychain
@@ -45,11 +46,16 @@ fi
 echo "==> Notarization credentials ready ✓"
 
 # ── 3. Fresh archive of the current code ─────────────────────────────────────
-rm -rf "$OUT_DIR"
-mkdir -p "$OUT_DIR"
-echo "==> Archiving the current code (a few minutes)…"
-xcodebuild -project Foldiq.xcodeproj -scheme Foldiq -configuration Release \
-  -destination 'generic/platform=macOS' -archivePath "$ARCHIVE" archive -quiet
+if [ "${1:-}" = "--skip-archive" ] && [ -d "$ARCHIVE" ]; then
+  echo "==> Reusing the archive from the previous run ✓"
+  rm -rf "$EXPORT_DIR" "$FINAL_DMG"
+else
+  rm -rf "$OUT_DIR"
+  mkdir -p "$OUT_DIR"
+  echo "==> Archiving the current code (a few minutes)…"
+  xcodebuild -project Foldiq.xcodeproj -scheme Foldiq -configuration Release \
+    -destination 'generic/platform=macOS' -archivePath "$ARCHIVE" archive -quiet
+fi
 
 # ── 4. Export signed with Developer ID ───────────────────────────────────────
 echo "==> Exporting with Developer ID…"
@@ -58,7 +64,13 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT_DIR" \
 APP="$EXPORT_DIR/Foldiq.app"
 [ -d "$APP" ] || { echo "❌ Export did not produce Foldiq.app"; exit 1; }
 codesign --verify --deep --strict "$APP"
-codesign -dv "$APP" 2>&1 | grep -q "Developer ID Application" || { echo "❌ Foldiq.app is not signed with Developer ID"; exit 1; }
+# -dvv lists the signing authority (plain -dv does not).
+SIGNATURE=$(codesign -dvv "$APP" 2>&1)
+if ! echo "$SIGNATURE" | grep -q "Authority=Developer ID Application"; then
+  echo "❌ Foldiq.app is not signed with Developer ID:"
+  echo "$SIGNATURE" | grep -E "Authority|TeamIdentifier" || echo "$SIGNATURE"
+  exit 1
+fi
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist")
 echo "==> Foldiq $VERSION signed with Developer ID ✓"
 
