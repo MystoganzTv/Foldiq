@@ -1,0 +1,79 @@
+name: Windows Store Package
+
+# Builds the MSIX/AppX package that is uploaded by hand to Partner Center.
+# Microsoft signs Store packages itself, so no certificate is needed here.
+# The package identity lives in desktop/package.json → build.appx and must
+# match Partner Center → Product management → Product identity exactly.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Windows version from desktop/package.json
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  build-store-package:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate inputs
+        shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          $packageVersion = (Get-Content package.json | ConvertFrom-Json).version
+          if ($packageVersion -ne $env:REQUESTED_VERSION) {
+            throw "Requested version $env:REQUESTED_VERSION does not match package version $packageVersion"
+          }
+          $appx = (Get-Content package.json | ConvertFrom-Json).build.appx
+          if (-not $appx.identityName -or -not $appx.publisher.StartsWith('CN=') -or -not $appx.publisherDisplayName) {
+            throw 'build.appx in desktop/package.json is missing the Partner Center identity'
+          }
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test ZIP, RAR, 7z, drag/drop sources, and file safety
+        run: npm run prepare:7zip && npm test
+
+      - name: Prepare Windows runtimes
+        run: npm run prepare:win-runtimes
+
+      - name: Build renderer
+        run: npx vite build
+
+      - name: Build Store package
+        run: npx electron-builder --win appx --x64 --publish never
+
+      - name: Verify packaged runtimes
+        run: node scripts/verify-win-package.js
+
+      - name: Upload Store package
+        uses: actions/upload-artifact@v7
+        with:
+          name: foldiq-store-${{ inputs.version }}
+          retention-days: 14
+          if-no-files-found: error
+          path: desktop/dist-electron/*.appx

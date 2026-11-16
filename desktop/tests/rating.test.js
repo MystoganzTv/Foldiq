@@ -77,3 +77,8 @@ test('the review form URL carries the source and review mode', () => {
   assert.equal(url.searchParams.get('source'), 'foldiq-windows-review');
   assert.equal(url.searchParams.get('kind'), 'review');
 });
+
+test('Microsoft Store installs are sent to the Store review page', () => {
+  assert.equal(rating.reviewURL(true), 'ms-windows-store://review/?ProductId=9N7XKX8G0M2P');
+  assert.equal(rating.reviewURL(false), rating.REVIEW_URL);
+});
