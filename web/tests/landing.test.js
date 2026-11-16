@@ -62,11 +62,16 @@ test('cookie-free analytics is disclosed and strips purchase tokens', () => {
   assert.match(html, /anonymous, cookie-free traffic/);
 });
 
-test('landing screenshots preserve their native aspect ratio', () => {
-  assert.match(html, /\.screenshot-frame img\s*\{[^}]*height:\s*auto;/s);
-  const slides = [...html.matchAll(/<img src="\/screenshots\/laptop-angled\/([^"/]+)\.webp"[^>]+width="1536" height="1024" loading="lazy"/g)];
-  assert.deepEqual(slides.map(([, name]) => name), ['scan', 'rules', 'preview', 'duplicates', 'report'],
-    'all five slides must reserve space before they load');
+test('the tour shows each Windows screenshot and links to it at full size', async () => {
+  const slides = [...html.matchAll(/<a class="screenshot-frame" id="slide-([^"]+)" href="([^"]+)"[^>]*>\s*<span class="laptop-mockup">\s*<img class="laptop-screen" src="([^"]+)"[^>]+width="2732" height="1536" loading="lazy"/g)];
+  assert.deepEqual(slides.map(([, name]) => name),
+    ['folders', 'scan', 'rules', 'preview', 'duplicates', 'structure', 'confirm', 'report']);
+  for (const [, name, href, src] of slides) {
+    assert.equal(href, src);
+    assert.match(html, new RegExp(`aria-controls="slide-${name}"`));
+    assert.match(src, /^screenshots\/windows\//);
+    await readFile(new URL(src, new URL('../', import.meta.url)));
+  }
 });
 
 test('Mac and Windows sell at the same web price shown on the page', () => {

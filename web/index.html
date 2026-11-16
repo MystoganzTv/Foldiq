@@ -113,8 +113,8 @@
       display: inline-block; margin-top: 18px; color: var(--blue-dark);
       font-size: 14px; font-weight: 700; text-underline-offset: 4px;
     }
-    .hero-photo img {
-      display: block; width: 100%; height: auto; border-radius: 20px;
+    .hero-photo .laptop-mockup {
+      border-radius: 20px;
       box-shadow: 0 22px 52px rgba(27, 20, 68, .18);
     }
     .hero-photo figcaption {
@@ -297,6 +297,21 @@
     .trailer-frame video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
 
     /* ── APP TOUR ── */
+    .laptop-mockup {
+      position: relative; display: block; overflow: hidden;
+      container-type: inline-size; aspect-ratio: 1536 / 1024;
+      background: #191b24 url('screenshots/laptop-angled/preview.webp') center / cover no-repeat;
+    }
+    .laptop-mockup .laptop-screen {
+      position: absolute; inset: 0 auto auto 0;
+      width: 100%; height: auto; aspect-ratio: 8 / 5;
+      object-fit: contain; background: #171923; transform-origin: top left;
+      /* Map the screenshot to the four corners of the existing laptop display. */
+      transform: translate(15.8203125%, 10.9375%) perspective(100cqw)
+        matrix3d(.64253236, -.0048104, -.05553978, 0,
+                 .01877233, .63513065, -.00190588, 0,
+                 0, 0, 1, 0, 0, 0, 0, 1);
+    }
     .screenshots-section { background: var(--white); }
     .gallery { max-width: 1100px; margin: 32px auto 0; }
     .screenshots-track {
@@ -309,7 +324,6 @@
       border: 1px solid #e5e0ef; background: var(--slate-50); text-decoration: none;
     }
     .screenshot-frame[hidden] { display: none; }
-    .screenshot-frame img { width: 100%; height: auto; display: block; }
     .screenshot-label {
       display: block; padding: 11px 15px;
       font-size: 14px; font-weight: 700; color: var(--slate-900);
@@ -346,7 +360,7 @@
     }
     @media (max-width: 640px) {
       nav .nav-links { display: none; }
-      .hero-photo img { border-radius: 13px; }
+      .hero-photo .laptop-mockup { border-radius: 13px; }
       .features-grid, .purchase-grid { grid-template-columns: 1fr; }
       .privacy-bar { padding: 28px 24px; }
     }
@@ -383,8 +397,10 @@
       <a class="hero-tour" href="#screenshots">See Foldiq in action ↓</a>
     </div>
     <figure class="hero-photo">
-      <img src="/screenshots/laptop-angled/preview.webp" alt="Foldiq running on an angled laptop, with file names and their planned destinations." width="1536" height="1024" fetchpriority="high" />
-      <figcaption>Foldiq for Mac · Preview Changes</figcaption>
+      <span class="laptop-mockup">
+        <img class="laptop-screen" src="screenshots/windows/preview.webp" alt="Foldiq for Windows showing file names, planned destinations, and information about the selected photo." width="2732" height="1536" fetchpriority="high" />
+      </span>
+      <figcaption>Foldiq for Windows · Preview Changes</figcaption>
     </figure>
   </div>
 </section>
@@ -407,36 +423,67 @@
   <div style="max-width:1100px;margin:0 auto;">
     <p class="section-label">App tour</p>
     <h2 class="section-title" id="screenshots-title">See how Foldiq organizes files</h2>
-    <p class="section-sub">Follow a sample library through Foldiq for Mac, from scan to report.</p>
+    <p class="section-sub">Follow a sample library through Foldiq for Windows, from choosing folders to the final report.</p>
   </div>
   <div class="gallery" id="product-gallery">
     <div class="gallery-controls" role="group" aria-label="App screens" hidden>
+      <button type="button" class="gallery-control" aria-controls="slide-folders" aria-pressed="false">Choose folders<span>Add folders and archives to scan.</span></button>
       <button type="button" class="gallery-control" aria-controls="slide-scan" aria-pressed="false">Scan results<span>See photo totals, duplicates, and files with missing dates.</span></button>
       <button type="button" class="gallery-control" aria-controls="slide-rules" aria-pressed="false">Organization rules<span>Choose how dates become real folders.</span></button>
       <button type="button" class="gallery-control" aria-controls="slide-preview" aria-pressed="false">File destinations<span>Review exactly where the files will go.</span></button>
       <button type="button" class="gallery-control" aria-controls="slide-duplicates" aria-pressed="false">Duplicate review<span>Review exact matches and files set aside.</span></button>
+      <button type="button" class="gallery-control" aria-controls="slide-structure" aria-pressed="false">Folder structure<span>See the folder tree before anything moves.</span></button>
+      <button type="button" class="gallery-control" aria-controls="slide-confirm" aria-pressed="false">Confirm changes<span>Check the destination and file counts before moving.</span></button>
       <button type="button" class="gallery-control" aria-controls="slide-report" aria-pressed="false">Organization report<span>Check the results and review library totals.</span></button>
     </div>
     <div>
       <div class="screenshots-track" aria-labelledby="screenshots-title">
-        <a class="screenshot-frame" id="slide-scan" href="/screenshots/laptop-angled/scan.webp" target="_blank" rel="noopener" aria-label="Scan results (opens full-size image in a new tab)">
-          <img src="/screenshots/laptop-angled/scan.webp" alt="Foldiq scan results on an angled laptop, showing photo totals and categories found during a scan." width="1536" height="1024" loading="lazy" decoding="async" />
+        <a class="screenshot-frame" id="slide-folders" href="screenshots/windows/folders.webp" target="_blank" rel="noopener" aria-label="Choose folders (opens full-size image in a new tab)">
+          <span class="laptop-mockup">
+            <img class="laptop-screen" src="screenshots/windows/folders.webp" alt="Three folders selected for scanning in Foldiq." width="2732" height="1536" loading="lazy" decoding="async" />
+          </span>
+          <span class="screenshot-label">Choose folders</span>
+        </a>
+        <a class="screenshot-frame" id="slide-scan" href="screenshots/windows/scan.webp" target="_blank" rel="noopener" aria-label="Scan results (opens full-size image in a new tab)">
+          <span class="laptop-mockup">
+            <img class="laptop-screen" src="screenshots/windows/scan.webp" alt="Scan results showing file totals, duplicates, and sources of capture dates." width="2732" height="1536" loading="lazy" decoding="async" />
+          </span>
           <span class="screenshot-label">Scan results</span>
         </a>
-        <a class="screenshot-frame" id="slide-rules" href="/screenshots/laptop-angled/rules.webp" target="_blank" rel="noopener" aria-label="Organization rules (opens full-size image in a new tab)">
-          <img src="/screenshots/laptop-angled/rules.webp" alt="Foldiq settings on an angled laptop, showing Smart Hybrid, By Year, and By Year &amp; Month." width="1536" height="1024" loading="lazy" decoding="async" />
+        <a class="screenshot-frame" id="slide-rules" href="screenshots/windows/rules.webp" target="_blank" rel="noopener" aria-label="Organization rules (opens full-size image in a new tab)">
+          <span class="laptop-mockup">
+            <img class="laptop-screen" src="screenshots/windows/rules.webp" alt="Organization settings with an output folder and a Smart Hybrid folder example." width="2732" height="1536" loading="lazy" decoding="async" />
+          </span>
           <span class="screenshot-label">Organization rules</span>
         </a>
-        <a class="screenshot-frame" id="slide-preview" href="/screenshots/laptop-angled/preview.webp" target="_blank" rel="noopener" aria-label="File destinations (opens full-size image in a new tab)">
-          <img src="/screenshots/laptop-angled/preview.webp" alt="Foldiq file preview on an angled laptop, with filenames and proposed destination folders." width="1536" height="1024" loading="lazy" decoding="async" />
+        <a class="screenshot-frame" id="slide-preview" href="screenshots/windows/preview.webp" target="_blank" rel="noopener" aria-label="File destinations (opens full-size image in a new tab)">
+          <span class="laptop-mockup">
+            <img class="laptop-screen" src="screenshots/windows/preview.webp" alt="File preview showing file names, proposed destinations, and details for the selected photo." width="2732" height="1536" loading="lazy" decoding="async" />
+          </span>
           <span class="screenshot-label">File destinations</span>
         </a>
-        <a class="screenshot-frame" id="slide-duplicates" href="/screenshots/laptop-angled/duplicates.webp" target="_blank" rel="noopener" aria-label="Duplicate review (opens full-size image in a new tab)">
-          <img src="/screenshots/laptop-angled/duplicates.webp" alt="Foldiq on an angled laptop, listing exact duplicates and other files flagged for review." width="1536" height="1024" loading="lazy" decoding="async" />
+        <a class="screenshot-frame" id="slide-duplicates" href="screenshots/windows/duplicates.webp" target="_blank" rel="noopener" aria-label="Duplicate review (opens full-size image in a new tab)">
+          <span class="laptop-mockup">
+            <img class="laptop-screen" src="screenshots/windows/duplicates.webp" alt="The duplicate filter showing exact matches and a preview of the selected photo." width="2732" height="1536" loading="lazy" decoding="async" />
+          </span>
           <span class="screenshot-label">Duplicate review</span>
         </a>
-        <a class="screenshot-frame" id="slide-report" href="/screenshots/laptop-angled/report.webp" target="_blank" rel="noopener" aria-label="Organization report (opens full-size image in a new tab)">
-          <img src="/screenshots/laptop-angled/report.webp" alt="Foldiq’s final report on an angled laptop with organize, skip, and error counts." width="1536" height="1024" loading="lazy" decoding="async" />
+        <a class="screenshot-frame" id="slide-structure" href="screenshots/windows/structure.webp" target="_blank" rel="noopener" aria-label="Folder structure (opens full-size image in a new tab)">
+          <span class="laptop-mockup">
+            <img class="laptop-screen" src="screenshots/windows/structure.webp" alt="Preview of the folders Foldiq will create, grouped by year, month, and day." width="2732" height="1536" loading="lazy" decoding="async" />
+          </span>
+          <span class="screenshot-label">Folder structure</span>
+        </a>
+        <a class="screenshot-frame" id="slide-confirm" href="screenshots/windows/confirm.webp" target="_blank" rel="noopener" aria-label="Confirm changes (opens full-size image in a new tab)">
+          <span class="laptop-mockup">
+            <img class="laptop-screen" src="screenshots/windows/confirm.webp" alt="Confirmation dialog showing the output folder, file counts, and information about undo." width="2732" height="1536" loading="lazy" decoding="async" />
+          </span>
+          <span class="screenshot-label">Confirm changes</span>
+        </a>
+        <a class="screenshot-frame" id="slide-report" href="screenshots/windows/report.webp" target="_blank" rel="noopener" aria-label="Organization report (opens full-size image in a new tab)">
+          <span class="laptop-mockup">
+            <img class="laptop-screen" src="screenshots/windows/report.webp" alt="Final report showing organized, skipped, and failed files, with an Undo button." width="2732" height="1536" loading="lazy" decoding="async" />
+          </span>
           <span class="screenshot-label">Organization report</span>
         </a>
       </div>
