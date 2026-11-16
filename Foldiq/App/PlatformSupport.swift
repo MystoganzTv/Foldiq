@@ -59,6 +59,42 @@ extension Image {
         self.init(nsImage: platformImage)
     }
 }
+
+/// Builds the Quick Look view used by the preview sheets.
+///
+/// `QLPreviewView(frame:style:)` is failable. It used to be force-unwrapped with
+/// `preconditionFailure`, which turned a missing preview into a crash of the whole
+/// app. Now the user just sees a short message instead of the preview.
+enum QuickLookPreviewFactory {
+    static func makeView(for url: URL) -> NSView {
+        guard let previewView = QLPreviewView(frame: .zero, style: .normal) else {
+            return makeUnavailableView()
+        }
+        previewView.autostarts = true
+        previewView.previewItem = url as NSURL
+        return previewView
+    }
+
+    static func update(_ view: NSView, for url: URL) {
+        (view as? QLPreviewView)?.previewItem = url as NSURL
+    }
+
+    private static func makeUnavailableView() -> NSView {
+        let container = NSView(frame: .zero)
+        let label = NSTextField(labelWithString: "Preview isn't available for this file.")
+        label.textColor = .secondaryLabelColor
+        label.alignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            label.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 20),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -20),
+        ])
+        return container
+    }
+}
 #else
 import UIKit
 import QuickLook

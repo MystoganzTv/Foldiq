@@ -12,6 +12,7 @@
 
 import Foundation
 import CryptoKit
+import SwiftData
 
 // MARK: ─── FileMover ──────────────────────────────────────────────────────────
 
@@ -47,6 +48,11 @@ final class FileMover {
 
         for plan in plans {
             done += 1
+
+            // The journal must exist before any file is touched; without it there
+            // is no safe Undo, so stop. A purged plan just has nothing left to do.
+            guard manifest.isUsable else { break }
+            guard plan.isUsable else { continue }
 
             // Report progress for every file so the UI shows real-time file names.
             let p = ApplyProgress(
@@ -93,6 +99,10 @@ final class FileMover {
                 guard !hash.isEmpty else {
                     throw CocoaError(.fileReadUnknown)
                 }
+                // Nothing has been moved yet: if the journal or the plan went away
+                // during the hash, skip this file instead of writing to them.
+                guard manifest.isUsable else { break }
+                guard plan.isUsable else { continue }
 
                 // Persist Undo intent before touching either path. This makes a
                 // crash between the file operation and the next UI update safe:
@@ -128,24 +138,30 @@ final class FileMover {
                         expectedHash: hash
                     )
                 }.value
-                entry.wasCompleted = true
+                if entry.isUsable { entry.wasCompleted = true }
 
-                // Back on @MainActor: safe to touch SwiftData models
+                // Back on @MainActor: safe to touch SwiftData models — unless the
+                // plan was purged meanwhile (the journal entry still records it).
                 Self.preserveDates(source: srcURL, destination: destURL, operation: op)
-                plan.status    = .done
-                plan.appliedAt = Date()
+                if plan.isUsable {
+                    plan.status    = .done
+                    plan.appliedAt = Date()
+                }
 
                 try checkpoint()
 
             } catch {
                 let human = Self.humanizeError(error)
-                plan.status       = .error
-                plan.errorMessage = human
+                if plan.isUsable {
+                    plan.status       = .error
+                    plan.errorMessage = human
+                }
                 errors.append(srcURL.lastPathComponent + ": " + human)
                 // Remove a journal entry only when no destination exists and
                 // the original is still present. Every ambiguous state remains
                 // recorded for safe recovery.
-                if FileManager.default.fileExists(atPath: srcPath),
+                if manifest.isUsable,
+                   FileManager.default.fileExists(atPath: srcPath),
                    !FileManager.default.fileExists(atPath: destPath),
                    let last = manifest.entries.last,
                    last.originalPath == srcPath,
@@ -199,8 +215,11 @@ final class FileMover {
     /// leaves an orphaned UndoEntry row behind; nothing else ever fetches
     /// UndoEntry directly, so the row would never be reachable again.
     private static func discard(_ entry: UndoEntry, from manifest: UndoManifest) {
-        manifest.entries.removeAll { $0.id == entry.id }
-        manifest.modelContext?.delete(entry)
+        guard entry.isUsable else { return }
+        if manifest.isUsable {
+            manifest.entries.removeAll { $0.id == entry.id }
+        }
+        entry.modelContext?.delete(entry)
     }
 
     // MARK: - Undo
@@ -225,6 +244,9 @@ final class FileMover {
 
         for entry in entries {
             done += 1
+            // Skip a journal entry that was already removed (e.g. by a second
+            // recovery pass); reading a deleted model traps inside SwiftData.
+            guard entry.isUsable else { continue }
             let p = ApplyProgress(
                 done: done, total: total,
                 currentFile: URL(fileURLWithPath: entry.newPath).lastPathComponent,
@@ -258,7 +280,9 @@ final class FileMover {
             }
         }
 
-        manifest.wasUndone = errors.isEmpty && manifest.entries.isEmpty
+        if manifest.isUsable {
+            manifest.wasUndone = errors.isEmpty && manifest.entries.isEmpty
+        }
         try? checkpoint()
         onProgress(ApplyProgress(
             done: done,

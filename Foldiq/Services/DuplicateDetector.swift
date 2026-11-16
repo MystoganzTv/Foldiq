@@ -14,6 +14,7 @@
 
 import Foundation
 import CryptoKit
+import SwiftData
 
 final class DuplicateDetector {
 
@@ -85,6 +86,10 @@ final class DuplicateDetector {
             }
         }
 
+        // A cancelled scan must not write back: its files may already have been
+        // deleted by the Welcome screen's purge.
+        guard !Task.isCancelled else { return 0 }
+
         // ── 4. Group snapshots by hash ────────────────────────────────────
         var byHash: [String: [FileSnapshot]] = [:]
         for snap in snapshots {
@@ -93,7 +98,7 @@ final class DuplicateDetector {
         }
 
         // ── 5. Elect originals, mark extras — write back to @Model on @MainActor
-        let fileByID = Dictionary(uniqueKeysWithValues: files.map { ($0.id, $0) })
+        let fileByID = Dictionary(uniqueKeysWithValues: files.filter(\.isUsable).map { ($0.id, $0) })
         var groupCount = 0
 
         for (_, group) in byHash where group.count > 1 {

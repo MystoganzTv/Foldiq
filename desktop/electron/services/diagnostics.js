@@ -4,6 +4,8 @@ const SUPPORT_FORM = 'https://foldiq.app/contact.html?source=foldiq-windows';
 const SAFE_FIELDS = [
   'sourceCount', 'includeVideos', 'includeArchives', 'batchNumber', 'count',
   'returned', 'code', 'files', 'warnings', 'elapsedMs',
+  // Crash records (see crash-reporter.js).
+  'kind', 'reason', 'exitCode', 'type', 'name', 'appVersion',
 ];
 
 function redactMessage(value) {
@@ -41,6 +43,7 @@ function formatEvent(event) {
     if (event[field] !== undefined) details.push(`${field}=${String(event[field]).slice(0, 80)}`);
   }
   if (event.message) details.push(`message=${redactMessage(event.message)}`);
+  if (event.stack) details.push(`stack=${redactMessage(event.stack)}`);
   return `${redactMessage(event.at || 'unknown time')} | ${redactMessage(event.event || 'unknown event')}${details.length ? ` | ${details.join(' ')}` : ''}`;
 }
 

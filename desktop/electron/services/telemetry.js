@@ -3,7 +3,7 @@ const path = require('path');
 const { randomUUID } = require('crypto');
 
 const ENDPOINT = 'https://foldiq.app/api/telemetry';
-const EVENTS = new Set(['scan_completed', 'apply_completed', 'undo_completed']);
+const EVENTS = new Set(['scan_completed', 'apply_completed', 'undo_completed', 'app_crashed']);
 
 function durationBucket(elapsedMs) {
   if (elapsedMs < 30000) return 'under_30s';
@@ -61,4 +61,16 @@ async function send({ enabled, idPath, appVersion, eventName, success, elapsedMs
   }
 }
 
-module.exports = { durationBucket, itemCountBucket, installId, send, ENDPOINT };
+// Anonymous crash ping: no error text, no stack, no paths — only that a crash
+// happened, the app version and how long the app had been running (bucketed).
+function sendCrash({ enabled, idPath, appVersion, uptimeMs, fetchImpl }) {
+  return send({
+    enabled, idPath, appVersion, fetchImpl,
+    eventName: 'app_crashed',
+    success: false,
+    elapsedMs: uptimeMs,
+    itemCount: 0,
+  });
+}
+
+module.exports = { durationBucket, itemCountBucket, installId, send, sendCrash, ENDPOINT };

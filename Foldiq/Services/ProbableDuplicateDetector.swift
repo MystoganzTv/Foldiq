@@ -4,6 +4,7 @@
 // review-only and always remain in the normal organization flow.
 
 import Foundation
+import SwiftData
 import ImageIO
 import CoreGraphics
 
@@ -151,6 +152,10 @@ final class ProbableDuplicateDetector {
             }
         }
 
+        // `return` inside the task group only leaves the group; stop here too so a
+        // cancelled scan never writes to files the Welcome screen may have purged.
+        guard !Task.isCancelled else { return 0 }
+
         var allGroups = UnionFind(count: snapshots.count)
         var sameGroups = UnionFind(count: snapshots.count)
         var edges: [MatchEdge] = []
@@ -183,7 +188,7 @@ final class ProbableDuplicateDetector {
             components[root, default: Component()].edges.append(edge)
         }
 
-        let filesByID = Dictionary(uniqueKeysWithValues: files.map { ($0.id, $0) })
+        let filesByID = Dictionary(uniqueKeysWithValues: files.filter(\.isUsable).map { ($0.id, $0) })
         var groupCount = 0
         for component in components.values {
             groupCount += 1

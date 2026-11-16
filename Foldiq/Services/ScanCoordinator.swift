@@ -119,13 +119,11 @@ final class ScanCoordinator: ObservableObject {
         phaseItemCount = discovered.count
 
         for (idx, disc) in discovered.enumerated() {
-            // Honour cancellation every 25 files
-            if idx % 25 == 0, Task.isCancelled {
-                // Clean up the partial session from SwiftData before bailing
-                context.delete(session)
-                try? context.save()
-                phase = .failed
-                return nil
+            // Honour cancellation on every file. Cancelling (or leaving the scan
+            // screen) sends the user back to Welcome, which purges scan data; a
+            // late write to that deleted session traps inside SwiftData.
+            if Task.isCancelled || !session.isUsable {
+                return abandon(session, in: context)
             }
 
             processedCount = idx + 1
@@ -134,6 +132,10 @@ final class ScanCoordinator: ObservableObject {
             let meta = await Task.detached(priority: .utility) {
                 await MetadataExtractor().extract(from: disc.url, kind: disc.kind)
             }.value
+            // The await above is where a cancel/purge can slip in.
+            if Task.isCancelled || !session.isUsable {
+                return abandon(session, in: context)
+            }
 
             let file = MediaFile(
                 filePath:  disc.filePath,
@@ -164,11 +166,8 @@ final class ScanCoordinator: ObservableObject {
         try? context.save()
 
         // Cancelled during metadata extraction?
-        guard !Task.isCancelled else {
-            context.delete(session)
-            try? context.save()
-            phase = .failed
-            return nil
+        guard !Task.isCancelled, session.isUsable else {
+            return abandon(session, in: context)
         }
 
         // 4. Duplicate detection
@@ -183,6 +182,10 @@ final class ScanCoordinator: ObservableObject {
             self?.currentFile    = p.currentFile
         }
 
+        guard !Task.isCancelled, session.isUsable else {
+            return abandon(session, in: context)
+        }
+
         // 5. Probable duplicate detection (second pass, non-exact matches)
         phase = .matching
         processedCount = 0
@@ -191,6 +194,10 @@ final class ScanCoordinator: ObservableObject {
             self?.processedCount = p.processed
             self?.phaseItemCount = p.total
             self?.currentFile    = p.currentFile
+        }
+
+        guard !Task.isCancelled, session.isUsable else {
+            return abandon(session, in: context)
         }
 
         // 6. Update session stats
@@ -211,5 +218,16 @@ final class ScanCoordinator: ObservableObject {
         _ = groupCount
         phase = .done
         return session
+    }
+
+    /// Stops a cancelled scan: removes its partial session unless the Welcome
+    /// screen already purged it (deleting it twice would trap as well).
+    private func abandon(_ session: ScanSession, in context: ModelContext) -> ScanSession? {
+        if session.isUsable {
+            context.delete(session)
+            try? context.save()
+        }
+        phase = .failed
+        return nil
     }
 }
