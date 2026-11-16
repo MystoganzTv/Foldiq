@@ -287,6 +287,14 @@
     .footer-links a:hover { color: #fff; }
     .footer-copy { font-size: 13px; color: #a8a1c1; }
 
+    /* ── TRAILER ── */
+    .trailer-section { background: #faf8f5; }
+    .trailer-frame {
+      max-width: 1100px; margin: 32px auto 0; border-radius: var(--radius); overflow: hidden;
+      background: #0f0b2e; box-shadow: 0 24px 60px rgba(20, 15, 58, .22), 0 0 0 1px rgba(20, 15, 58, .08);
+    }
+    .trailer-frame video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+
     /* ── APP TOUR ── */
     .screenshots-section { background: var(--white); }
     .gallery { max-width: 1100px; margin: 32px auto 0; }
@@ -381,6 +389,19 @@
 </section>
 
 <!-- APP TOUR -->
+<section class="trailer-section" id="trailer" aria-labelledby="trailer-title">
+  <div style="max-width:1100px;margin:0 auto;">
+    <p class="section-label">See it in action</p>
+    <h2 class="section-title" id="trailer-title">From messy folders to a clean library</h2>
+    <p class="section-sub">Scan, preview every move, organize, and undo. Shown on Windows with a sample library; the Mac app follows the same steps.</p>
+  </div>
+  <div class="trailer-frame">
+    <video controls muted playsinline preload="none" poster="/media/foldiq-trailer-poster.jpg" width="1920" height="1080" aria-label="Foldiq trailer: a sample photo library scanned, previewed, organized and undone in Foldiq for Windows">
+      <source src="/media/foldiq-trailer.mp4" type="video/mp4" />
+    </video>
+  </div>
+</section>
+
 <section class="screenshots-section" id="screenshots">
   <div style="max-width:1100px;margin:0 auto;">
     <p class="section-label">App tour</p>
