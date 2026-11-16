@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('foldiq', {
   getPathForFile: (file)       => webUtils.getPathForFile(file),
   filterSources:  (paths)      => ipcRenderer.invoke('sources:filterSupported', { sourcePaths: paths }),
   getAppInfo:     ()           => ipcRenderer.invoke('app:info'),
+  getLicense:     (refresh)    => ipcRenderer.invoke('license:get', { refresh: refresh === true }),
+  buyFullVersion: ()           => ipcRenderer.invoke('license:buy'),
   getPreferences: ()           => ipcRenderer.invoke('preferences:get'),
   savePreferences:(value)      => ipcRenderer.invoke('preferences:save', { value }),
 

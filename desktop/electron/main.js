@@ -14,6 +14,7 @@ const rating = require('./services/rating');
 const telemetry = require('./services/telemetry');
 const watcher = require('./services/watcher');
 const crashReporter = require('./services/crash-reporter');
+const { TrialLicense, STORE_PRODUCT_URL } = require('./services/trial');
 
 let mainWindow;
 let activeManifestPaths = [];
@@ -61,6 +62,18 @@ function telemetryIdPath() {
 
 function crashLogPath() {
   return path.join(app.getPath('userData'), 'logs', 'crashes.jsonl');
+}
+
+let trialLicense = null;
+// Store copies only: Stripe/NSIS installs always report the full version.
+function trial() {
+  if (!trialLicense) {
+    trialLicense = new TrialLicense({
+      statePath: path.join(app.getPath('userData'), 'trial.json'),
+      log: message => console.warn(message),
+    });
+  }
+  return trialLicense;
 }
 
 function readDiagnosticLogs() {
@@ -171,6 +184,7 @@ app.whenReady().then(() => {
   if (process.platform === 'win32') app.setAppUserModelId('app.foldiq.desktop');
   scanner.configureDiagnostics(diagnosticsPath());
   createWindow();
+  void trial().refresh();
   const watchState = watcher.readState(watchStatePath());
   if (watchState.enabled) startFolderWatcher(watchState.folder);
 });
@@ -196,8 +210,14 @@ async function organizeWatchedFiles(filePaths, config) {
     cachePath: locationCachePath(),
     appVersion: app.getVersion(),
   });
-  const plan = planner.buildPlan(located.files, config);
-  return mover.apply(plan, { ...config, manifestDirectory: undoDirectory() }, () => {});
+  const limited = await trial().limit(planner.buildPlan(located.files, config));
+  if (limited.held > 0 && !limited.plan.some(item => item.action !== 'skip' && item.included !== false)) {
+    // Thrown, not recorded: the files stay pending and are organized once Foldiq is bought.
+    throw new Error('The free trial has organized its 100 files. Buy Foldiq to keep auto-organizing new files.');
+  }
+  const result = await mover.apply(limited.plan, { ...config, manifestDirectory: undoDirectory() }, () => {});
+  await trial().record(result.moved);
+  return result;
 }
 
 function sendWatchEvent(event) {
@@ -301,6 +321,18 @@ ipcMain.handle('app:info', async () => ({
   version: app.getVersion(),
   platform: process.platform,
 }));
+
+// Free trial (Microsoft Store copies). `refresh` re-asks the Store, e.g. when the
+// window regains focus after the user bought Foldiq in the Store app.
+ipcMain.handle('license:get', async (event, { refresh = false } = {}) => {
+  if (refresh) await trial().refresh({ minIntervalMs: 10000 });
+  return trial().status();
+});
+
+ipcMain.handle('license:buy', async () => {
+  await shell.openExternal(STORE_PRODUCT_URL);
+  return true;
+});
 
 ipcMain.handle('preferences:get', async () => preferences.readPreferences(preferencesPath()));
 
@@ -455,15 +487,18 @@ ipcMain.handle('apply:start', async (event, { plan, config }) => {
   assertString(config.outputFolder, 'output folder');
   const onProgress = (p) => mainWindow.webContents.send('apply:progress', p);
   try {
-    const result = await trackManualOperation(() => mover.apply(plan, {
+    const limited = await trial().limit(plan);
+    const result = await trackManualOperation(() => mover.apply(limited.plan, {
       ...config,
       manifestDirectory: undoDirectory(),
     }, onProgress));
+    await trial().record(result.moved);
     activeManifestPaths = result.manifestPaths;
     activeOutputFolder = path.resolve(config.outputFolder);
-    if (result.errors.length === 0) await scanner.cleanupTempDirs();
+    // Extracted archive copies are still needed if some files were held back by the trial.
+    if (result.errors.length === 0 && limited.held === 0) await scanner.cleanupTempDirs();
     recordAnonymousOperation('apply_completed', startedAt, plan.length, result.errors.length === 0);
-    return result;
+    return { ...result, trialHeld: limited.held };
   } catch (error) {
     recordAnonymousOperation('apply_completed', startedAt, plan.length, false);
     throw error;
@@ -475,12 +510,14 @@ ipcMain.handle('apply:retry', async (event, { plan, config }) => {
   if (!config || typeof config !== 'object') throw new Error('Invalid retry configuration');
   assertString(config.outputFolder, 'output folder');
   const onProgress = progress => mainWindow.webContents.send('apply:progress', progress);
-  const result = await trackManualOperation(() => mover.apply(plan, {
+  const limited = await trial().limit(plan);
+  const result = await trackManualOperation(() => mover.apply(limited.plan, {
     ...config,
     manifestDirectory: undoDirectory(),
   }, onProgress));
+  await trial().record(result.moved);
   activeManifestPaths.push(...result.manifestPaths);
-  return result;
+  return { ...result, trialHeld: limited.held };
 });
 
 // Undo last operation
