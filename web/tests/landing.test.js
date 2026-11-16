@@ -60,7 +60,7 @@ test('cookie-free analytics is disclosed and strips purchase tokens', () => {
 
 test('landing screenshots preserve their native aspect ratio', () => {
   assert.match(html, /\.screenshot-frame img\s*\{[^}]*height:\s*auto;/s);
-  const slides = [...html.matchAll(/<img src="\/screenshots\/product\/([^"/]+)\.webp"[^>]+width="1728" height="936" loading="lazy"/g)];
+  const slides = [...html.matchAll(/<img src="\/screenshots\/laptop\/([^"/]+)\.webp"[^>]+width="1536" height="1024" loading="lazy"/g)];
   assert.deepEqual(slides.map(([, name]) => name), ['scan', 'rules', 'preview', 'duplicates', 'report'],
     'all five slides must reserve space before they load');
 });
