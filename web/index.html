@@ -21,10 +21,10 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --blue: #3B82F6;
-      --blue-dark: #1D4ED8;
-      --blue-light: #EFF6FF;
-      --blue-mid: #BFDBFE;
+      --blue: #5143c4;
+      --blue-dark: #38308d;
+      --blue-light: #f1efff;
+      --blue-mid: #ddd8fa;
       --green: #10B981;
       --slate-900: #0F172A;
       --slate-800: #1E293B;
@@ -37,6 +37,10 @@
     }
 
     html { scroll-behavior: smooth; }
+    :focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
 
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -50,7 +54,7 @@
     nav {
       position: sticky; top: 0; z-index: 100;
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 5%;
+      padding: 0 max(5%, calc((100% - 1320px) / 2));
       height: 64px;
       background: rgba(255,255,255,0.85);
       backdrop-filter: blur(12px);
@@ -75,115 +79,50 @@
 
     /* ── HERO ── */
     .hero {
-      display: flex; flex-direction: column; align-items: center; text-align: center;
-      padding: 100px 5% 80px;
-      background: linear-gradient(180deg, #F0F7FF 0%, #FFFFFF 100%);
+      background: radial-gradient(ellipse at 70% 12%, #eee9fb, transparent 67%), #faf8f5;
+      padding: clamp(52px, 8vw, 104px) 5% clamp(54px, 8vw, 96px);
     }
-    .hero-badge {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: var(--blue-light); border: 1px solid var(--blue-mid);
-      color: var(--blue); font-size: 13px; font-weight: 600;
-      padding: 6px 14px; border-radius: 100px;
-      margin-bottom: 28px;
+    .hero-inner {
+      display: grid; grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
+      align-items: center; gap: clamp(30px, 5vw, 72px);
+      max-width: 1320px; margin: 0 auto;
     }
-    .hero-badge-dot { width: 6px; height: 6px; background: var(--blue); border-radius: 50%; }
     .hero h1 {
-      font-size: clamp(40px, 6vw, 72px);
-      font-weight: 900; line-height: 1.07; letter-spacing: -1.5px;
-      color: var(--slate-900);
-      max-width: 800px; margin-bottom: 24px;
+      font-size: clamp(42px, 5.1vw, 76px); font-weight: 800;
+      line-height: 1.02; letter-spacing: -.055em; color: var(--slate-900);
+      margin-bottom: 22px;
     }
     .hero h1 span { color: var(--blue); }
-    .hero p {
-      font-size: clamp(17px, 2vw, 20px); color: var(--slate-600);
-      max-width: 580px; margin-bottom: 44px; line-height: 1.65;
+    .hero .hero-description {
+      max-width: 44ch; margin-bottom: 28px;
+      font-size: clamp(16px, 1.5vw, 19px); color: var(--slate-600);
     }
-    .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-bottom: 18px; }
-    .btn-primary {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: var(--blue); color: #fff; font-size: 16px; font-weight: 700;
-      padding: 16px 30px; border-radius: var(--radius); text-decoration: none;
-      transition: background .15s, transform .12s;
-      box-shadow: 0 4px 20px rgba(59,130,246,0.35);
+    .hero-ctas { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn-primary, .btn-secondary {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      border: 1px solid transparent; border-radius: 11px; padding: 12px 17px;
+      font: 700 15px/1.4 'Inter', system-ui, sans-serif;
+      text-decoration: none; cursor: pointer;
     }
-    .btn-primary:hover { background: var(--blue-dark); transform: translateY(-1px); }
-    .btn-secondary {
-      display: inline-flex; align-items: center; gap: 8px;
-      border: 1.5px solid #CBD5E1; color: var(--slate-700); font-size: 16px; font-weight: 600;
-      padding: 16px 30px; border-radius: var(--radius); text-decoration: none;
-      transition: border-color .15s;
+    .btn-primary { background: var(--blue); color: var(--white); }
+    .btn-primary:hover { background: var(--blue-dark); }
+    .btn-primary:disabled { cursor: wait; opacity: .65; }
+    .btn-secondary { border-color: #b9b2d0; color: var(--slate-900); }
+    .btn-secondary:hover { border-color: var(--blue); color: var(--blue-dark); }
+    .hero-tour {
+      display: inline-block; margin-top: 18px; color: var(--blue-dark);
+      font-size: 14px; font-weight: 700; text-underline-offset: 4px;
     }
-    .btn-secondary:hover { border-color: var(--blue); color: var(--blue); }
-    .store-link {
-      display: inline-flex; align-items: center; gap: 8px; position: relative;
-      isolation: isolate; overflow: hidden;
-      background: linear-gradient(90deg, #2563EB, #7C3AED, #DB2777, #F97316, #2563EB);
-      background-size: 300% 100%;
-      border: 1px solid rgba(255,255,255,0.65);
-      color: #fff; font-size: 14px; font-weight: 800; text-decoration: none;
-      padding: 10px 18px; border-radius: 999px;
-      box-shadow: 0 12px 30px rgba(79,70,229,0.25), 0 0 0 4px rgba(124,58,237,0.08);
-      animation: store-link-shift 5s ease infinite;
-      transition: transform .12s, box-shadow .15s;
+    .hero-photo img {
+      display: block; width: 100%; height: auto; border-radius: 20px;
+      box-shadow: 0 22px 52px rgba(27, 20, 68, .18);
     }
-    .store-link::before {
-      content: ""; position: absolute; inset: 1px; z-index: -1;
-      border-radius: inherit;
-      background: linear-gradient(90deg, rgba(255,255,255,0.18), rgba(255,255,255,0.05), rgba(255,255,255,0.18));
-      transform: translateX(-120%);
-      animation: store-link-shine 2.8s ease-in-out infinite;
+    .hero-photo figcaption {
+      margin-top: 12px; color: var(--slate-600); font-size: 13px;
     }
-    .store-link:hover {
-      transform: translateY(-1px) scale(1.02);
-      box-shadow: 0 16px 36px rgba(79,70,229,0.34), 0 0 0 5px rgba(124,58,237,0.12);
-    }
-    @keyframes store-link-shift {
-      0%, 100% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-    }
-    @keyframes store-link-shine {
-      0%, 45% { transform: translateX(-120%); }
-      75%, 100% { transform: translateX(120%); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .store-link { animation: none; }
-      .store-link::before { animation: none; display: none; }
-    }
-    .hero-store-link { margin-bottom: 46px; }
-
-    /* ── APP WINDOW MOCKUP ── */
-    .app-mockup {
-      width: 100%; max-width: 860px;
-      background: var(--slate-900); border-radius: 14px;
-      overflow: hidden;
-      box-shadow: 0 40px 100px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.06);
-    }
-    .mockup-titlebar {
-      background: #1C2333; padding: 14px 18px;
-      display: flex; align-items: center; gap: 8px;
-    }
-    .mockup-dot { width: 12px; height: 12px; border-radius: 50%; }
-    .mockup-dot.red { background: #FF5F56; }
-    .mockup-dot.yellow { background: #FFBD2E; }
-    .mockup-dot.green { background: #27C93F; }
-    .mockup-title { flex: 1; text-align: center; font-size: 13px; color: #64748B; font-weight: 500; }
-    .mockup-body { padding: 24px; }
-    .mockup-before-after {
-      display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start;
-    }
-    .mockup-col-label {
-      font-size: 11px; font-weight: 600; color: #64748B; letter-spacing: .06em;
-      text-transform: uppercase; margin-bottom: 10px;
-    }
-    .mockup-tree { font-family: 'SF Mono', 'Monaco', monospace; font-size: 12px; line-height: 1.8; }
-    .mockup-tree .folder { color: #60A5FA; }
-    .mockup-tree .file { color: #94A3B8; }
-    .mockup-tree .dup { color: #F87171; }
-    .mockup-tree .video { color: #A78BFA; }
-    .mockup-arrow { font-size: 24px; color: var(--blue); align-self: center; padding-top: 24px; }
 
     /* ── SECTION BASE ── */
-    section { padding: 100px 5%; }
+    section { padding: clamp(54px, 7vw, 96px) 5%; scroll-margin-top: 64px; }
     .section-label {
       font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
       color: var(--blue); margin-bottom: 14px;
@@ -197,10 +136,10 @@
     }
 
     /* ── HOW IT WORKS ── */
-    .how { background: var(--slate-50); }
+    .how { background: #faf8f5; }
     .steps {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 24px; margin-top: 60px;
+      gap: 24px; margin-top: 36px;
     }
     .step {
       background: var(--white); border-radius: var(--radius);
@@ -220,7 +159,7 @@
     /* ── FEATURES ── */
     .features-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 24px; margin-top: 60px;
+      gap: 24px; margin-top: 36px;
     }
     .feature-card {
       background: var(--white); border-radius: var(--radius);
@@ -311,108 +250,95 @@
     .faq-item p { padding: 0 24px 20px; font-size: 15px; color: var(--slate-600); line-height: 1.65; margin: 0; }
 
     .cta-section {
-      text-align: center;
-      background: linear-gradient(180deg, #F0F7FF 0%, #fff 100%);
+      background: #f1eff9;
       scroll-margin-top: 64px;
     }
-    .cta-section h2 {
-      font-size: clamp(28px, 4vw, 48px); font-weight: 900; letter-spacing: -.5px;
-      color: var(--slate-900); margin-bottom: 16px;
+    .purchase-layout { max-width: 1100px; margin: 0 auto; }
+    .purchase-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px; margin-top: 32px;
     }
-    .cta-section p { font-size: 18px; color: var(--slate-600); margin-bottom: 40px; }
-
-    /* ── CONTACT ── */
-    .contact-section {
-      background: var(--slate-50);
-      text-align: center;
+    .purchase-option {
+      display: flex; flex-direction: column; align-items: flex-start;
+      padding: clamp(22px, 4vw, 38px); border: 1px solid #e0daef;
+      border-radius: 18px; background: var(--white);
+      scroll-margin-top: 80px;
     }
-    .contact-card {
-      max-width: 560px; margin: 0 auto;
-      background: #fff; border-radius: 24px;
-      padding: 52px 48px;
-      box-shadow: 0 4px 32px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04);
+    .purchase-option h3 { font-size: 26px; line-height: 1.2; margin-bottom: 12px; }
+    .purchase-option p { color: var(--slate-600); margin-bottom: 18px; }
+    .purchase-option .purchase-price {
+      font-size: 32px; font-weight: 800; letter-spacing: -.04em;
+      line-height: 1.1; color: var(--slate-900); margin-bottom: 6px;
     }
-    .contact-card .section-label { margin-bottom: 12px; }
-    .contact-card h2 {
-      font-size: clamp(22px, 3vw, 32px); font-weight: 800;
-      color: var(--slate-900); margin-bottom: 10px;
-    }
-    .contact-card p { font-size: 15px; color: var(--slate-600); margin-bottom: 36px; }
-    .contact-form { display: flex; flex-direction: column; gap: 14px; text-align: left; }
-    .contact-form input,
-    .contact-form textarea {
-      width: 100%; padding: 14px 16px;
-      border: 1.5px solid #E2E8F0; border-radius: 12px;
-      font-family: inherit; font-size: 15px; color: var(--slate-900);
-      background: var(--slate-50); outline: none;
-      transition: border-color .15s;
-      resize: vertical;
-    }
-    .contact-form input:focus,
-    .contact-form textarea:focus { border-color: var(--blue); background: #fff; }
-    .contact-form textarea { min-height: 120px; }
-    .contact-form button {
-      width: 100%; padding: 16px;
-      background: var(--blue); color: #fff;
-      font-size: 16px; font-weight: 700; font-family: inherit;
-      border: none; border-radius: 14px; cursor: pointer;
-      transition: background .15s;
-    }
-    .contact-form button:hover { background: var(--blue-dark); }
-    .contact-form button:disabled { background: #93C5FD; cursor: default; }
-    .contact-success {
-      display: none; text-align: center; padding: 20px 0;
-      font-size: 16px; font-weight: 600; color: var(--green);
-    }
+    .purchase-option .purchase-price small { font-size: 13px; letter-spacing: 0; font-weight: 600; }
+    .purchase-option .purchase-note { font-size: 14px; margin-bottom: 22px; }
+    .purchase-option .btn-primary, .purchase-option .btn-secondary { margin-top: auto; }
+    .purchase-option .checkout-error { color: #a12638; margin: 12px 0 0; font-size: 14px; }
 
     /* ── FOOTER ── */
     footer {
-      background: var(--slate-900); color: #94A3B8;
+      background: #19152e; color: #94A3B8;
       padding: 48px 5%;
       display: flex; flex-direction: column; gap: 24px; align-items: center;
       text-align: center;
     }
     .footer-links { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; }
-    .footer-links a { font-size: 14px; color: #64748B; text-decoration: none; transition: color .15s; }
+    .footer-links a { font-size: 14px; color: #c4bfd6; text-decoration: none; transition: color .15s; }
     .footer-links a:hover { color: #fff; }
-    .footer-copy { font-size: 13px; color: #475569; }
+    .footer-copy { font-size: 13px; color: #a8a1c1; }
 
-    /* ── SCREENSHOTS ── */
-    .screenshots-section { background: var(--slate-50); overflow: hidden; scroll-margin-top: 64px; }
+    /* ── APP TOUR ── */
+    .screenshots-section { background: var(--white); }
+    .gallery { max-width: 1100px; margin: 32px auto 0; }
     .screenshots-track {
-      display: flex; gap: 24px; margin-top: 40px;
-      overflow-x: auto; padding: 6px 5% 20px;
-      scroll-snap-type: x mandatory;
-      scroll-padding-inline: 5%;
+      display: flex; gap: 14px; overflow-x: auto;
+      scroll-snap-type: x mandatory; padding: 4px 4px 12px;
     }
     .screenshot-frame {
-      flex-shrink: 0; scroll-snap-align: start;
-      width: min(870px, 85vw);
-      border-radius: 14px;
-      overflow: hidden;
-      box-shadow: 0 12px 28px rgba(15,23,42,0.16);
-      background: var(--white);
-      text-decoration: none;
+      flex: 0 0 min(810px, 86vw); scroll-snap-align: start;
+      display: block; min-width: 0; border-radius: 16px; overflow: hidden;
+      border: 1px solid #e5e0ef; background: var(--slate-50); text-decoration: none;
     }
-    .screenshots-track:focus-visible, .screenshot-frame:focus-visible {
-      outline: 3px solid var(--blue);
-      outline-offset: 2px;
-    }
+    .screenshot-frame[hidden] { display: none; }
     .screenshot-frame img { width: 100%; height: auto; display: block; }
     .screenshot-label {
-      display: block; padding: 12px 16px;
+      display: block; padding: 11px 15px;
       font-size: 14px; font-weight: 700; color: var(--slate-900);
     }
-    .screenshots-hint {
-      text-align: center; margin-top: 20px; padding: 0 5%;
-      font-size: 13px; color: var(--slate-600);
+    .gallery-controls:not([hidden]) { display: grid; align-content: start; gap: 8px; }
+    .gallery.gallery-enhanced {
+      display: grid; grid-template-columns: minmax(220px, .33fr) minmax(0, 1fr);
+      align-items: start; gap: 26px;
     }
+    .gallery-enhanced .screenshots-track { display: block; overflow: visible; padding: 0; }
+    .gallery-enhanced .screenshot-label { display: none; }
+    .gallery-control {
+      text-align: left; padding: 12px 14px; background: var(--white);
+      border-radius: 10px; border: 1px solid #e5e0ef; color: var(--slate-900);
+      font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    .gallery-control:hover { border-color: var(--blue); }
+    .gallery-control[aria-pressed="true"] {
+      border-color: var(--blue); background: var(--blue-light); color: var(--blue-dark);
+    }
+    .gallery-control span {
+      display: block; font-weight: 400; font-size: 13px; color: var(--slate-600);
+    }
+    .screenshots-hint { margin-top: 10px; color: var(--slate-600); font-size: 13px; }
 
-    /* ── RESPONSIVE ── */
+    @media (max-width: 860px) {
+      .hero-inner { grid-template-columns: 1fr; }
+      .hero h1 { max-width: 14ch; }
+      .hero-photo { max-width: 720px; }
+      .gallery.gallery-enhanced { grid-template-columns: 1fr; gap: 14px; }
+      .gallery-controls:not([hidden]) { display: flex; flex-wrap: wrap; }
+      .gallery-control { padding: 8px 10px; }
+      .gallery-control span { display: none; }
+    }
     @media (max-width: 640px) {
       nav .nav-links { display: none; }
-      .mockup-before-after { grid-template-columns: 1fr; }
-      .mockup-arrow { transform: rotate(90deg); justify-self: center; }
+      .hero-photo img { border-radius: 13px; }
+      .features-grid, .purchase-grid { grid-template-columns: 1fr; }
       .privacy-bar { padding: 28px 24px; }
     }
   </style>
@@ -428,79 +354,71 @@
   <div class="nav-links">
     <a href="#how-it-works">How it works</a>
     <a href="#features">Features</a>
-    <a href="#formats">Formats</a>
+    <a href="#screenshots">App tour</a>
     <a href="#faq">FAQ</a>
   </div>
-  <a class="btn-nav" href="#download">Download — $19.99</a>
+  <a class="btn-nav" href="#download">Get Foldiq</a>
 </nav>
 
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-badge">
-    <div class="hero-badge-dot"></div>
-    Mac &amp; Windows · On-device media processing · No subscription
-  </div>
-  <h1>Your photo library,<br /><span>finally organized.</span></h1>
-  <p>Foldiq scans any folder of photos and videos, reads the real EXIF date, and builds a clean folder structure automatically — with full undo if you change your mind.</p>
-  <div class="hero-ctas">
-    <a class="btn-primary" href="https://apps.apple.com/us/app/foldiq/id6772513569" id="hero-mac-btn" target="_blank" rel="noopener">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px;vertical-align:middle"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-      Get Foldiq for Mac
-    </a>
-    <a class="btn-primary" href="#download" id="hero-win-btn" onclick="event.preventDefault(); startCheckout('windows')" style="background:#1E293B;">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px;vertical-align:middle"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5l-9 1.68V12h9zm0 1H12v5.28L20 20v-7zm-17 0h6v5.57l-6-1.32V13z"/></svg>
-      Download for Windows
-    </a>
-    <a class="btn-secondary" href="#how-it-works">See how it works</a>
-  </div>
-  <div class="hero-store-link">
-    <a class="store-link" href="https://apps.apple.com/us/app/foldiq/id6772513569" target="_blank" rel="noopener">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-      Mac version is on the Mac App Store — signed &amp; notarized by Apple
-    </a>
-  </div>
-  <p style="margin-top:0;font-size:14px;color:var(--slate-400);">One-time $19.99 · Lifetime license · No subscription</p>
-
-  <!-- Mockup -->
-  <div class="app-mockup">
-    <div class="mockup-titlebar">
-      <div class="mockup-dot red"></div>
-      <div class="mockup-dot yellow"></div>
-      <div class="mockup-dot green"></div>
-      <div class="mockup-title">Foldiq — Smart Hybrid Preview</div>
-    </div>
-    <div class="mockup-body">
-      <div class="mockup-before-after">
-        <div>
-          <div class="mockup-col-label">Before</div>
-          <div class="mockup-tree">
-            <span class="folder">📁 Photos/</span><br/>
-            &nbsp;&nbsp;<span class="file">IMG_4821.jpg</span><br/>
-            &nbsp;&nbsp;<span class="file">IMG_4822.HEIC</span><br/>
-            &nbsp;&nbsp;<span class="file">WhatsApp Image 2024…</span><br/>
-            &nbsp;&nbsp;<span class="file">DSC_0001.NEF</span><br/>
-            &nbsp;&nbsp;<span class="file">VID_20230615.mp4</span><br/>
-            &nbsp;&nbsp;<span class="dup">IMG_4821 copy.jpg ← dup</span><br/>
-            &nbsp;&nbsp;<span class="file">misc backup final (2).zip</span>
-          </div>
-        </div>
-        <div class="mockup-arrow">→</div>
-        <div>
-          <div class="mockup-col-label">After</div>
-          <div class="mockup-tree">
-            <span class="folder">📁 Organized Media/</span><br/>
-            &nbsp;&nbsp;<span class="folder">📁 2024/</span><br/>
-            &nbsp;&nbsp;&nbsp;&nbsp;<span class="folder">📁 2024-08 August/</span><br/>
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="folder">📁 2024-08-14 Herndon VA/</span><br/>
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">IMG_4821.jpg</span><br/>
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">IMG_4822.HEIC</span><br/>
-            &nbsp;&nbsp;<span class="folder">📁 Duplicates/</span><br/>
-            &nbsp;&nbsp;&nbsp;&nbsp;<span class="dup">IMG_4821 copy.jpg</span><br/>
-            &nbsp;&nbsp;<span class="folder">📁 Videos/</span><br/>
-            &nbsp;&nbsp;&nbsp;&nbsp;<span class="video">VID_20230615.mp4</span>
-          </div>
-        </div>
+<main>
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <p class="section-label">Photo &amp; video organizer for Mac and Windows</p>
+      <h1 id="hero-title">Photo chaos.<br /><span>Clean folders.</span></h1>
+      <p class="hero-description">Foldiq sorts your photos and videos by capture date and flags duplicates. Review the destination of each file before you apply any changes.</p>
+      <div class="hero-ctas">
+        <a class="btn-primary" href="https://apps.apple.com/us/app/foldiq/id6772513569" id="hero-mac-btn">Get it for Mac</a>
+        <a class="btn-secondary" href="#windows-purchase" id="hero-win-btn">Windows · $19.99</a>
       </div>
+      <a class="hero-tour" href="#screenshots">See Foldiq in action ↓</a>
+    </div>
+    <figure class="hero-photo">
+      <img src="/screenshots/laptop-angled/preview.webp" alt="Foldiq running on an angled laptop, with file names and their planned destinations." width="1536" height="1024" fetchpriority="high" />
+      <figcaption>Foldiq for Mac · Preview Changes</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- APP TOUR -->
+<section class="screenshots-section" id="screenshots">
+  <div style="max-width:1100px;margin:0 auto;">
+    <p class="section-label">App tour</p>
+    <h2 class="section-title" id="screenshots-title">See how Foldiq organizes files</h2>
+    <p class="section-sub">Follow a sample library through Foldiq for Mac, from scan to report.</p>
+  </div>
+  <div class="gallery" id="product-gallery">
+    <div class="gallery-controls" role="group" aria-label="App screens" hidden>
+      <button type="button" class="gallery-control" aria-controls="slide-scan" aria-pressed="false">Scan results<span>See photo totals, duplicates, and files with missing dates.</span></button>
+      <button type="button" class="gallery-control" aria-controls="slide-rules" aria-pressed="false">Organization rules<span>Choose how dates become real folders.</span></button>
+      <button type="button" class="gallery-control" aria-controls="slide-preview" aria-pressed="false">File destinations<span>Review exactly where the files will go.</span></button>
+      <button type="button" class="gallery-control" aria-controls="slide-duplicates" aria-pressed="false">Duplicate review<span>Review exact matches and files set aside.</span></button>
+      <button type="button" class="gallery-control" aria-controls="slide-report" aria-pressed="false">Organization report<span>Check the results and review library totals.</span></button>
+    </div>
+    <div>
+      <div class="screenshots-track" aria-labelledby="screenshots-title">
+        <a class="screenshot-frame" id="slide-scan" href="/screenshots/laptop-angled/scan.webp" target="_blank" rel="noopener" aria-label="Scan results (opens full-size image in a new tab)">
+          <img src="/screenshots/laptop-angled/scan.webp" alt="Foldiq scan results on an angled laptop, showing photo totals and categories found during a scan." width="1536" height="1024" loading="lazy" decoding="async" />
+          <span class="screenshot-label">Scan results</span>
+        </a>
+        <a class="screenshot-frame" id="slide-rules" href="/screenshots/laptop-angled/rules.webp" target="_blank" rel="noopener" aria-label="Organization rules (opens full-size image in a new tab)">
+          <img src="/screenshots/laptop-angled/rules.webp" alt="Foldiq settings on an angled laptop, showing Smart Hybrid, By Year, and By Year &amp; Month." width="1536" height="1024" loading="lazy" decoding="async" />
+          <span class="screenshot-label">Organization rules</span>
+        </a>
+        <a class="screenshot-frame" id="slide-preview" href="/screenshots/laptop-angled/preview.webp" target="_blank" rel="noopener" aria-label="File destinations (opens full-size image in a new tab)">
+          <img src="/screenshots/laptop-angled/preview.webp" alt="Foldiq file preview on an angled laptop, with filenames and proposed destination folders." width="1536" height="1024" loading="lazy" decoding="async" />
+          <span class="screenshot-label">File destinations</span>
+        </a>
+        <a class="screenshot-frame" id="slide-duplicates" href="/screenshots/laptop-angled/duplicates.webp" target="_blank" rel="noopener" aria-label="Duplicate review (opens full-size image in a new tab)">
+          <img src="/screenshots/laptop-angled/duplicates.webp" alt="Foldiq on an angled laptop, listing exact duplicates and other files flagged for review." width="1536" height="1024" loading="lazy" decoding="async" />
+          <span class="screenshot-label">Duplicate review</span>
+        </a>
+        <a class="screenshot-frame" id="slide-report" href="/screenshots/laptop-angled/report.webp" target="_blank" rel="noopener" aria-label="Organization report (opens full-size image in a new tab)">
+          <img src="/screenshots/laptop-angled/report.webp" alt="Foldiq’s final report on an angled laptop with organize, skip, and error counts." width="1536" height="1024" loading="lazy" decoding="async" />
+          <span class="screenshot-label">Organization report</span>
+        </a>
+      </div>
+      <p class="screenshots-hint">Select an image to open it at full size.</p>
     </div>
   </div>
 </section>
@@ -529,43 +447,11 @@
       </div>
       <div class="step">
         <div class="step-num">4</div>
-        <h3>Apply & undo anytime</h3>
-        <p>Confirm and Foldiq reorganizes your library. Every run creates an undo manifest — one click restores everything.</p>
+        <h3>Apply and review</h3>
+        <p>Confirm the plan to organize your files. The report includes the option to undo the run.</p>
       </div>
     </div>
   </div>
-</section>
-
-<!-- SCREENSHOTS -->
-<section class="screenshots-section" id="screenshots" style="padding:100px 0 80px;">
-  <div style="max-width:1100px;margin:0 auto;padding:0 5%;">
-    <div class="section-label">See it in action</div>
-    <h2 class="section-title" id="screenshots-title">How Foldiq organizes your files</h2>
-    <p class="section-sub">Explore five screens from Foldiq for Mac, from the initial scan to the final report.</p>
-  </div>
-  <div class="screenshots-track" role="region" aria-labelledby="screenshots-title" tabindex="0">
-    <a class="screenshot-frame" href="/screenshots/laptop/scan.webp" target="_blank" rel="noopener" aria-label="Scan results (opens full-size image in a new tab)">
-      <span class="screenshot-label">Scan results</span>
-      <img src="/screenshots/laptop/scan.webp" alt="Foldiq scan results on a laptop, showing photo totals, duplicate matches, and missing dates." width="1536" height="1024" loading="lazy" decoding="async" />
-    </a>
-    <a class="screenshot-frame" href="/screenshots/laptop/rules.webp" target="_blank" rel="noopener" aria-label="Organization rules (opens full-size image in a new tab)">
-      <span class="screenshot-label">Organization rules</span>
-      <img src="/screenshots/laptop/rules.webp" alt="Foldiq settings on a laptop, showing Smart Hybrid, By Year, and By Year & Month." width="1536" height="1024" loading="lazy" decoding="async" />
-    </a>
-    <a class="screenshot-frame" href="/screenshots/laptop/preview.webp" target="_blank" rel="noopener" aria-label="File destinations (opens full-size image in a new tab)">
-      <span class="screenshot-label">File destinations</span>
-      <img src="/screenshots/laptop/preview.webp" alt="Foldiq’s file preview on a laptop, showing each filename alongside its proposed destination." width="1536" height="1024" loading="lazy" decoding="async" />
-    </a>
-    <a class="screenshot-frame" href="/screenshots/laptop/duplicates.webp" target="_blank" rel="noopener" aria-label="Duplicate review (opens full-size image in a new tab)">
-      <span class="screenshot-label">Duplicate review</span>
-      <img src="/screenshots/laptop/duplicates.webp" alt="Foldiq on a laptop, showing exact duplicates and other files set aside for review." width="1536" height="1024" loading="lazy" decoding="async" />
-    </a>
-    <a class="screenshot-frame" href="/screenshots/laptop/report.webp" target="_blank" rel="noopener" aria-label="Organization report (opens full-size image in a new tab)">
-      <span class="screenshot-label">Organization report</span>
-      <img src="/screenshots/laptop/report.webp" alt="Foldiq’s final report on a laptop, showing organized, skipped, and error counts plus library statistics." width="1536" height="1024" loading="lazy" decoding="async" />
-    </a>
-  </div>
-  <p class="screenshots-hint">Scroll to browse. Select a slide to view it full size.</p>
 </section>
 
 <!-- FEATURES -->
@@ -587,8 +473,8 @@
       </div>
       <div class="feature-card">
         <div class="feature-icon" style="background:#F0FDF4;">↩️</div>
-        <h3>Full undo, always</h3>
-        <p>Every organization run writes a complete undo manifest. Change your mind days later — one click moves every file back to its exact original location.</p>
+        <h3>Undo from the report</h3>
+        <p>Foldiq records the file changes in an undo manifest so you can reverse an organization run from the report.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" style="background:#FDF4FF;">📂</div>
@@ -712,7 +598,7 @@
     </details>
     <details class="faq-item">
       <summary>Is it a one-time payment or a subscription?</summary>
-      <p>A single one-time payment of $19.99 — no subscription, no recurring fees. You get a lifetime license with all future updates included.</p>
+      <p>Foldiq for Windows is a one-time purchase of $19.99 USD with no subscription. The Mac App Store shows the price for Mac in your region.</p>
     </details>
     <details class="faq-item">
       <summary>Do my photos get uploaded anywhere?</summary>
@@ -729,40 +615,34 @@
   </div>
 </section>
 
-<!-- DOWNLOAD CTA -->
+<!-- PURCHASE -->
 <section class="cta-section" id="download">
-  <div style="max-width:700px;margin:0 auto;">
-    <div class="section-label" style="text-align:center;">Available now</div>
-    <h2>Ready to clean up your library?</h2>
-    <p>One-time purchase · No subscription · Yours forever.</p>
-
-    <!-- Platform picker -->
-    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:24px;flex-wrap:wrap;">
-      <button id="tab-mac" onclick="selectPlatform('mac')" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;border:2px solid #3B82F6;background:#3B82F6;color:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-        macOS
-      </button>
-      <button id="tab-windows" onclick="selectPlatform('windows')" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;border:2px solid #334155;background:transparent;color:#475569;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5l-9 1.68V12h9zm0 1H12v5.28L20 20v-7zm-17 0h6v5.57l-6-1.32V13z"/></svg>
-        Windows
-      </button>
+  <div class="purchase-layout">
+    <h2 class="section-title">Get Foldiq for your computer</h2>
+    <div class="purchase-grid" id="purchase-options">
+      <article class="purchase-option" id="mac-purchase">
+        <h3>macOS</h3>
+        <p>macOS 14 Sonoma or later. Works with Apple Silicon and Intel.</p>
+        <a class="btn-secondary" href="https://apps.apple.com/us/app/foldiq/id6772513569">See price on the Mac App Store</a>
+      </article>
+      <article class="purchase-option" id="windows-purchase">
+        <h3>Windows</h3>
+        <p class="purchase-price">$19.99 <small>USD</small></p>
+        <p class="purchase-note">One-time purchase for Windows 10 and 11 (64-bit).</p>
+        <button type="button" class="btn-primary" id="buy-btn">Buy for Windows</button>
+        <p class="checkout-error" id="checkout-error" role="alert" hidden></p>
+      </article>
     </div>
-
-    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;align-items:center;">
-      <button class="btn-primary" id="buy-btn" onclick="startCheckout(currentPlatform)">
-        <span id="buy-label">Get Foldiq on the Mac App Store</span>
-      </button>
-    </div>
-    <p style="margin-top:16px;font-size:14px;color:#334155;font-weight:600;">✓ One-time payment&nbsp;&nbsp;·&nbsp;&nbsp;✓ Lifetime license&nbsp;&nbsp;·&nbsp;&nbsp;✓ No subscription</p>
-    <p id="platform-note" style="margin-top:24px;font-size:14px;color:#94A3B8;">macOS 14 Sonoma or later · Apple Silicon &amp; Intel · Purchase &amp; updates through the Mac App Store</p>
   </div>
 </section>
+</main>
 
 <!-- FOOTER -->
 <footer>
   <div class="footer-links">
     <a href="#how-it-works">How it works</a>
     <a href="#features">Features</a>
+    <a href="#formats">Formats</a>
     <a href="privacy-policy.html">Privacy Policy</a>
     <a href="terms.html">Terms of Service</a>
     <a href="/contact.html">Contact</a>
@@ -773,55 +653,33 @@
 </footer>
 
 <script>
-  let currentPlatform = 'mac';
+  const heroMac = document.getElementById('hero-mac-btn');
+  const heroWindows = document.getElementById('hero-win-btn');
+  if (/Windows/i.test(navigator.userAgent)) {
+    heroMac.className = 'btn-secondary';
+    heroWindows.className = 'btn-primary';
+    heroMac.before(heroWindows);
+    document.getElementById('mac-purchase').before(document.getElementById('windows-purchase'));
+  }
 
-  function selectPlatform(platform) {
-    currentPlatform = platform;
-    const tabMac = document.getElementById('tab-mac');
-    const tabWin = document.getElementById('tab-windows');
-    const label  = document.getElementById('buy-label');
-    const note   = document.getElementById('platform-note');
+  const gallery = document.getElementById('product-gallery');
+  const galleryControls = gallery.querySelector('.gallery-controls');
+  const galleryButtons = [...galleryControls.querySelectorAll('button')];
 
-    if (platform === 'mac') {
-      tabMac.style.background = '#3B82F6';
-      tabMac.style.borderColor = '#3B82F6';
-      tabMac.style.color = '#fff';
-      tabWin.style.background = 'transparent';
-      tabWin.style.borderColor = '#334155';
-      tabWin.style.color = '#475569';
-      label.textContent = 'Get Foldiq on the Mac App Store';
-      note.textContent = 'macOS 14 Sonoma or later · Apple Silicon & Intel · Purchase & updates through the Mac App Store';
-    } else {
-      tabWin.style.background = '#1E293B';
-      tabWin.style.borderColor = '#1E293B';
-      tabWin.style.color = '#fff';
-      tabMac.style.background = 'transparent';
-      tabMac.style.borderColor = '#334155';
-      tabMac.style.color = '#475569';
-      label.textContent = '⬇ Download for Windows — $19.99';
-      note.textContent = 'Windows 10 / 11 · 64-bit · Secure checkout by Stripe';
+  function showSlide(selectedButton) {
+    for (const button of galleryButtons) {
+      const isSelected = button === selectedButton;
+      button.setAttribute('aria-pressed', String(isSelected));
+      document.getElementById(button.getAttribute('aria-controls')).hidden = !isSelected;
     }
   }
 
-  // Auto-detect OS on page load
-  (function() {
-    const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes('win')) {
-      selectPlatform('windows');
-      // Promote the Windows button in the hero, demote macOS
-      const macBtn = document.getElementById('hero-mac-btn');
-      const winBtn = document.getElementById('hero-win-btn');
-      if (macBtn && winBtn) {
-        winBtn.style.background = '';        // primary blue (btn-primary default)
-        macBtn.style.background = '#1E293B'; // secondary dark
-        winBtn.parentNode.insertBefore(winBtn, macBtn); // show Windows first
-      }
-    }
-  })();
-
-  // Mac is distributed exclusively through the Mac App Store, where the build is
-  // signed and notarized by Apple. Stripe checkout is Windows-only.
-  const MAC_APP_STORE_URL = 'https://apps.apple.com/us/app/foldiq/id6772513569';
+  for (const button of galleryButtons) {
+    button.addEventListener('click', () => showSlide(button));
+  }
+  showSlide(galleryButtons[0]);
+  gallery.classList.add('gallery-enhanced');
+  galleryControls.hidden = false;
 
   // ── Purchase attribution ────────────────────────────────────────────────────
   // Remembers how this visitor arrived so a completed sale can be credited to a
@@ -868,56 +726,34 @@
 
   const visitAttribution = captureAttribution();
 
-  async function startCheckout(platform) {
-    const btn = document.getElementById('buy-btn');
-    const label = document.getElementById('buy-label');
-    const plat = platform || currentPlatform;
+  const buyButton = document.getElementById('buy-btn');
+  const checkoutError = document.getElementById('checkout-error');
+  const buyLabel = buyButton.textContent;
 
-    if (plat !== 'windows') {
-      window.location.href = MAC_APP_STORE_URL;
-      return;
-    }
-
-    btn.disabled = true;
-    label.textContent = 'Loading…';
-
+  buyButton.addEventListener('click', async () => {
+    buyButton.disabled = true;
+    buyButton.textContent = 'Opening checkout…';
+    checkoutError.hidden = true;
     try {
-      const res = await fetch('/api/create-checkout', {
+      const response = await fetch('/api/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: plat, attribution: visitAttribution }),
+        body: JSON.stringify({ platform: 'windows', attribution: visitAttribution }),
       });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error(data.error || 'Unknown error');
+      const data = await response.json();
+      if (!response.ok || !data.url) {
+        throw new Error('Checkout could not be opened.');
       }
-    } catch (err) {
-      label.textContent = '⬇ Download for Windows — $19.99';
-      btn.disabled = false;
-      alert('Error: ' + (err.message || 'Something went wrong. Please try again.'));
-      console.error(err);
+      window.location.href = data.url;
+    } catch (error) {
+      checkoutError.textContent = 'Checkout is unavailable. Please try again.';
+      checkoutError.hidden = false;
+      console.error(error);
+    } finally {
+      buyButton.textContent = buyLabel;
+      buyButton.disabled = false;
     }
-  }
-
-  // Smooth-scroll in-page anchor links without putting "#section" in the URL bar
-  document.querySelectorAll('a[href^="#"]').forEach(function (link) {
-    link.addEventListener('click', function (e) {
-      if (link.hasAttribute('onclick')) return; // leave checkout buttons alone
-      const id = link.getAttribute('href').slice(1);
-      if (!id) return;
-      const target = document.getElementById(id);
-      if (!target) return;
-      e.preventDefault();
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
   });
-
-  // If someone lands with a #hash already in the URL, clean it up
-  if (window.location.hash) {
-    history.replaceState(null, '', window.location.pathname + window.location.search);
-  }
 </script>
 </body>
 </html>

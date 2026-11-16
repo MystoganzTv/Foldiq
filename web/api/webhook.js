@@ -14,7 +14,6 @@
 import Stripe from 'stripe';
 import { Resend } from 'resend';
 import { channelFromMetadata } from '../lib/attribution.js';
-import { WINDOWS_PRICE_CENTS } from '../lib/commerce.js';
 
 // Disable Vercel's automatic body parsing — Stripe needs the raw bytes.
 export const config = {
@@ -82,8 +81,8 @@ export function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date,
   const isMac = platform === 'mac';
   const productLabel = isMac ? 'Foldiq for Mac' : 'Foldiq for Windows';
   const platformNote = isMac
-    ? 'One-time purchase · Lifetime license · Delivered via the Mac App Store'
-    : 'One-time purchase · Lifetime license · All future updates';
+    ? 'One-time purchase · Delivered via the Mac App Store'
+    : 'One-time purchase · No subscription';
   const downloadUrl = isMac
     ? MAC_APP_STORE_URL
     : `${SITE}/api/download?session_id=${encodeURIComponent(checkoutSessionId)}`;
@@ -237,12 +236,11 @@ export default async function handler(req, res) {
   const customerName  = session.customer_details?.name || '';
   const platform      = session.metadata?.platform === 'mac' ? 'mac' : 'windows';
   const channel       = channelFromMetadata(session.metadata);
-  const amountTotal   = session.amount_total ?? WINDOWS_PRICE_CENTS;
+  const amountTotal   = session.amount_total;
   const currency      = (session.currency || 'usd').toUpperCase();
-  const amount        = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-  }).format(amountTotal / 100);
+  const amount        = amountTotal == null
+    ? 'See Stripe receipt'
+    : new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amountTotal / 100);
   const invoiceId     = session.id.replace('cs_live_', '').replace('cs_test_', '').slice(0, 16).toUpperCase();
   const eventDate     = stripeEvent.created ? new Date(stripeEvent.created * 1000) : new Date();
   const date          = eventDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });

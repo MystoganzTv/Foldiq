@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { WINDOWS_PRICE_CENTS } from '../lib/commerce.js';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const checkout = await readFile(new URL('../api/create-checkout.js', import.meta.url), 'utf8');
+const orderConfirmation = await readFile(new URL('../api/webhook.js', import.meta.url), 'utf8');
 const privacy = await readFile(new URL('../privacy-policy.html', import.meta.url), 'utf8');
 const analytics = await readFile(new URL('../analytics.js', import.meta.url), 'utf8');
 const contact = await readFile(new URL('../contact.html', import.meta.url), 'utf8');
@@ -20,7 +23,8 @@ test('download navigation targets the purchase section with sticky-nav spacing',
   assert.match(html, /<a class="btn-nav" href="#download">/);
   assert.match(html, /<section class="cta-section" id="download">/);
   assert.match(html, /\.cta-section\s*\{[^}]*scroll-margin-top:\s*64px;/s);
-  assert.match(html, /target\.scrollIntoView\(\{ behavior: 'smooth', block: 'start' \}\)/);
+  assert.match(html, /<a class="hero-tour" href="#screenshots">/);
+  assert.match(html, /<section class="screenshots-section" id="screenshots">/);
 });
 
 test('the Foldiq brand icon appears only once on the landing page', () => {
@@ -60,9 +64,20 @@ test('cookie-free analytics is disclosed and strips purchase tokens', () => {
 
 test('landing screenshots preserve their native aspect ratio', () => {
   assert.match(html, /\.screenshot-frame img\s*\{[^}]*height:\s*auto;/s);
-  const slides = [...html.matchAll(/<img src="\/screenshots\/laptop\/([^"/]+)\.webp"[^>]+width="1536" height="1024" loading="lazy"/g)];
+  const slides = [...html.matchAll(/<img src="\/screenshots\/laptop-angled\/([^"/]+)\.webp"[^>]+width="1536" height="1024" loading="lazy"/g)];
   assert.deepEqual(slides.map(([, name]) => name), ['scan', 'rules', 'preview', 'duplicates', 'report'],
     'all five slides must reserve space before they load');
+});
+
+test('Windows price matches checkout and Mac pricing is shown by the App Store', () => {
+  assert.equal(WINDOWS_PRICE_CENTS, 1999);
+  const expectedPrice = (WINDOWS_PRICE_CENTS / 100).toFixed(2);
+  assert.ok(html.includes(`class="purchase-price">$${expectedPrice}`));
+  assert.ok(html.includes('See price on the Mac App Store'));
+  assert.match(checkout, /unit_amount: WINDOWS_PRICE_CENTS/);
+  for (const customerCopy of [html, checkout, orderConfirmation]) {
+    assert.doesNotMatch(customerCopy, /lifetime|yours forever|all future updates/i);
+  }
 });
 
 test('social metadata points to the production domain', () => {

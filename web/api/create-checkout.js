@@ -42,7 +42,7 @@ export default async function handler(req, res) {
             currency: 'usd',
             product_data: {
               name: 'Foldiq for Windows',
-              description: 'One-time purchase — lifetime license, all future updates included. Windows 10/11 64-bit.',
+              description: 'One-time purchase for Windows 10 and 11 (64-bit).',
               images: [`${SITE}/icon.png`],
             },
             unit_amount: WINDOWS_PRICE_CENTS,
