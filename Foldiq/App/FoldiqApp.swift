@@ -166,3 +166,14 @@ extension View {
         modifier(StoreRecoveryAlertModifier())
     }
 }
+
+// MARK: - Model liveness
+
+extension PersistentModel {
+    /// False once the model was deleted from its context (or the context let go of
+    /// it). Long-running work that awaits — scans, duplicate detection, Apply,
+    /// Undo — must check this after every suspension point before touching the
+    /// model again: going back to the Welcome screen purges scan data, and writing
+    /// to a deleted model traps inside SwiftData.
+    var isUsable: Bool { !isDeleted && modelContext != nil }
+}

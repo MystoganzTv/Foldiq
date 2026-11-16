@@ -56,7 +56,7 @@ struct ScanView: View {
                 config: nav.organizationConfig,
                 context: context
             )
-            if let session {
+            if let session, !Task.isCancelled, session.isUsable {
                 nav.scanSession = session
                 // Store archive temp dirs so ApplyView can clean them up after apply.
                 nav.archiveTempDirs = coordinator.archiveTempDirs

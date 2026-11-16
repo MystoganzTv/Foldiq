@@ -234,6 +234,10 @@ struct ApplyView: View {
 
         let tempDirs = nav.archiveTempDirs
         let startedAt = Date()
+        // Value snapshots: after the awaits below, the user may already be back on
+        // the Welcome screen, which purges plans and completed journals.
+        let planCount = plans.count
+        let expectedDestinationPaths = Set(plans.map(\.destinationAbsPath))
         Task {
             await mover.apply(plans: plans, manifest: m, checkpoint: {
                 try context.save()
@@ -242,6 +246,7 @@ struct ApplyView: View {
             }
             // Keep an interrupted/ambiguous operation recoverable. Ordinary per-file
             // failures that never reached the filesystem do not leave pending entries.
+            let journaledCount = m.entries.count
             m.stateRaw = m.entries.contains(where: { !$0.wasCompleted })
                 ? "needsAttention"
                 : "complete"
@@ -251,17 +256,17 @@ struct ApplyView: View {
                 await mover.cleanupTempDirs(tempDirs)
                 nav.archiveTempDirs = []
             }
-            let completedWithoutErrors = progress.errors.isEmpty && m.entries.count == plans.count
+            let completedWithoutErrors = progress.errors.isEmpty && journaledCount == planCount
             AnonymousTelemetry.send(
                 .applyCompleted,
                 success: completedWithoutErrors,
                 elapsed: Date().timeIntervalSince(startedAt),
-                itemCount: plans.count
+                itemCount: planCount
             )
             if completedWithoutErrors && nav.organizationConfig.fileOperation == .move {
                 reviewShelvedFiles = await mover.shelveResidualFilesForReview(
                     under: nav.selectedFolderURLs,
-                    expectedDestinationPaths: Set(plans.map(\.destinationAbsPath)),
+                    expectedDestinationPaths: expectedDestinationPaths,
                     outputFolderName: nav.organizationConfig.outputFolderName,
                     reviewFolderName: nav.organizationConfig.reviewFolderName
                 )
@@ -272,7 +277,7 @@ struct ApplyView: View {
             }
             let shouldRequestReview = completedWithoutErrors &&
                 AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
-                    successfulItemCount: m.entries.count
+                    successfulItemCount: journaledCount
                 )
             isComplete = true
 
