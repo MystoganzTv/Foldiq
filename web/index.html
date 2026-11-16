@@ -378,37 +378,29 @@
     .footer-copy { font-size: 13px; color: #475569; }
 
     /* ── SCREENSHOTS ── */
-    .screenshots-section { background: var(--slate-50); overflow: hidden; }
+    .screenshots-section { background: var(--slate-50); overflow: hidden; scroll-margin-top: 64px; }
     .screenshots-track {
       display: flex; gap: 24px; margin-top: 56px;
-      overflow-x: auto; padding-bottom: 20px;
+      overflow-x: auto; padding: 6px 5% 20px;
       scroll-snap-type: x mandatory;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
+      scroll-padding-inline: 5%;
     }
-    .screenshots-track::-webkit-scrollbar { display: none; }
     .screenshot-frame {
       flex-shrink: 0; scroll-snap-align: start;
-      width: min(760px, 85vw);
+      width: min(920px, 85vw);
       border-radius: 14px;
       overflow: hidden;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.13), 0 0 0 1px rgba(0,0,0,0.06);
-      background: #fff;
+      box-shadow: 0 12px 28px rgba(15,23,42,0.16);
+      background: var(--slate-900);
     }
-    .screenshot-frame img {
-      width: 100%; height: auto; display: block;
-      aspect-ratio: 16 / 10;
-      object-fit: contain;
+    .screenshots-track:focus-visible, .screenshot-frame:focus-visible {
+      outline: 3px solid var(--blue);
+      outline-offset: 2px;
     }
-    .screenshot-caption {
-      padding: 14px 20px;
-      font-size: 13px; font-weight: 600; color: #64748B;
-      background: #F8FAFC;
-      border-top: 1px solid #E2E8F0;
-    }
+    .screenshot-frame img { width: 100%; height: auto; display: block; }
     .screenshots-hint {
-      text-align: center; margin-top: 20px;
-      font-size: 13px; color: var(--slate-400);
+      text-align: center; margin-top: 20px; padding: 0 5%;
+      font-size: 13px; color: var(--slate-600);
     }
 
     /* ── RESPONSIVE ── */
@@ -543,37 +535,27 @@
 <section class="screenshots-section" id="screenshots" style="padding:100px 0 80px;">
   <div style="max-width:1100px;margin:0 auto;padding:0 5%;">
     <div class="section-label">See it in action</div>
-    <h2 class="section-title">Every step, built for clarity</h2>
-    <p class="section-sub">From scan to report — you see exactly what's happening at every stage.</p>
+    <h2 class="section-title" id="screenshots-title">How Foldiq organizes your files</h2>
+    <p class="section-sub">Explore five screens from Foldiq for Mac, from the initial scan to the final report.</p>
   </div>
-  <div class="screenshots-track" style="padding-left:5%;padding-right:5%;">
-    <div class="screenshot-frame">
-
-      <img src="screenshots/welcome.png" alt="Foldiq — Select your folder to organize" width="1440" height="900" loading="lazy" />
-      <div class="screenshot-caption">① Select a folder — or drag it straight onto the window</div>
-    </div>
-    <div class="screenshot-frame">
-
-      <img src="screenshots/scan.png" alt="Foldiq — Scan Complete with file stats" width="1440" height="900" loading="lazy" />
-      <div class="screenshot-caption">② Scan results — photos, videos, duplicates, and missing dates at a glance</div>
-    </div>
-    <div class="screenshot-frame">
-
-      <img src="screenshots/settings.png" alt="Foldiq — Organization Settings" width="1440" height="900" loading="lazy" />
-      <div class="screenshot-caption">③ Pick your folder structure — Smart Hybrid, By Year, Month, or Exact Date</div>
-    </div>
-    <div class="screenshot-frame">
-
-      <img src="screenshots/applying.png" alt="Foldiq — Done!" width="1440" height="900" loading="lazy" />
-      <div class="screenshot-caption">④ Foldiq moves your files — live progress, file by file</div>
-    </div>
-    <div class="screenshot-frame">
-
-      <img src="screenshots/report.png" alt="Foldiq — Organization Complete" width="1440" height="900" loading="lazy" />
-      <div class="screenshot-caption">⑤ Report — stats, camera breakdown, and one-click undo</div>
-    </div>
+  <div class="screenshots-track" role="region" aria-labelledby="screenshots-title" tabindex="0">
+    <a class="screenshot-frame" href="/screenshots/product/scan.webp" target="_blank" rel="noopener" aria-label="Scan results (opens full-size image in a new tab)">
+      <img src="/screenshots/product/scan.webp" alt="Foldiq scan summary with photo counts, duplicate matches, and files missing a capture date." width="1728" height="936" loading="lazy" decoding="async" />
+    </a>
+    <a class="screenshot-frame" href="/screenshots/product/rules.webp" target="_blank" rel="noopener" aria-label="Organization rules (opens full-size image in a new tab)">
+      <img src="/screenshots/product/rules.webp" alt="Foldiq settings showing Smart Hybrid folders by year, month, and day, alongside the option to group by year." width="1728" height="936" loading="lazy" decoding="async" />
+    </a>
+    <a class="screenshot-frame" href="/screenshots/product/preview.webp" target="_blank" rel="noopener" aria-label="File and folder preview (opens full-size image in a new tab)">
+      <img src="/screenshots/product/preview.webp" alt="Foldiq preview showing filenames and their planned destinations alongside the proposed folder tree." width="1728" height="936" loading="lazy" decoding="async" />
+    </a>
+    <a class="screenshot-frame" href="/screenshots/product/duplicates.webp" target="_blank" rel="noopener" aria-label="Duplicate review (opens full-size image in a new tab)">
+      <img src="/screenshots/product/duplicates.webp" alt="Foldiq duplicate filter showing an exact match and files set aside for review." width="1728" height="936" loading="lazy" decoding="async" />
+    </a>
+    <a class="screenshot-frame" href="/screenshots/product/report.webp" target="_blank" rel="noopener" aria-label="Organization report (opens full-size image in a new tab)">
+      <img src="/screenshots/product/report.webp" alt="Foldiq report showing organized, skipped, and error counts, plus the option to move files back." width="1728" height="936" loading="lazy" decoding="async" />
+    </a>
   </div>
-  <p class="screenshots-hint">← Scroll to see all screens →</p>
+  <p class="screenshots-hint">Scroll to browse. Select a slide to view it full size.</p>
 </section>
 
 <!-- FEATURES -->

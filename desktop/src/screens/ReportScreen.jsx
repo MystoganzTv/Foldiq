@@ -16,6 +16,15 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
   const completed = result?.completed || [];
   const copied = completed.filter(file => file.action === 'copy').length;
   const moved = completed.filter(file => file.action === 'move').length;
+  const sizeByPath = new Map((plan || []).map(file => [`${file.path}\n${file.destPath}`, Number(file.size) || 0]));
+  const outputPrefix = String(config.outputFolder || '').replace(/[\\/]+$/, '');
+  const duplicateBytes = completed
+    .filter(file => {
+      const destination = String(file.destPath || '');
+      if (!outputPrefix || !destination.toLowerCase().startsWith(outputPrefix.toLowerCase())) return false;
+      return /^[\\/]Duplicates[\\/]/i.test(destination.slice(outputPrefix.length));
+    })
+    .reduce((sum, file) => sum + (sizeByPath.get(`${file.path}\n${file.destPath}`) || 0), 0);
 
   useEffect(() => {
     if (!result || config.copyMode) return;
@@ -207,6 +216,11 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
           <span><strong>{copied.toLocaleString()}</strong> copied</span>
           <span><strong>{moved.toLocaleString()}</strong> moved</span>
           <span><strong>{result.skipped.toLocaleString()}</strong> untouched</span>
+          {duplicateBytes > 0 && (
+            <span title="Check the Duplicates folder, then delete it to get this space back. Foldiq never deletes files.">
+              <strong>{formatBytes(duplicateBytes)}</strong> of duplicates set aside
+            </span>
+          )}
         </div>
 
         <details className={s.detailedReportDisclosure}>
@@ -294,4 +308,11 @@ export default function ReportScreen({ go, result, config, plan, setFolders, set
       </div>
     </div>
   );
+}
+
+function formatBytes(value) {
+  const bytes = Number(value) || 0;
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }

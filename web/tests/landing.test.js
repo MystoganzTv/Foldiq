@@ -21,8 +21,6 @@ test('download navigation targets the purchase section with sticky-nav spacing',
   assert.match(html, /<section class="cta-section" id="download">/);
   assert.match(html, /\.cta-section\s*\{[^}]*scroll-margin-top:\s*64px;/s);
   assert.match(html, /target\.scrollIntoView\(\{ behavior: 'smooth', block: 'start' \}\)/);
-  const sizedScreenshots = html.match(/<img src="screenshots\/[^"]+"[^>]+width="1440" height="900"/g) ?? [];
-  assert.equal(sizedScreenshots.length, 5, 'lazy screenshots must reserve space before they load');
 });
 
 test('the Foldiq brand icon appears only once on the landing page', () => {
@@ -62,7 +60,9 @@ test('cookie-free analytics is disclosed and strips purchase tokens', () => {
 
 test('landing screenshots preserve their native aspect ratio', () => {
   assert.match(html, /\.screenshot-frame img\s*\{[^}]*height:\s*auto;/s);
-  assert.match(html, /\.screenshot-frame img\s*\{[^}]*aspect-ratio:\s*16\s*\/\s*10;/s);
+  const slides = [...html.matchAll(/<img src="\/screenshots\/product\/([^"/]+)\.webp"[^>]+width="1728" height="936" loading="lazy"/g)];
+  assert.deepEqual(slides.map(([, name]) => name), ['scan', 'rules', 'preview', 'duplicates', 'report'],
+    'all five slides must reserve space before they load');
 });
 
 test('social metadata points to the production domain', () => {
