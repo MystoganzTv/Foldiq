@@ -14,6 +14,7 @@
 import Stripe from 'stripe';
 import { Resend } from 'resend';
 import { channelFromMetadata } from '../lib/attribution.js';
+import { WINDOWS_PRICE_CENTS } from '../lib/commerce.js';
 
 // Disable Vercel's automatic body parsing — Stripe needs the raw bytes.
 export const config = {
@@ -236,7 +237,7 @@ export default async function handler(req, res) {
   const customerName  = session.customer_details?.name || '';
   const platform      = session.metadata?.platform === 'mac' ? 'mac' : 'windows';
   const channel       = channelFromMetadata(session.metadata);
-  const amountTotal   = session.amount_total ?? 999;
+  const amountTotal   = session.amount_total ?? WINDOWS_PRICE_CENTS;
   const currency      = (session.currency || 'usd').toUpperCase();
   const amount        = new Intl.NumberFormat('en-US', {
     style: 'currency',
