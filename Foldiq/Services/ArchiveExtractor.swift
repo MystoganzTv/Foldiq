@@ -157,7 +157,9 @@ actor ArchiveExtractor {
             _ = try safeDestinationURL(for: entry.filename, inside: tempDir)
         }
 
-        let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions)
+        // Google Takeout sidecars (.json) are extracted too so their capture dates
+        // can be read; collectMedia(in:) still returns photos and videos only.
+        let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions).union(["json"])
         let mediaEntries = entries.filter { entry in
             guard !entry.isDirectory else { return false }
             let normalized = entry.filename.replacingOccurrences(of: "\\", with: "/")
@@ -227,7 +229,9 @@ actor ArchiveExtractor {
             throw ZipError.invalidFormat("too many archive entries")
         }
 
-        let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions)
+        // Google Takeout sidecars (.json) are extracted too so their capture dates
+        // can be read; collectMedia(in:) still returns photos and videos only.
+        let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions).union(["json"])
         let maximumEntryBytes = min(
             UInt64(8 * 1024 * 1024 * 1024),
             max(UInt64(256 * 1024 * 1024), ProcessInfo.processInfo.physicalMemory / 3)
@@ -296,7 +300,9 @@ actor ArchiveExtractor {
             throw ArchiveError.extractionFailed(libArchiveMessage(archive))
         }
 
-        let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions)
+        // Google Takeout sidecars (.json) are extracted too so their capture dates
+        // can be read; collectMedia(in:) still returns photos and videos only.
+        let supported = MediaTypes.photoExtensions.union(MediaTypes.videoExtensions).union(["json"])
         let fm = FileManager.default
         var entryPointer: OpaquePointer?
         var entryCount = 0

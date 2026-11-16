@@ -28,6 +28,9 @@ struct IOSPhotosExportView: View {
     @State private var pickedPhotoItems: [PhotosPickerItem] = []
     @State private var showingExportPlan = true
     @State private var showingUndoConfirmation = false
+    /// Shown under the completion actions when StoreKit's own dialog was not
+    /// spent recently — see `ManualRatingInvitePolicy`.
+    @State private var showRatingInvite = false
 
     @AppStorage("mobileOutputFolderName") private var outputFolderName = "Foldiq Export"
     @AppStorage(AnonymousTelemetry.preferenceKey) private var shareAnonymousUsageData = false
@@ -718,6 +721,10 @@ struct IOSPhotosExportView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+
+                if showRatingInvite {
+                    RatingInviteCard { showRatingInvite = false }
+                }
             }
         case .undoing:
             EmptyView()
@@ -804,8 +811,10 @@ struct IOSPhotosExportView: View {
             )
 
             var shouldRequestReview = false
+            var exportWentCleanly = false
             if case .completed(_, let exported, let skipped, let failures) = exporter.phase,
                failures.isEmpty {
+                exportWentCleanly = true
                 shouldRequestReview = AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
                     successfulItemCount: exported + skipped
                 )
@@ -821,6 +830,8 @@ struct IOSPhotosExportView: View {
                 }
                 requestReview()
             }
+            // Never ask for a review on the back of an export that went wrong.
+            showRatingInvite = exportWentCleanly && ManualRatingInvitePolicy.shouldShowInvite()
             activeTask = nil
         }
     }
@@ -919,6 +930,10 @@ struct IOSPhotosExportView: View {
                 }
                 if let terms = URL(string: "https://foldiq.app/terms") {
                     Link("Terms", destination: terms)
+                }
+                Button("Rate Foldiq") {
+                    ManualRatingInvitePolicy.recordReviewComposerOpened()
+                    PlatformActions.openURL(AppStoreLinks.writeReview)
                 }
             }
             .font(.caption2.weight(.medium))

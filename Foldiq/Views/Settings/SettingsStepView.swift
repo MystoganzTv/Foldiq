@@ -37,6 +37,16 @@ struct SettingsStepView: View {
             : "Best when you want a lower-risk first pass. It uses more disk space because both the original and organized copy remain."
     }
 
+    private var includesPhotosLibrary: Bool {
+        nav.selectedFolderURLs.contains { PhotosLibrarySupport.isPhotosLibrary($0) }
+    }
+
+    /// Every selected source is a Photos library, so Move vs. Copy changes nothing.
+    private var onlyPhotosLibraries: Bool {
+        !nav.selectedFolderURLs.isEmpty
+            && nav.selectedFolderURLs.allSatisfy { PhotosLibrarySupport.isPhotosLibrary($0) }
+    }
+
     @State private var showMoreOptions = false
     @State private var showingDestinationImporter = false
 
@@ -74,22 +84,40 @@ struct SettingsStepView: View {
                     Label("Originals", systemImage: "arrow.right.doc.on.clipboard")
                         .font(.headline)
 
-                    HStack(spacing: 16) {
-                        OperationCard(
-                            op: .move,
-                            selected: nav.organizationConfig.fileOperation == .move
-                        ) { nav.organizationConfig.fileOperation = .move }
+                    if onlyPhotosLibraries {
+                        // Nothing to move or copy from the person's point of view:
+                        // Photos keeps every original either way.
+                        Label("Your photos stay in Photos. Foldiq saves organized copies to the destination below.",
+                              systemImage: "lock.shield")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                    } else {
+                        HStack(spacing: 16) {
+                            OperationCard(
+                                op: .move,
+                                selected: nav.organizationConfig.fileOperation == .move
+                            ) { nav.organizationConfig.fileOperation = .move }
 
-                        OperationCard(
-                            op: .copy,
-                            selected: nav.organizationConfig.fileOperation == .copy
-                        ) { nav.organizationConfig.fileOperation = .copy }
+                            OperationCard(
+                                op: .copy,
+                                selected: nav.organizationConfig.fileOperation == .copy
+                            ) { nav.organizationConfig.fileOperation = .copy }
+                        }
+
+                        Text(operationSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+
+                        if includesPhotosLibrary {
+                            Label("Items from Photos are always copied. Your Photos library is never changed.",
+                                  systemImage: "lock.shield")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 4)
+                        }
                     }
-
-                    Text(operationSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 4)
                 }
 
                 Divider()
@@ -169,6 +197,11 @@ struct SettingsStepView: View {
                                 label: "Separate duplicates",
                                 detail: "Route exact copies and strong visual matches to Duplicates/. Review-only similar photos always stay organized normally.",
                                 isOn: $nav.organizationConfig.separateDuplicates
+                            )
+                            ToggleRow(
+                                label: "Rename files by capture date",
+                                detail: "IMG_4821.jpg becomes 2024-08-14 15.32.10.jpg. Live Photos and RAW+JPEG pairs keep matching names. Duplicates and undated files keep their names, and Undo restores the originals.",
+                                isOn: $nav.organizationConfig.renameByDate
                             )
                             ToggleRow(
                                 label: "Use GPS location in folder names",

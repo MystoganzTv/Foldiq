@@ -1,7 +1,8 @@
 import Stripe from 'stripe';
 
+import { WEB_PRODUCTS } from '../lib/commerce.js';
+
 const REPOSITORY = 'MystoganzTv/Foldiq';
-const ASSET_NAME = 'Foldiq-Setup.exe';
 const GITHUB_API = 'https://api.github.com';
 
 function send(res, status, message) {
@@ -93,15 +94,19 @@ export function createDownloadHandler({
       return;
     }
 
+    // The link always serves the newest installer, so the same email link
+    // also works for updates.
+    const product = WEB_PRODUCTS[session.metadata?.platform];
     if (
       session.id !== sessionId ||
       session.payment_status !== 'paid' ||
       session.status !== 'complete' ||
-      session.metadata?.platform !== 'windows'
+      !product
     ) {
-      send(res, 403, 'A completed Windows purchase is required');
+      send(res, 403, 'A completed Foldiq purchase is required');
       return;
     }
+    const assetName = product.installer;
 
     try {
       const releaseResponse = await fetchImpl(
@@ -111,8 +116,22 @@ export function createDownloadHandler({
       if (!releaseResponse.ok) throw new Error(`GitHub release lookup returned ${releaseResponse.status}`);
 
       const release = await releaseResponse.json();
-      const asset = release.assets?.find(item => item.name === ASSET_NAME);
-      if (!asset?.url) throw new Error(`${ASSET_NAME} is missing from the latest release`);
+      let asset = release.assets?.find(item => item.name === assetName);
+      if (!asset?.url) {
+        // The Mac and Windows installers may be published in different
+        // releases: fall back to the newest release that has this installer.
+        const listResponse = await fetchImpl(
+          `${GITHUB_API}/repos/${REPOSITORY}/releases?per_page=20`,
+          { headers: githubHeaders(githubToken) }
+        );
+        if (!listResponse.ok) throw new Error(`GitHub release list returned ${listResponse.status}`);
+        const releases = await listResponse.json();
+        asset = releases
+          .filter(item => !item.draft)
+          .flatMap(item => item.assets || [])
+          .find(item => item.name === assetName);
+      }
+      if (!asset?.url) throw new Error(`${assetName} is missing from the recent releases`);
 
       const assetResponse = await fetchImpl(asset.url, {
         headers: githubHeaders(githubToken, 'application/octet-stream'),

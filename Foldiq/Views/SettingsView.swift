@@ -150,6 +150,15 @@ struct SettingsView: View {
                     Text("macOS \(macOSVersion)")
                         .foregroundStyle(.secondary)
                 }
+
+                if AppDistribution.isAppStore {
+                    Button {
+                        ManualRatingInvitePolicy.recordReviewComposerOpened()
+                        PlatformActions.openURL(AppStoreLinks.writeReview)
+                    } label: {
+                        Label("Rate Foldiq on the App Store", systemImage: "star")
+                    }
+                }
             }
 
             Section("Privacy") {

@@ -65,52 +65,42 @@
 
   <script>
     const params = new URLSearchParams(window.location.search);
-    const platform = params.get('platform') || 'mac';
+    const platform = params.get('platform') === 'mac' ? 'mac' : 'windows';
     const sessionId = params.get('session_id');
     const wrap = document.getElementById('download-wrap');
 
-    // Mac ships through the Mac App Store (Apple-signed + notarized).
-    // Only the Windows installer is served from GitHub Releases.
-    const MAC_URL  = 'https://apps.apple.com/us/app/foldiq/id6772513569';
-    const WIN_URL  = sessionId
+    // Both installers come from the payment-verified download endpoint, which
+    // always serves the newest version.
+    const DOWNLOAD_URL = sessionId
       ? `/api/download?session_id=${encodeURIComponent(sessionId)}`
       : null;
+    const isMac = platform === 'mac';
+    const APPLE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>';
+    const WINDOWS_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5l-9 1.68V12h9zm0 1H12v5.28L20 20v-7zm-17 0h6v5.57l-6-1.32V13z"/></svg>';
 
-    if (platform === 'windows') {
-      if (!WIN_URL) {
-        document.getElementById('main-msg').textContent =
-          'We could not verify this checkout link. Use the private download link in your order email or contact support.';
-        wrap.innerHTML = `
-          <a class="btn btn-win" href="/contact.html">Contact Foldiq support</a>
-        `;
-      } else {
-        wrap.innerHTML = `
-        <a class="btn btn-win" href="${WIN_URL}">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5l-9 1.68V12h9zm0 1H12v5.28L20 20v-7zm-17 0h6v5.57l-6-1.32V13z"/></svg>
+    if (!DOWNLOAD_URL) {
+      document.getElementById('main-msg').textContent =
+        'We could not verify this checkout link. Use the private download link in your order email or contact support.';
+      wrap.innerHTML = `
+        <a class="btn ${isMac ? 'btn-mac' : 'btn-win'}" href="/contact.html">Contact Foldiq support</a>
+      `;
+    } else if (isMac) {
+      wrap.innerHTML = `
+        <a class="btn btn-mac" href="${DOWNLOAD_URL}">
+          ${APPLE_ICON}
+          Download Foldiq for Mac
+        </a>
+        <p class="note">Open Foldiq.dmg and drag Foldiq into Applications · macOS 14 Sonoma or later</p>
+        <p class="note">Keep your order email: its link always downloads the newest version.</p>
+      `;
+    } else {
+      wrap.innerHTML = `
+        <a class="btn btn-win" href="${DOWNLOAD_URL}">
+          ${WINDOWS_ICON}
           Download Foldiq for Windows
         </a>
-        <div class="divider"><span>also available</span></div>
-        <a class="btn btn-both" href="${MAC_URL}" target="_blank" rel="noopener">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-          Using a Mac? Get it on the Mac App Store
-        </a>
         <p class="note">Windows 10 / 11 · 64-bit</p>
-      `;
-      }
-    } else {
-      document.getElementById('main-msg').textContent =
-        'Thank you! The Mac version is delivered through the Mac App Store, so it stays signed, notarized and auto-updating.';
-      wrap.innerHTML = `
-        <a class="btn btn-mac" href="${MAC_URL}" target="_blank" rel="noopener">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-          Open Foldiq on the Mac App Store
-        </a>
-        <div class="divider"><span>also available</span></div>
-        <a class="btn btn-both" href="/?platform=windows">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5l-9 1.68V12h9zm0 1H12v5.28L20 20v-7zm-17 0h6v5.57l-6-1.32V13z"/></svg>
-          Buy Foldiq for Windows instead
-        </a>
-        <p class="note">macOS 14 Sonoma or later · Apple Silicon &amp; Intel</p>
+        <p class="note">Keep your order email: its link always downloads the newest version.</p>
       `;
     }
   </script>

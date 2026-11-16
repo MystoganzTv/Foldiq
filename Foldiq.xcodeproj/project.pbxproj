@@ -78,6 +78,13 @@
 		AA200031 /* AnonymousTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000032 /* AnonymousTelemetry.swift */; };
 		AA200032 /* MobileExportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000033 /* MobileExportSupport.swift */; };
 		AA300001 /* MobileExportSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB300001 /* MobileExportSupportTests.swift */; };
+		AA000040 /* GoogleTakeoutSidecar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000040 /* GoogleTakeoutSidecar.swift */; };
+		AA200040 /* GoogleTakeoutSidecar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000040 /* GoogleTakeoutSidecar.swift */; };
+		AA000041 /* DateFileNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000041 /* DateFileNaming.swift */; };
+		AA200041 /* DateFileNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000041 /* DateFileNaming.swift */; };
+		AA000042 /* DuplicateSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000042 /* DuplicateSpace.swift */; };
+		AA200042 /* DuplicateSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000042 /* DuplicateSpace.swift */; };
+		AA100007 /* LibraryFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100007 /* LibraryFeatureTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -142,6 +149,10 @@
 		CC100001 /* FoldiqTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FoldiqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC200001 /* Foldiq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foldiq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC300001 /* FoldiqIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FoldiqIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB000040 /* GoogleTakeoutSidecar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleTakeoutSidecar.swift; sourceTree = "<group>"; };
+		BB000041 /* DateFileNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFileNaming.swift; sourceTree = "<group>"; };
+		BB000042 /* DuplicateSpace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicateSpace.swift; sourceTree = "<group>"; };
+		BB100007 /* LibraryFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryFeatureTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -219,6 +230,7 @@
 				BB100002 /* ProbableDuplicateDetectorTests.swift */,
 				BB100003 /* ArchiveExtractorTests.swift */,
 				BB100006 /* FileMoverSafetyTests.swift */,
+				BB100007 /* LibraryFeatureTests.swift */,
 				BB100004 /* archive-media.7z */,
 				BB100005 /* archive-media.rar */,
 			);
@@ -303,6 +315,9 @@
 				BB000029 /* PhotoLibraryExporter.swift */,
 				BB000032 /* AnonymousTelemetry.swift */,
 				BB000033 /* MobileExportSupport.swift */,
+				BB000040 /* GoogleTakeoutSidecar.swift */,
+				BB000041 /* DateFileNaming.swift */,
+				BB000042 /* DuplicateSpace.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -571,6 +586,9 @@
 				AA000023 /* ArchiveExtractor.swift in Sources */,
 				AA000024 /* ZipInflate.c in Sources */,
 				AA000026 /* ProbableDuplicateDetector.swift in Sources */,
+				AA000040 /* GoogleTakeoutSidecar.swift in Sources */,
+				AA000041 /* DateFileNaming.swift in Sources */,
+				AA000042 /* DuplicateSpace.swift in Sources */,
 				AA000029 /* PhotoLibraryExporter.swift in Sources */,
 				AA000030 /* IOSPhotosExportView.swift in Sources */,
 				AA000034 /* AnonymousTelemetry.swift in Sources */,
@@ -585,6 +603,7 @@
 				AA100002 /* ProbableDuplicateDetectorTests.swift in Sources */,
 				AA100003 /* ArchiveExtractorTests.swift in Sources */,
 				AA100006 /* FileMoverSafetyTests.swift in Sources */,
+				AA100007 /* LibraryFeatureTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -621,6 +640,9 @@
 				AA200029 /* IOSPhotosExportView.swift in Sources */,
 				AA200031 /* AnonymousTelemetry.swift in Sources */,
 				AA200032 /* MobileExportSupport.swift in Sources */,
+				AA200040 /* GoogleTakeoutSidecar.swift in Sources */,
+				AA200041 /* DateFileNaming.swift in Sources */,
+				AA200042 /* DuplicateSpace.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -700,6 +722,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Foldiq copies the original photos and videos out of your Photos library so it can organize them. Your library is never changed.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				MARKETING_VERSION = 1.0.22;
 				OTHER_LDFLAGS = "-lz";
@@ -725,6 +748,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Foldiq copies the original photos and videos out of your Photos library so it can organize them. Your library is never changed.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				MARKETING_VERSION = 1.0.22;
 				OTHER_LDFLAGS = "-lz";

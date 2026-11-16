@@ -10,6 +10,18 @@ struct FoldiqCommands: Commands {
             }
             .keyboardShortcut("o", modifiers: .command)
         }
+
+        // Until now there was no way at all to leave a review on purpose — the
+        // only ask was one automatic dialog that most people never saw.
+        // Only App Store copies can be reviewed there.
+        CommandGroup(after: .help) {
+            if AppDistribution.isAppStore {
+                Button("Rate Foldiq on the App Store") {
+                    ManualRatingInvitePolicy.recordReviewComposerOpened()
+                    PlatformActions.openURL(AppStoreLinks.writeReview)
+                }
+            }
+        }
     }
 }
 #endif
