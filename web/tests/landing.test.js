@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { WINDOWS_PRICE_CENTS, MAC_PRICE_CENTS, WEB_PRODUCTS, automaticTaxEnabled } from '../lib/commerce.js';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const checkout = await readFile(new URL('../api/create-checkout.js', import.meta.url), 'utf8');
+const orderConfirmation = await readFile(new URL('../api/webhook.js', import.meta.url), 'utf8');
 const privacy = await readFile(new URL('../privacy-policy.html', import.meta.url), 'utf8');
 const analytics = await readFile(new URL('../analytics.js', import.meta.url), 'utf8');
 const contact = await readFile(new URL('../contact.html', import.meta.url), 'utf8');
@@ -20,7 +23,8 @@ test('download navigation targets the purchase section with sticky-nav spacing',
   assert.match(html, /<a class="btn-nav" href="#download">/);
   assert.match(html, /<section class="cta-section" id="download">/);
   assert.match(html, /\.cta-section\s*\{[^}]*scroll-margin-top:\s*64px;/s);
-  assert.match(html, /target\.scrollIntoView\(\{ behavior: 'smooth', block: 'start' \}\)/);
+  assert.match(html, /<a class="hero-tour" href="#screenshots">/);
+  assert.match(html, /<section class="screenshots-section" id="screenshots">/);
 });
 
 test('the Foldiq brand icon appears only once on the landing page', () => {
@@ -60,9 +64,26 @@ test('cookie-free analytics is disclosed and strips purchase tokens', () => {
 
 test('landing screenshots preserve their native aspect ratio', () => {
   assert.match(html, /\.screenshot-frame img\s*\{[^}]*height:\s*auto;/s);
-  const slides = [...html.matchAll(/<img src="\/screenshots\/laptop\/([^"/]+)\.webp"[^>]+width="1536" height="1024" loading="lazy"/g)];
+  const slides = [...html.matchAll(/<img src="\/screenshots\/laptop-angled\/([^"/]+)\.webp"[^>]+width="1536" height="1024" loading="lazy"/g)];
   assert.deepEqual(slides.map(([, name]) => name), ['scan', 'rules', 'preview', 'duplicates', 'report'],
     'all five slides must reserve space before they load');
+});
+
+test('Mac and Windows sell at the same web price shown on the page', () => {
+  assert.equal(WINDOWS_PRICE_CENTS, 1999);
+  assert.equal(MAC_PRICE_CENTS, WINDOWS_PRICE_CENTS);
+  const expectedPrice = (WINDOWS_PRICE_CENTS / 100).toFixed(2);
+  const shownPrices = [...html.matchAll(/class="purchase-price">\$([\d.]+)/g)].map(([, price]) => price);
+  assert.deepEqual(shownPrices, [expectedPrice, expectedPrice]);
+  assert.match(html, /data-platform="mac">Buy for Mac/);
+  assert.match(html, /data-platform="windows">Buy for Windows/);
+  assert.ok(html.includes('Prefer the Mac App Store?'));
+  assert.equal(WEB_PRODUCTS.mac.installer, 'Foldiq.dmg');
+  assert.equal(WEB_PRODUCTS.windows.installer, 'Foldiq-Setup.exe');
+  assert.match(checkout, /unit_amount: product\.priceCents/);
+  for (const customerCopy of [html, checkout, orderConfirmation]) {
+    assert.doesNotMatch(customerCopy, /lifetime|yours forever|all future updates/i);
+  }
 });
 
 test('social metadata points to the production domain', () => {
@@ -100,4 +121,9 @@ test('owner dashboard distinguishes business KPIs from diagnostics and snapshots
   assert.doesNotMatch(owner, /Combined gross sales/);
   assert.doesNotMatch(owner, /Active opted-in installs[\s\S]*>Off</);
   assert.match(owner, /No customer identities, filenames, paths, photo metadata, or media content/);
+});
+
+test('Stripe Tax stays off until it is switched on in Vercel', () => {
+  assert.equal(automaticTaxEnabled({}), false);
+  assert.equal(automaticTaxEnabled({ STRIPE_AUTOMATIC_TAX: 'true' }), true);
 });

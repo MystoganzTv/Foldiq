@@ -57,11 +57,12 @@ async function stripeMetrics(stripe) {
     payments.push(...page.data.filter(item => item.status === 'succeeded'));
     startingAfter = page.has_more ? page.data.at(-1)?.id : undefined;
   } while (startingAfter && payments.length < 1000);
-  const paid = payments.filter(item => !item.metadata?.platform || item.metadata.platform === 'windows');
+  const paid = payments.filter(item => !item.metadata?.platform || ['windows', 'mac'].includes(item.metadata.platform));
   const external = paid.filter(item => !OWNER_EMAILS.has(paymentEmail(item)));
   const explicitWindows = external.filter(item => item.metadata?.platform === 'windows');
   const legacyUnlabeled = external.filter(item => !item.metadata?.platform);
-  const downloaded = paid.filter(item => item.metadata?.platform === 'windows' && Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
+  const downloaded = paid.filter(item => ['windows', 'mac'].includes(item.metadata?.platform) && Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
+  const explicitMac = external.filter(item => item.metadata?.platform === 'mac');
   const externalDownloaded = explicitWindows.filter(item => Number.parseInt(item.metadata?.foldiq_download_count, 10) > 0);
   const nowSeconds = Math.floor(Date.now() / 1000);
   const external7d = external.filter(item => item.created >= nowSeconds - 7 * 86400);
@@ -117,6 +118,7 @@ async function stripeMetrics(stripe) {
     configured: true,
     purchases: paid.length,
     externalPurchases: external.length,
+    macDirectPurchases: explicitMac.length,
     externalCustomers: external.length,
     verifiedWindowsPurchases: explicitWindows.length,
     legacyDirectMacPurchases: legacyUnlabeled.length,

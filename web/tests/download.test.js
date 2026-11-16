@@ -109,3 +109,82 @@ test('refuses an unexpected redirect host', () => {
   assert.equal(isAllowedGitHubRedirect('https://release-assets.githubusercontent.com/file'), true);
   assert.equal(isAllowedGitHubRedirect('https://evil.example/file'), false);
 });
+
+test('a Mac purchase downloads the Mac installer and other platforms are refused', async () => {
+  const requested = [];
+  const fetchImpl = async (url) => {
+    requested.push(url);
+    if (requested.length === 1) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ assets: [
+          { name: 'Foldiq-Setup.exe', url: 'https://api.github.com/assets/1' },
+          { name: 'Foldiq.dmg', url: 'https://api.github.com/assets/2' },
+        ] }),
+      };
+    }
+    return { status: 302, headers: new Headers({ location: 'https://release-assets.githubusercontent.com/private/mac' }) };
+  };
+  const mac = createDownloadHandler({
+    stripeClient: { checkout: { sessions: { retrieve: async () => session({ metadata: { platform: 'mac' } }) } } },
+    fetchImpl,
+    githubToken: 'github-token',
+  });
+  const res = response();
+  await mac({ method: 'GET', query: { session_id: 'cs_test_paid123' } }, res);
+  assert.equal(res.statusCode, 302);
+  assert.equal(requested[1], 'https://api.github.com/assets/2');
+
+  const unknown = createDownloadHandler({
+    stripeClient: { checkout: { sessions: { retrieve: async () => session({ metadata: { platform: 'linux' } }) } } },
+    fetchImpl: async () => { throw new Error('GitHub must not be called'); },
+    githubToken: 'github-token',
+  });
+  const refused = response();
+  await unknown({ method: 'GET', query: { session_id: 'cs_test_paid123' } }, refused);
+  assert.equal(refused.statusCode, 403);
+});
+
+test('checkout builds a Mac session and refuses an unknown platform', async () => {
+  const { checkoutSessionParams } = await import('../api/create-checkout.js');
+  const mac = checkoutSessionParams('mac', {}, {});
+  assert.equal(mac.metadata.platform, 'mac');
+  assert.equal(mac.line_items[0].price_data.product_data.name, 'Foldiq for Mac');
+  assert.equal(mac.line_items[0].price_data.unit_amount, 1999);
+  assert.equal(mac.automatic_tax.enabled, false);
+  assert.match(mac.success_url, /platform=mac$/);
+
+  const taxed = checkoutSessionParams('windows', {}, { STRIPE_AUTOMATIC_TAX: 'true' });
+  assert.equal(taxed.automatic_tax.enabled, true);
+  assert.equal(taxed.line_items[0].price_data.tax_behavior, 'inclusive');
+
+  assert.equal(checkoutSessionParams('linux', {}, {}), null);
+  assert.equal(checkoutSessionParams(undefined, {}, {}), null);
+});
+
+test('finds the Mac installer in an earlier release when the latest one only has Windows', async () => {
+  const requested = [];
+  const fetchImpl = async (url) => {
+    requested.push(url);
+    if (url.endsWith('/releases/latest')) {
+      return { ok: true, status: 200, json: async () => ({ assets: [{ name: 'Foldiq-Setup.exe', url: 'https://api.github.com/assets/1' }] }) };
+    }
+    if (url.includes('/releases?per_page=')) {
+      return { ok: true, status: 200, json: async () => ([
+        { draft: true, assets: [{ name: 'Foldiq.dmg', url: 'https://api.github.com/assets/draft' }] },
+        { draft: false, assets: [{ name: 'Foldiq.dmg', url: 'https://api.github.com/assets/9' }] },
+      ]) };
+    }
+    return { status: 302, headers: new Headers({ location: 'https://release-assets.githubusercontent.com/private/mac' }) };
+  };
+  const handler = createDownloadHandler({
+    stripeClient: { checkout: { sessions: { retrieve: async () => session({ metadata: { platform: 'mac' } }) } } },
+    fetchImpl,
+    githubToken: 'github-token',
+  });
+  const res = response();
+  await handler({ method: 'GET', query: { session_id: 'cs_test_paid123' } }, res);
+  assert.equal(res.statusCode, 302);
+  assert.equal(requested.at(-1), 'https://api.github.com/assets/9');
+});

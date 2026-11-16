@@ -86,3 +86,19 @@ test('purchase email source is configurable and defaults to the verified Foldiq 
   assert.match(source, /idempotencyKey.*foldiq-order-/);
   assert.match(source, /replyTo:/);
 });
+
+test('a Mac order email links to the verified Mac download, not the App Store', async () => {
+  const { buildInvoiceHTML } = await import('../api/webhook.js');
+  const html = buildInvoiceHTML({
+    customerName: 'Ana',
+    customerEmail: 'ana@example.com',
+    invoiceId: 'FQ-1',
+    date: 'Nov 15, 2026',
+    amount: '$19.99',
+    platform: 'mac',
+    checkoutSessionId: 'cs_test_mac123',
+  });
+  assert.match(html, /\/api\/download\?session_id=cs_test_mac123/);
+  assert.match(html, /Download Foldiq for Mac/);
+  assert.doesNotMatch(html, /apps\.apple\.com/);
+});

@@ -1,185 +1,97 @@
 #!/bin/bash
-# notarize.sh — Sign, notarize, and staple Foldiq for direct distribution
-# Run from the project root: bash notarize.sh
+# notarize.sh — Build the Foldiq.dmg sold on foldiq.app: signed with Developer ID
+# and notarized by Apple, so Gatekeeper opens it without warnings.
 #
-# Prerequisites:
-#   • Developer ID Application certificate in Keychain
-#   • App-Specific Password stored via:
-#     xcrun notarytool store-credentials "FoldiqNotarization" \
-#       --apple-id "enrique.padron853@gmail.com" \
-#       --team-id "V6F97AK8AD" \
-#       --password "xxxx-xxxx-xxxx-xxxx"
+# Run from the project root on your Mac:   bash notarize.sh
+#
+# Needs, once:
+#   • A "Developer ID Application" certificate in your keychain
+#     (Xcode → Settings → Accounts → your team → Manage Certificates → + )
+#   • Notarization credentials; the script asks for an app-specific password
+#     (appleid.apple.com → Sign-In and Security → App-Specific Passwords) the
+#     first time and keeps it in the keychain.
+#
+# Every step stops the script if it fails. It never ships an unsigned app:
+# that is what made macOS call the old Foldiq.dmg "damaged".
 
-set -e
+set -euo pipefail
 
-# ── Config ────────────────────────────────────────────────────────────────────
 APPLE_ID="enrique.padron853@gmail.com"
 TEAM_ID="V6F97AK8AD"
-SIGN_IDENTITY="Developer ID Application: Enrique Padron spaangberg (V6F97AK8AD)"
 KEYCHAIN_PROFILE="FoldiqNotarization"
-VERSION="1.0"
-DMG_NAME="Foldiq-${VERSION}.dmg"
-FINAL_DMG="$HOME/Desktop/$DMG_NAME"
-LOCAL_ARCHIVE="build/Foldiq.xcarchive"
-EXPORT_DIR="/tmp/FoldiqExport"
-BACKGROUND_SRC="$(dirname "$0")/build/dmg-background.png"
+OUT_DIR="build/Mac Download"
+ARCHIVE="$OUT_DIR/Foldiq.xcarchive"
+EXPORT_DIR="$OUT_DIR/Export"
+FINAL_DMG="$OUT_DIR/Foldiq.dmg"
+BACKGROUND_SRC="build/dmg-background.png"
 
 echo ""
-echo "╔══════════════════════════════════════════════╗"
-echo "║        Foldiq — Sign & Notarize              ║"
-echo "╚══════════════════════════════════════════════╝"
+echo "Foldiq — build the notarized Mac download"
 echo ""
 
-# ── Step 1: Store credentials (only needed once) ──────────────────────────────
+# ── 1. Certificate ────────────────────────────────────────────────────────────
+if ! security find-identity -v -p codesigning | grep -q "Developer ID Application"; then
+  echo "❌ No 'Developer ID Application' certificate in your keychain."
+  echo "   Xcode → Settings → Accounts → your team → Manage Certificates → + → Developer ID Application"
+  exit 1
+fi
+echo "==> Developer ID certificate found ✓"
+
+# ── 2. Notarization credentials (asked once) ─────────────────────────────────
 if ! xcrun notarytool history --keychain-profile "$KEYCHAIN_PROFILE" &>/dev/null; then
-  echo "==> Storing notarization credentials in Keychain…"
-  xcrun notarytool store-credentials "$KEYCHAIN_PROFILE" \
-    --apple-id "$APPLE_ID" \
-    --team-id "$TEAM_ID"
-  echo "  ✓ Credentials stored"
-else
-  echo "==> Credentials already stored ✓"
+  echo "==> Saving notarization credentials in your keychain (asks for an app-specific password)…"
+  xcrun notarytool store-credentials "$KEYCHAIN_PROFILE" --apple-id "$APPLE_ID" --team-id "$TEAM_ID"
 fi
+echo "==> Notarization credentials ready ✓"
 
-# ── Step 2: Export .app from archive ─────────────────────────────────────────
-if [ ! -d "$LOCAL_ARCHIVE" ]; then
-  echo "❌ No archive found at $LOCAL_ARCHIVE"
-  echo "   Run build-dmg.sh first to create the archive."
-  exit 1
-fi
+# ── 3. Fresh archive of the current code ─────────────────────────────────────
+rm -rf "$OUT_DIR"
+mkdir -p "$OUT_DIR"
+echo "==> Archiving the current code (a few minutes)…"
+xcodebuild -project Foldiq.xcodeproj -scheme Foldiq -configuration Release \
+  -destination 'generic/platform=macOS' -archivePath "$ARCHIVE" archive -quiet
 
-echo "==> Exporting .app from archive…"
-rm -rf "$EXPORT_DIR"
-
-cat > /tmp/ExportOptions.plist << 'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>developer-id</string>
-    <key>signingStyle</key>
-    <string>manual</string>
-    <key>signingCertificate</key>
-    <string>Developer ID Application</string>
-    <key>teamID</key>
-    <string>V6F97AK8AD</string>
-</dict>
-</plist>
-PLIST
-
-xcodebuild \
-  -exportArchive \
-  -archivePath "$LOCAL_ARCHIVE" \
-  -exportPath "$EXPORT_DIR" \
-  -exportOptionsPlist /tmp/ExportOptions.plist \
-  | grep -E "error:|Export succeeded|FAILED" || true
-
+# ── 4. Export signed with Developer ID ───────────────────────────────────────
+echo "==> Exporting with Developer ID…"
+xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT_DIR" \
+  -exportOptionsPlist distribution/ExportOptions-DeveloperID.plist -quiet
 APP="$EXPORT_DIR/Foldiq.app"
+[ -d "$APP" ] || { echo "❌ Export did not produce Foldiq.app"; exit 1; }
+codesign --verify --deep --strict "$APP"
+codesign -dv "$APP" 2>&1 | grep -q "Developer ID Application" || { echo "❌ Foldiq.app is not signed with Developer ID"; exit 1; }
+VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist")
+echo "==> Foldiq $VERSION signed with Developer ID ✓"
 
-# Fallback: grab from archive Products
-if [ ! -d "$APP" ]; then
-  APP=$(find "$LOCAL_ARCHIVE/Products" -name "Foldiq.app" | head -1)
-  echo "  (using .app from archive: $APP)"
-fi
-
-if [ ! -d "$APP" ]; then
-  echo "❌ Could not find Foldiq.app"
-  exit 1
-fi
-
-# ── Step 3: Deep-sign the .app ────────────────────────────────────────────────
-echo "==> Signing .app with Developer ID…"
-
-# Sign all nested binaries/frameworks first, then the main bundle
-find "$APP" -name "*.dylib" -o -name "*.framework" | while read f; do
-  codesign --force --sign "$SIGN_IDENTITY" --timestamp "$f" 2>/dev/null || true
-done
-
-codesign \
-  --force \
-  --deep \
-  --sign "$SIGN_IDENTITY" \
-  --timestamp \
-  --options runtime \
-  --entitlements "Foldiq/Foldiq.entitlements" \
-  "$APP"
-
-echo "  Verifying signature…"
-codesign --verify --deep --strict "$APP" && echo "  ✓ Signature valid"
-
-# ── Step 4: Create DMG ────────────────────────────────────────────────────────
-echo "==> Creating DMG…"
+# ── 5. Disk image ────────────────────────────────────────────────────────────
+echo "==> Creating Foldiq.dmg…"
 STAGING=$(mktemp -d)
 cp -R "$APP" "$STAGING/"
 ln -s /Applications "$STAGING/Applications"
-
-mkdir -p "$STAGING/.background"
-[ -f "$BACKGROUND_SRC" ] && cp "$BACKGROUND_SRC" "$STAGING/.background/background.png"
-
-TMP_DMG="/tmp/Foldiq_rw.dmg"
-rm -f "$TMP_DMG"
-
-hdiutil create \
-  -volname "Foldiq" \
-  -srcfolder "$STAGING" \
-  -ov -format UDRW -size 300m \
-  "$TMP_DMG"
-
+if [ -f "$BACKGROUND_SRC" ]; then
+  mkdir -p "$STAGING/.background"
+  cp "$BACKGROUND_SRC" "$STAGING/.background/background.png"
+fi
+hdiutil create -volname "Foldiq" -srcfolder "$STAGING" -ov -format UDZO -imagekey zlib-level=9 "$FINAL_DMG" -quiet
 rm -rf "$STAGING"
+codesign --force --sign "Developer ID Application" --timestamp "$FINAL_DMG"
 
-MOUNT_OUT=$(hdiutil attach -readwrite -noverify "$TMP_DMG" | grep "Foldiq")
-VOLUME=$(echo "$MOUNT_OUT" | awk '{print $NF}')
-sleep 1
-
-osascript << APPLESCRIPT
-tell application "Finder"
-  tell disk "Foldiq"
-    open
-    set current view of container window to icon view
-    set toolbar visible of container window to false
-    set statusbar visible of container window to false
-    set the bounds of container window to {100, 100, 760, 500}
-    set viewOptions to the icon view options of container window
-    set arrangement of viewOptions to not arranged
-    set icon size of viewOptions to 128
-    set text size of viewOptions to 14
-    set background picture of viewOptions to file ".background:background.png"
-    set position of item "Foldiq.app" of container window to {155, 185}
-    set position of item "Applications" of container window to {505, 185}
-    close
-    open
-    update without registering applications
-    delay 2
-  end tell
-end tell
-APPLESCRIPT
-
-sync
-hdiutil detach "$VOLUME" -quiet
-
-rm -f "$FINAL_DMG"
-hdiutil convert "$TMP_DMG" -format UDZO -imagekey zlib-level=9 -o "$FINAL_DMG"
-rm -f "$TMP_DMG"
-
-# ── Step 5: Sign the DMG ──────────────────────────────────────────────────────
-echo "==> Signing DMG…"
-codesign --force --sign "$SIGN_IDENTITY" --timestamp "$FINAL_DMG"
-echo "  ✓ DMG signed"
-
-# ── Step 6: Notarize ──────────────────────────────────────────────────────────
-echo "==> Submitting to Apple for notarization (this takes 1-5 min)…"
-xcrun notarytool submit "$FINAL_DMG" \
-  --keychain-profile "$KEYCHAIN_PROFILE" \
-  --wait \
-  --timeout 10m
-
-# ── Step 7: Staple ────────────────────────────────────────────────────────────
-echo "==> Stapling notarization ticket…"
+# ── 6. Notarize and staple ───────────────────────────────────────────────────
+echo "==> Sending to Apple for notarization (usually 1–5 minutes)…"
+RESULT=$(xcrun notarytool submit "$FINAL_DMG" --keychain-profile "$KEYCHAIN_PROFILE" --wait --timeout 20m --output-format plist)
+STATUS=$(echo "$RESULT" | plutil -extract status raw -o - - 2>/dev/null || echo "Unknown")
+if [ "$STATUS" != "Accepted" ]; then
+  echo "❌ Notarization status: $STATUS"
+  SUBMISSION=$(echo "$RESULT" | plutil -extract id raw -o - - 2>/dev/null || true)
+  [ -n "$SUBMISSION" ] && xcrun notarytool log "$SUBMISSION" --keychain-profile "$KEYCHAIN_PROFILE"
+  exit 1
+fi
 xcrun stapler staple "$FINAL_DMG"
+xcrun stapler validate "$FINAL_DMG"
+spctl --assess --type open --context context:primary-signature -v "$FINAL_DMG"
 
 echo ""
-echo "✅  Done! Notarized DMG ready: $FINAL_DMG"
-echo "    Size: $(du -sh "$FINAL_DMG" | cut -f1)"
+echo "✅ Notarized download ready: $FINAL_DMG (Foldiq $VERSION, $(du -sh "$FINAL_DMG" | cut -f1))"
 echo ""
-echo "Next: upload to GitHub Releases and replace the existing Foldiq-1.0.dmg"
+echo "Next:"
+echo "  1. Add it to the latest GitHub release as 'Foldiq.dmg' (same release as Foldiq-Setup.exe)."
+echo "  2. Set \"version\": \"$VERSION\" in web/mac-version.json and deploy, so earlier web copies see the update."

@@ -29,9 +29,8 @@ const SITE = 'https://foldiq.app';
 const OWNER_EMAIL = 'enrique.padron853@gmail.com';
 const RECEIPTS_FROM_EMAIL = process.env.RECEIPTS_FROM_EMAIL || 'Foldiq <receipts@foldiq.app>';
 
-// Windows is served by a payment-verified endpoint backed by a private GitHub
-// release. Mac ships from the App Store and is not sold here.
-const MAC_APP_STORE_URL = 'https://apps.apple.com/us/app/foldiq/id6772513569';
+// Both installers are served by a payment-verified endpoint backed by a
+// private GitHub release (Foldiq-Setup.exe and the notarized Foldiq.dmg).
 
 // Vercel may expose the body directly or leave it on the request stream,
 // depending on the function runtime. Stripe must receive the exact bytes when
@@ -81,12 +80,11 @@ export function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date,
   const isMac = platform === 'mac';
   const productLabel = isMac ? 'Foldiq for Mac' : 'Foldiq for Windows';
   const platformNote = isMac
-    ? 'One-time purchase · Lifetime license · Delivered via the Mac App Store'
-    : 'One-time purchase · Lifetime license · All future updates';
-  const downloadUrl = isMac
-    ? MAC_APP_STORE_URL
-    : `${SITE}/api/download?session_id=${encodeURIComponent(checkoutSessionId)}`;
-  const downloadLabel = isMac ? ' Open on the Mac App Store' : '⬇ Download Foldiq for Windows';
+    ? 'One-time purchase · macOS 14 or later · No subscription'
+    : 'One-time purchase · No subscription';
+  // The same link always serves the newest version, so it also works for updates.
+  const downloadUrl = `${SITE}/api/download?session_id=${encodeURIComponent(checkoutSessionId)}`;
+  const downloadLabel = isMac ? '⬇ Download Foldiq for Mac' : '⬇ Download Foldiq for Windows';
   const safeCustomerName = escapeHTML(customerName || 'there');
   const safeCustomerEmail = escapeHTML(customerEmail);
   const safeInvoiceId = escapeHTML(invoiceId);
@@ -236,12 +234,11 @@ export default async function handler(req, res) {
   const customerName  = session.customer_details?.name || '';
   const platform      = session.metadata?.platform === 'mac' ? 'mac' : 'windows';
   const channel       = channelFromMetadata(session.metadata);
-  const amountTotal   = session.amount_total ?? 999;
+  const amountTotal   = session.amount_total;
   const currency      = (session.currency || 'usd').toUpperCase();
-  const amount        = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-  }).format(amountTotal / 100);
+  const amount        = amountTotal == null
+    ? 'See Stripe receipt'
+    : new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amountTotal / 100);
   const invoiceId     = session.id.replace('cs_live_', '').replace('cs_test_', '').slice(0, 16).toUpperCase();
   const eventDate     = stripeEvent.created ? new Date(stripeEvent.created * 1000) : new Date();
   const date          = eventDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
