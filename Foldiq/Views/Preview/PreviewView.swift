@@ -1473,7 +1473,7 @@ struct LocationReviewSheet: View {
                 Button(accepted.count == suggestions.count ? "Select None" : "Select All") {
                     accepted = accepted.count == suggestions.count ? [] : Set(suggestions.map(\.fileID))
                 }
-                .buttonStyle(.link)
+                .linkStyleOnMac()
             }
             List(suggestions) { suggestion in
                 Toggle(isOn: isAccepted(suggestion)) {
@@ -1676,5 +1676,17 @@ struct LocationReviewSheet: View {
                     fileIDs: value.ids
                 )
             }
+    }
+}
+
+private extension View {
+    /// `.link` exists only on macOS; iPhone falls back to a borderless button.
+    @ViewBuilder
+    func linkStyleOnMac() -> some View {
+        #if os(macOS)
+        buttonStyle(.link)
+        #else
+        buttonStyle(.borderless)
+        #endif
     }
 }
