@@ -11,12 +11,11 @@ struct FoldiqApp: App {
     // Holds scan results, organization plans, and undo manifests
     // across the session. Stored on disk so a crash doesn't lose progress.
     //
-    // Schema-change strategy (development builds):
-    //   When the @Model schema evolves (new properties added/removed), SwiftData
-    //   cannot silently migrate a non-optional column that has no stored default.
-    //   For production, switch to VersionedSchema + SchemaMigrationPlan.
-    //   For now we destroy and recreate the store on any load failure — scan data
-    //   is always regenerated, and undo manifests from a prior schema are invalid anyway.
+    // Schema changes: SwiftData migrates added properties on its own as long
+    //   as they are optional or have a default, so new fields must be added
+    //   that way. If the store still can't be opened, it is moved aside — never
+    //   deleted — because it may hold the safety record of an interrupted
+    //   organization, the only way to put those files back.
     let container: ModelContainer = {
         let schema = Schema([
             MediaFile.self,
@@ -38,13 +37,25 @@ struct FoldiqApp: App {
         do {
             return try ModelContainer(for: schema, configurations: [cfg])
         } catch {
-            // Schema changed — destroy the stale store and start fresh.
-            print("⚠️ SwiftData store incompatible with current schema — wiping and recreating. Error: \(error)")
-            let sidecarExtensions = ["store-shm", "store-wal"]
-            for ext in (["store"] + sidecarExtensions) {
+            print("⚠️ SwiftData store can't be opened with the current schema — moving it aside. Error: \(error)")
+            let fm = FileManager.default
+            let backupDir = storeDir.appendingPathComponent(
+                "Previous Database \(DateFileNaming.stem(for: Date()))",
+                isDirectory: true
+            )
+            try? fm.createDirectory(at: backupDir, withIntermediateDirectories: true)
+            for ext in ["store", "store-shm", "store-wal"] {
                 let url = storeDir.appendingPathComponent("Foldiq.\(ext)")
-                try? FileManager.default.removeItem(at: url)
+                guard fm.fileExists(atPath: url.path) else { continue }
+                do {
+                    try fm.moveItem(at: url, to: backupDir.appendingPathComponent(url.lastPathComponent))
+                } catch {
+                    // Last resort only: a store that can't be moved would make
+                    // Foldiq fail to start every time.
+                    try? fm.removeItem(at: url)
+                }
             }
+            UserDefaults.standard.set(backupDir.path, forKey: "foldiq.previousDatabasePath")
             do {
                 return try ModelContainer(for: schema, configurations: [cfg])
             } catch {

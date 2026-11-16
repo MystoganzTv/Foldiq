@@ -22,6 +22,10 @@
 	<key>com.apple.security.network.client</key>
 	<true/>
 
+	<!-- Read the Mac's Photos library through PhotoKit (downloads originals kept in iCloud) -->
+	<key>com.apple.security.personal-information.photos-library</key>
+	<true/>
+
 	<!-- Persist access to user-selected folders across launches via security-scoped bookmarks -->
 	<key>com.apple.security.files.bookmarks.app-scope</key>
 	<true/>

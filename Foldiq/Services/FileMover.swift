@@ -408,22 +408,122 @@ final class FileMover {
     /// When re-organizing an already organized output folder, any leftover files
     /// that didn't end up in the new planned structure are moved into a dedicated
     /// review folder instead of being left scattered through the old hierarchy.
+    /// Each move is written to the same Undo record as the rest of the run,
+    /// before it happens, so Undo puts these files back too.
     func shelveResidualFilesForReview(
         under roots: [URL],
         expectedDestinationPaths: Set<String>,
         outputFolderName: String,
-        reviewFolderName: String
-    ) async -> Int {
-        await Task.detached(priority: .utility) {
-            roots.reduce(0) { count, root in
-                guard root.lastPathComponent == outputFolderName else { return count }
-                return count + Self.shelveResidualFiles(
-                    under: root,
-                    expectedDestinationPaths: expectedDestinationPaths,
-                    reviewFolderName: reviewFolderName
-                )
-            }
+        reviewFolderName: String,
+        manifest: UndoManifest,
+        checkpoint: @MainActor @escaping () throws -> Void = {}
+    ) async -> (moved: Int, errors: [String]) {
+        let moves = await Task.detached(priority: .utility) {
+            roots
+                .filter { $0.lastPathComponent == outputFolderName }
+                .flatMap {
+                    Self.residualMoves(
+                        under: $0,
+                        expectedDestinationPaths: expectedDestinationPaths,
+                        reviewFolderName: reviewFolderName
+                    )
+                }
         }.value
+
+        var moved = 0
+        var errors: [String] = []
+        for move in moves {
+            let source = move.source
+            let destination = move.destination
+            do {
+                let hash = await Task.detached(priority: .utility) { source.sha256() ?? "" }.value
+                guard !hash.isEmpty else { throw CocoaError(.fileReadUnknown) }
+
+                let entry = UndoEntry(
+                    originalPath: source.path,
+                    newPath: destination.path,
+                    hash: hash,
+                    operation: .move
+                )
+                manifest.modelContext?.insert(entry)
+                entry.manifest = manifest
+                do {
+                    try checkpoint()
+                } catch {
+                    Self.discard(entry, from: manifest)
+                    throw error
+                }
+
+                do {
+                    try FileManager.default.createDirectory(
+                        at: destination.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    try await Task.detached(priority: .utility) {
+                        try Self.performVerifiedOperation(
+                            source: source,
+                            destination: destination,
+                            operation: .move,
+                            expectedHash: hash
+                        )
+                    }.value
+                } catch {
+                    // Nothing moved: drop the record. Anything ambiguous stays recorded.
+                    if FileManager.default.fileExists(atPath: source.path),
+                       !FileManager.default.fileExists(atPath: destination.path) {
+                        Self.discard(entry, from: manifest)
+                        try? checkpoint()
+                    }
+                    throw error
+                }
+                entry.wasCompleted = true
+                try? checkpoint()
+                moved += 1
+            } catch {
+                errors.append(source.lastPathComponent + ": " + Self.humanizeError(error))
+            }
+        }
+        return (moved, errors)
+    }
+
+    private nonisolated static func residualMoves(
+        under root: URL,
+        expectedDestinationPaths: Set<String>,
+        reviewFolderName: String
+    ) -> [(source: URL, destination: URL)] {
+        let fm = FileManager.default
+        let reviewRoot = root.appendingPathComponent(reviewFolderName)
+
+        guard let enumerator = fm.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return [] }
+
+        var moves: [(source: URL, destination: URL)] = []
+        var reserved = Set<String>()
+        for case let fileURL as URL in enumerator {
+            let path = fileURL.path
+            if path.hasPrefix(reviewRoot.path + "/") { continue }
+            let values = try? fileURL.resourceValues(forKeys: [.isDirectoryKey])
+            if values?.isDirectory == true { continue }
+            if expectedDestinationPaths.contains(path) { continue }
+
+            let relativePath = String(path.dropFirst(root.path.count + 1))
+            var destination = resolveFileCollision(reviewRoot.appendingPathComponent(relativePath))
+            var counter = 1
+            while reserved.contains(destination.path) {
+                let base = reviewRoot.appendingPathComponent(relativePath)
+                let name = base.deletingPathExtension().lastPathComponent
+                let ext = base.pathExtension
+                destination = base.deletingLastPathComponent()
+                    .appendingPathComponent(ext.isEmpty ? "\(name)_\(counter)" : "\(name)_\(counter).\(ext)")
+                counter += 1
+            }
+            reserved.insert(destination.path)
+            moves.append((fileURL, destination))
+        }
+        return moves
     }
 
     // MARK: - Empty folder cleanup
@@ -449,6 +549,13 @@ final class FileMover {
     private nonisolated static func pruneEmptyDirs(_ url: URL, skip: String, isRoot: Bool, dryRun: Bool = false) -> Int {
         // Never touch the organized output folder
         guard isRoot || url.lastPathComponent != skip else { return 0 }
+
+        // Never reach inside a package — a Photos library, an app, a Final Cut
+        // library. Its empty folders are part of its structure.
+        if PhotosLibrarySupport.isPhotosLibrary(url)
+            || (try? url.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true {
+            return 0
+        }
 
         let fm = FileManager.default
         guard let contents = try? fm.contentsOfDirectory(
@@ -478,50 +585,6 @@ final class FileMover {
             }
         }
         return count
-    }
-
-    private nonisolated static func shelveResidualFiles(
-        under root: URL,
-        expectedDestinationPaths: Set<String>,
-        reviewFolderName: String
-    ) -> Int {
-        let fm = FileManager.default
-        let reviewRoot = root.appendingPathComponent(reviewFolderName)
-
-        guard let enumerator = fm.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return 0 }
-
-        var residualFiles: [URL] = []
-
-        for case let fileURL as URL in enumerator {
-            let path = fileURL.path
-            if path.hasPrefix(reviewRoot.path + "/") { continue }
-            let values = try? fileURL.resourceValues(forKeys: [.isDirectoryKey])
-            if values?.isDirectory == true { continue }
-            if expectedDestinationPaths.contains(path) { continue }
-            residualFiles.append(fileURL)
-        }
-
-        var movedCount = 0
-        for fileURL in residualFiles {
-            let relativePath = String(fileURL.path.dropFirst(root.path.count + 1))
-            var destination = reviewRoot.appendingPathComponent(relativePath)
-            let destDir = destination.deletingLastPathComponent()
-            try? fm.createDirectory(at: destDir, withIntermediateDirectories: true)
-            destination = resolveFileCollision(destination)
-
-            do {
-                try fm.moveItem(at: fileURL, to: destination)
-                movedCount += 1
-            } catch {
-                continue
-            }
-        }
-
-        return movedCount
     }
 
     private nonisolated static func resolveFileCollision(_ url: URL) -> URL {

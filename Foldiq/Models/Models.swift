@@ -91,6 +91,15 @@ final class MediaFile {
     // The value is the absolute path of the original archive file.
     var archiveSourcePath: String?
 
+    /// Why the file can't be opened (empty, cut off, can't be decoded), or nil
+    /// when it is fine. Damaged files go to Needs Review/Damaged Files.
+    var damageReason: String? = nil
+
+    /// Where a place without GPS came from: a suggestion the person accepted
+    /// or a place they typed. Nil when the location is the file's own.
+    /// The file itself is never changed — this only affects folder names.
+    var locationNote: String? = nil
+
     // ── Probable duplicate detection ──────────────────────────────────────────
     // Set by ProbableDuplicateDetector after exact SHA-256 detection.
     // isProbableDuplicate == true  →  file is routed to Duplicates/To Review/
@@ -267,6 +276,17 @@ final class UndoManifest {
     }
 }
 
+extension UndoManifest {
+    /// The runs of a session that still need undoing, newest first. "Retry
+    /// Failed Files" adds a second run to the same session; Undo must reverse
+    /// both, and the later one before the run it built on.
+    static func pendingUndoOrder(_ manifests: [UndoManifest]) -> [UndoManifest] {
+        manifests
+            .filter { !$0.wasUndone }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+}
+
 /// One file movement record inside a UndoManifest.
 @Model
 final class UndoEntry {
@@ -314,6 +334,9 @@ struct OrganizationConfig {
     var outputFolderName: String = "Organized Media"
     var customOutputParentPath: String?
     var useGPSLocation: Bool = true    // for SmartHybrid / ByLocation modes
+    var renameByDate: Bool = false     // IMG_4821.jpg → 2024-08-14 15.32.10.jpg
+    /// What to take from the Mac's main Photos library. Chosen per session, not saved.
+    var photosScope = PhotosLibraryScope()
 }
 
 // MARK: ─── OrganizationConfig persistence ────────────────────────────────────
@@ -328,6 +351,7 @@ extension OrganizationConfig {
         static let separateDuplicates = "org_separateDuplicates"
         static let useGPSLocation     = "org_useGPS"
         static let outputFolderName   = "org_outputFolderName"
+        static let renameByDate       = "org_renameByDate"
     }
 
     /// Load persisted config from UserDefaults. Falls back to defaults when
@@ -360,6 +384,9 @@ extension OrganizationConfig {
         if let name = ud.string(forKey: UDKey.outputFolderName), !name.isEmpty {
             c.outputFolderName = name
         }
+        if ud.object(forKey: UDKey.renameByDate) != nil {
+            c.renameByDate = ud.bool(forKey: UDKey.renameByDate)
+        }
         return c
     }
 
@@ -373,6 +400,7 @@ extension OrganizationConfig {
         ud.set(separateDuplicates,      forKey: UDKey.separateDuplicates)
         ud.set(useGPSLocation,          forKey: UDKey.useGPSLocation)
         ud.set(outputFolderName,        forKey: UDKey.outputFolderName)
+        ud.set(renameByDate,            forKey: UDKey.renameByDate)
     }
 
     /// Reset all persisted settings to factory defaults.
@@ -380,7 +408,7 @@ extension OrganizationConfig {
         let ud = UserDefaults.standard
         [UDKey.mode, UDKey.fileOperation, UDKey.includeVideos,
          UDKey.includeArchives, UDKey.separateDuplicates,
-         UDKey.useGPSLocation, UDKey.outputFolderName].forEach { ud.removeObject(forKey: $0) }
+         UDKey.useGPSLocation, UDKey.outputFolderName, UDKey.renameByDate].forEach { ud.removeObject(forKey: $0) }
     }
 }
 
@@ -410,7 +438,10 @@ extension OrganizationConfig {
         let isArchiveFile = exists
             ? !isDir.boolValue
             : MediaTypes.archiveExtensions.contains(rootURL.pathExtension.lowercased())
-        let base = isArchiveFile ? rootURL.deletingLastPathComponent() : rootURL
+        // A Photos library is a package: the output goes beside it, never inside.
+        let base = isArchiveFile || PhotosLibrarySupport.isPhotosLibrary(rootURL)
+            ? rootURL.deletingLastPathComponent()
+            : rootURL
 
         guard base.lastPathComponent != outputFolderName else { return base }
         return base.appendingPathComponent(outputFolderName)

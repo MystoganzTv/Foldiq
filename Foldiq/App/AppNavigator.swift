@@ -79,6 +79,9 @@ final class AppNavigator: ObservableObject {
 
     func removeSelectedFolderURL(_ url: URL) {
         selectedFolderURLs.removeAll { $0 == url }
+        if PhotosLibrarySupport.isPhotosLibrary(url) {
+            organizationConfig.photosScope = PhotosLibraryScope()
+        }
         if securityScopedURLs.remove(url) != nil {
             url.stopAccessingSecurityScopedResource()
         }
@@ -115,6 +118,7 @@ final class AppNavigator: ObservableObject {
         // Intentionally keep organizationConfig — user's settings survive between sessions.
         // customOutputParentPath is session-specific, so clear it for the new session.
         organizationConfig.customOutputParentPath = nil
+        organizationConfig.photosScope = PhotosLibraryScope()
         go(to: .welcome)
     }
 

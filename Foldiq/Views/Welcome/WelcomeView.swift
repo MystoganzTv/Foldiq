@@ -6,6 +6,7 @@ import SwiftData
 import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
+import Photos
 #endif
 
 struct WelcomeView: View {
@@ -16,6 +17,11 @@ struct WelcomeView: View {
     @State private var isHoveringButton = false
     @State private var isDragTargeted = false
     @State private var showingItemImporter = false
+    /// The Mac's main Photos library, waiting for the person to choose what to take from it.
+    @State private var pendingSystemLibrary: URL?
+    #if os(macOS)
+    @StateObject private var webUpdates = WebUpdateChecker()
+    #endif
     @State private var interruptedManifests: [UndoManifest] = []
     @State private var isRecovering = false
     @State private var recoveryMessage: String?
@@ -29,6 +35,17 @@ struct WelcomeView: View {
     private var archiveContentTypes: [UTType] {
         MediaTypes.archiveExtensions.compactMap { UTType(filenameExtension: $0) }
     }
+    /// Apple Photos libraries ("Photos Library.photoslibrary"). macOS only.
+    private var photosLibraryContentTypes: [UTType] {
+        #if os(macOS)
+        [
+            UTType("com.apple.photos.library"),
+            UTType(filenameExtension: PhotosLibrarySupport.packageExtension, conformingTo: .package),
+        ].compactMap { $0 }
+        #else
+        []
+        #endif
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +56,14 @@ struct WelcomeView: View {
                     .padding(.horizontal, 24)
                     .padding(.bottom, 16)
             }
+
+            #if os(macOS)
+            if let version = webUpdates.availableVersion {
+                updateBanner(version: version)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 16)
+            }
+            #endif
 
             // ── Logo & headline ─────────────────────────────────────────────
             VStack(spacing: 16) {
@@ -71,14 +96,20 @@ struct WelcomeView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(nav.selectedFolderURLs, id: \.path) { url in
                         HStack(spacing: 8) {
-                            Image(systemName: url.isArchiveFile ? "doc.zipper" : "folder.fill")
-                                .foregroundStyle(url.isArchiveFile ? .orange : .blue)
+                            Image(systemName: Self.iconName(for: url))
+                                .foregroundStyle(Self.iconColor(for: url))
                                 .font(.caption)
                             Text(url.path)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
+                            if PhotosLibrarySupport.isDefaultSystemLibrary(url) {
+                                Text(nav.organizationConfig.photosScope.summary)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.pink)
+                                    .lineLimit(1)
+                            }
                             Spacer()
                             Button {
                                 nav.removeSelectedFolderURL(url)
@@ -114,11 +145,23 @@ struct WelcomeView: View {
                 Image(systemName: "arrow.down.circle")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                Text("You can also drag folders or ZIP, RAR, and 7z archives onto this window")
+                Text("You can also drag folders, Photos libraries, or ZIP, RAR, and 7z archives onto this window")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
             .opacity(isCompact ? 0 : 1)
+
+            #if os(macOS)
+            Button {
+                selectPhotosLibrary()
+            } label: {
+                Label("Export from Photos…", systemImage: "photo.on.rectangle.angled")
+                    .font(.callout)
+            }
+            .buttonStyle(.link)
+            .padding(.top, 10)
+            .help("Save organized copies of your Photos library to a folder. Your photos stay in Photos.")
+            #endif
 
             Spacer()
 
@@ -159,6 +202,21 @@ struct WelcomeView: View {
         ) { result in
             handleImportedItems(result)
         }
+        #if os(macOS)
+        .sheet(isPresented: isChoosingPhotosScope) {
+            PhotosScopeSheet(
+                includeVideos: nav.organizationConfig.includeVideos,
+                onCancel: { pendingSystemLibrary = nil },
+                onConfirm: { scope in
+                    if let library = pendingSystemLibrary {
+                        nav.organizationConfig.photosScope = scope
+                        nav.addSelectedFolderURLs([library])
+                    }
+                    pendingSystemLibrary = nil
+                }
+            )
+        }
+        #endif
         // ── Drag & drop ──────────────────────────────────────────────────────
         .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
             handleDrop(providers: providers)
@@ -174,7 +232,7 @@ struct WelcomeView: View {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 44))
                                 .foregroundStyle(.blue)
-                            Text("Drop folders or archives to add them")
+                            Text("Drop folders, Photos libraries, or archives to add them")
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(.blue)
                         }
@@ -191,6 +249,9 @@ struct WelcomeView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        #if os(macOS)
+        .task { await webUpdates.check() }
+        #endif
         .onAppear {
             // ── SwiftData cleanup ────────────────────────────────────────────
             // When we return to WelcomeView (via restart or back navigation),
@@ -211,6 +272,32 @@ struct WelcomeView: View {
             }
         }
     }
+
+    #if os(macOS)
+    private func updateBanner(version: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.title2)
+                .foregroundStyle(.blue)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Foldiq \(version) is available")
+                    .font(.headline)
+                Text("Download it with the link in your order email — it always gives you the newest version.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Later") { webUpdates.dismiss() }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            Button("How to Update") { PlatformActions.openURL(webUpdates.downloadPage) }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(14)
+        .frame(maxWidth: 640)
+        .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+    }
+    #endif
 
     private var recoveryCard: some View {
         HStack(spacing: 14) {
@@ -412,7 +499,7 @@ struct WelcomeView: View {
                 guard !existing.contains(url.path) else { return }
 
                 DispatchQueue.main.async {
-                    nav.addSelectedFolderURLs([url])
+                    addItems([url])
                 }
             }
         }
@@ -425,8 +512,8 @@ struct WelcomeView: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
         panel.prompt = "Select"
-        panel.message = "Choose folders or ZIP, RAR, or 7z archives. Foldiq will organize the supported media inside."
-        panel.allowedContentTypes = [.folder] + archiveContentTypes
+        panel.message = "Choose folders, Photos libraries, or ZIP, RAR, or 7z archives. Foldiq will organize the supported media inside."
+        panel.allowedContentTypes = [.folder] + photosLibraryContentTypes + archiveContentTypes
 
         guard panel.runModal() == .OK else { return }
 
@@ -440,10 +527,66 @@ struct WelcomeView: View {
             if isDir.boolValue { return true }
             return url.isArchiveFile
         }
-        nav.addSelectedFolderURLs(newURLs)
+        addItems(newURLs)
         #else
         showingItemImporter = true
         #endif
+    }
+
+    #if os(macOS)
+    /// Opens the file picker in ~/Pictures, where Photos keeps its library.
+    private func selectPhotosLibrary() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.treatsFilePackagesAsDirectories = false
+        panel.allowedContentTypes = photosLibraryContentTypes
+        panel.prompt = "Choose"
+        panel.message = "Choose your Photos library. Your photos stay in Photos — Foldiq saves organized copies to a folder you pick."
+        panel.directoryURL = PhotosLibrarySupport.realHomeDirectory?
+            .appendingPathComponent("Pictures", isDirectory: true)
+
+        guard panel.runModal() == .OK else { return }
+
+        let existing = Set(nav.selectedFolderURLs.map(\.path))
+        let libraries = panel.urls.filter {
+            PhotosLibrarySupport.isPhotosLibrary($0) && !existing.contains($0.path)
+        }
+        addItems(libraries)
+    }
+    #endif
+
+    private var isChoosingPhotosScope: Binding<Bool> {
+        Binding(
+            get: { pendingSystemLibrary != nil },
+            set: { if !$0 { pendingSystemLibrary = nil } }
+        )
+    }
+
+    /// Adds the chosen items. The Mac's main Photos library first asks what to
+    /// take from it; it is added once the person confirms.
+    private func addItems(_ urls: [URL]) {
+        #if os(macOS)
+        if let library = urls.first(where: { PhotosLibrarySupport.isDefaultSystemLibrary($0) }) {
+            nav.addSelectedFolderURLs(urls.filter { $0 != library })
+            pendingSystemLibrary = library
+            return
+        }
+        #endif
+        nav.addSelectedFolderURLs(urls)
+    }
+
+    private static func iconName(for url: URL) -> String {
+        if url.isArchiveFile { return "doc.zipper" }
+        if PhotosLibrarySupport.isPhotosLibrary(url) { return "photo.on.rectangle.angled" }
+        return "folder.fill"
+    }
+
+    private static func iconColor(for url: URL) -> Color {
+        if url.isArchiveFile { return .orange }
+        if PhotosLibrarySupport.isPhotosLibrary(url) { return .pink }
+        return .blue
     }
 
     private func handleImportedItems(_ result: Result<[URL], Error>) {
@@ -500,3 +643,157 @@ enum AppInfo {
     /// Combined string for display, e.g. "v1.0.3 (23)".
     static var versionString: String { "v\(version) (\(build))" }
 }
+
+// MARK: ─── Photos scope sheet ─────────────────────────────────────────────────
+
+#if os(macOS)
+/// Asks what to take from the Mac's main Photos library before Foldiq starts
+/// copying originals out of it, and shows how many items that is.
+struct PhotosScopeSheet: View {
+    let includeVideos: Bool
+    let onCancel: () -> Void
+    let onConfirm: (PhotosLibraryScope) -> Void
+
+    private enum Access { case checking, granted, denied }
+
+    @State private var scope = PhotosLibraryScope()
+    @State private var access: Access = .checking
+    @State private var albums: [SystemPhotosStager.Album] = []
+    @State private var matchingCount: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("What should Foldiq export from Photos?")
+                .font(.title2.weight(.bold))
+            Text("Your photos stay in Photos. Foldiq saves organized copies to a folder you choose, downloading originals from iCloud when needed. A smaller selection finishes sooner and needs less free space.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            switch access {
+            case .checking:
+                ProgressView("Opening your Photos library…")
+            case .denied:
+                Text("Foldiq doesn't have access to Photos. Turn it on in System Settings → Privacy & Security → Photos, then try again.")
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .granted:
+                scopeControls
+            }
+
+            HStack {
+                Text(countLabel)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Continue") { onConfirm(confirmedScope) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canConfirm)
+            }
+        }
+        .padding(24)
+        .frame(width: 500)
+        .task { await openLibrary() }
+        .onChange(of: scope) { recount() }
+    }
+
+    @ViewBuilder
+    private var scopeControls: some View {
+        Picker("Organize", selection: $scope.kind) {
+            Text("Everything").tag(PhotosLibraryScope.Kind.everything)
+            Text("Date Range").tag(PhotosLibraryScope.Kind.dateRange)
+            Text("Albums").tag(PhotosLibraryScope.Kind.albums)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+
+        switch scope.kind {
+        case .everything:
+            Text(includeVideos ? "Every photo and video in the library." : "Every photo in the library.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        case .dateRange:
+            HStack(spacing: 20) {
+                DatePicker("From", selection: $scope.startDate, displayedComponents: .date)
+                DatePicker("To", selection: $scope.endDate, in: scope.startDate..., displayedComponents: .date)
+            }
+        case .albums:
+            if albums.isEmpty {
+                Text("No albums found in this library.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                List(albums) { album in
+                    Toggle(isOn: isSelected(album)) {
+                        HStack {
+                            Text(album.title)
+                            Spacer()
+                            Text("\(album.count)")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                }
+                .frame(height: 220)
+            }
+        }
+    }
+
+    private var countLabel: String {
+        guard access == .granted else { return "" }
+        guard let matchingCount else { return "Counting…" }
+        return matchingCount == 1 ? "1 item" : "\(matchingCount.formatted()) items"
+    }
+
+    private var canConfirm: Bool {
+        guard access == .granted, let matchingCount, matchingCount > 0 else { return false }
+        return scope.kind != .albums || !scope.albumIdentifiers.isEmpty
+    }
+
+    private var confirmedScope: PhotosLibraryScope {
+        var confirmed = scope
+        confirmed.albumNames = albums.filter { scope.albumIdentifiers.contains($0.id) }.map(\.title)
+        return confirmed
+    }
+
+    private func isSelected(_ album: SystemPhotosStager.Album) -> Binding<Bool> {
+        Binding(
+            get: { scope.albumIdentifiers.contains(album.id) },
+            set: { selected in
+                if selected {
+                    scope.albumIdentifiers.insert(album.id)
+                } else {
+                    scope.albumIdentifiers.remove(album.id)
+                }
+            }
+        )
+    }
+
+    private func openLibrary() async {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        guard status == .authorized || status == .limited else {
+            access = .denied
+            return
+        }
+        let videos = includeVideos
+        albums = await Task.detached { SystemPhotosStager.albums(includeVideos: videos) }.value
+        access = .granted
+        recount()
+    }
+
+    private func recount() {
+        guard access == .granted else { return }
+        let current = scope
+        let videos = includeVideos
+        matchingCount = nil
+        Task {
+            let count = await Task.detached {
+                SystemPhotosStager.count(includeVideos: videos, scope: current)
+            }.value
+            if current == scope { matchingCount = count }
+        }
+    }
+}
+#endif

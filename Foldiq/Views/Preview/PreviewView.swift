@@ -13,6 +13,7 @@ import QuickLookUI
 import QuickLook
 #endif
 import AVFoundation
+import CoreLocation
 
 struct PreviewView: View {
 
@@ -43,6 +44,10 @@ struct PreviewView: View {
 
     // Folder tree sheet
     @State private var showFolderTree = false
+
+    // Places for files without GPS
+    @State private var showLocationReview = false
+    @State private var missingPlaceCount = 0
     var selectedPlan: OrganizationPlan? {
         plans.first { $0.id == selectedPlanID }
     }
@@ -60,6 +65,7 @@ struct PreviewView: View {
         case excluded = "Left Alone"
         case duplicate = "Duplicates"
         case unknownDate = "Missing Date"
+        case damaged = "Damaged"
     }
 
     enum SortColumn: String { case source, destination, status }
@@ -87,6 +93,8 @@ struct PreviewView: View {
             result = result.filter { $0.destinationAbsPath.contains("/Duplicates/") }
         case .unknownDate:
             result = result.filter { $0.destinationAbsPath.contains("/Unknown Date/") }
+        case .damaged:
+            result = result.filter { Self.isDamaged($0) }
         }
 
         result.sort {
@@ -119,6 +127,14 @@ struct PreviewView: View {
         includedPlans.filter { $0.destinationAbsPath.contains("/Unknown Date/") }.count
     }
 
+    var damagedPlanCount: Int {
+        includedPlans.filter { Self.isDamaged($0) }.count
+    }
+
+    static func isDamaged(_ plan: OrganizationPlan) -> Bool {
+        plan.destinationAbsPath.contains("/\(MediaValidator.folderName)/")
+    }
+
     var destinationSummary: String {
         guard
             let session = nav.scanSession
@@ -144,6 +160,17 @@ struct PreviewView: View {
         }
         .onAppear { buildPlan() }
         .onDisappear { planTask?.cancel() }
+        .sheet(isPresented: $showLocationReview) {
+            if let session = nav.scanSession {
+                LocationReviewSheet(files: session.files) { changed in
+                    showLocationReview = false
+                    if changed {
+                        isPlanning = true
+                        buildPlan()
+                    }
+                }
+            }
+        }
         .alert(item: $exportFeedback) { item in
             if let revealURL = item.revealURL {
                 Alert(
@@ -190,72 +217,127 @@ struct PreviewView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    // MARK: - Plan toolbar pieces
+
+    private var planStats: some View {
+        HStack(spacing: 16) {
+            PlanStat(
+                icon: "checkmark.circle.fill",
+                value: "\(includedPlans.count)",
+                label: "ready",
+                color: .green
+            )
+            PlanStat(
+                icon: "minus.circle.fill",
+                value: "\(excludedPlans.count)",
+                label: "left alone",
+                color: .secondary
+            )
+            if duplicatePlanCount > 0 {
+                PlanStat(icon: "square.on.square.fill",
+                         value: "\(duplicatePlanCount)",
+                         label: "set aside",
+                         color: .orange)
+            }
+            if unknownDatePlanCount > 0 {
+                PlanStat(icon: "calendar.badge.exclamationmark",
+                         value: "\(unknownDatePlanCount)",
+                         label: "need dates",
+                         color: Color(red: 0.8, green: 0.65, blue: 0.0))
+            }
+            if damagedPlanCount > 0 {
+                PlanStat(icon: "exclamationmark.triangle.fill",
+                         value: "\(damagedPlanCount)",
+                         label: "damaged",
+                         color: .red)
+            }
+        }
+        .fixedSize()
+    }
+
+    private var filterPicker: some View {
+        Picker("Show", selection: $filterStatus) {
+            ForEach(FilterStatus.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+    }
+
+    private var searchField: some View {
+        TextField("Search photos…", text: $searchQuery)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    /// Places only matter when folder names use them.
+    private var locationMatters: Bool {
+        let config = nav.organizationConfig
+        return config.mode == .byLocation || (config.mode == .smartHybrid && config.useGPSLocation)
+    }
+
+    private var toolbarButtons: some View {
+        HStack(spacing: 6) {
+            if locationMatters && missingPlaceCount > 0 {
+                Button {
+                    showLocationReview = true
+                } label: {
+                    Label("\(missingPlaceCount) without place", systemImage: "mappin.slash")
+                }
+                .help("Suggest or add a place for photos and videos that have no location")
+            }
+
+            Button {
+                showFolderTree = true
+            } label: {
+                Image(systemName: "folder.fill.badge.questionmark")
+            }
+            .help("Preview folder structure")
+            .padding(.leading, 2)
+
+            Menu {
+                Button("Include Shown") { setDisplayedIncluded(true) }
+                Button("Exclude Shown") { setDisplayedIncluded(false) }
+                Divider()
+                Button("Save Detailed Report (.CSV)") { exportCSV() }
+            } label: {
+                Image(systemName: "checklist")
+            }
+            .help("More actions")
+        }
+        .padding(.leading, 8)
+        .fixedSize()
+    }
+
     // MARK: - Plan table
 
     var planTable: some View {
         VStack(spacing: 0) {
             // ── Toolbar ───────────────────────────────────────────────────
-            HStack(spacing: 0) {
-                // Stat summary — icon + number + label, no pill backgrounds
-                HStack(spacing: 16) {
-                    PlanStat(
-                        icon: "checkmark.circle.fill",
-                        value: "\(includedPlans.count)",
-                        label: "ready",
-                        color: .green
-                    )
-                    PlanStat(
-                        icon: "minus.circle.fill",
-                        value: "\(excludedPlans.count)",
-                        label: "left alone",
-                        color: .secondary
-                    )
-                    if duplicatePlanCount > 0 {
-                        PlanStat(icon: "square.on.square.fill",
-                                 value: "\(duplicatePlanCount)",
-                                 label: "set aside",
-                                 color: .orange)
+            // One row on wide windows. On narrower ones the filters move to a
+            // second row instead of sliding under the counts and the search field.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 0) {
+                    planStats
+                    Spacer(minLength: 16)
+                    filterPicker
+                    searchField
+                        .frame(width: 200)
+                        .padding(.leading, 12)
+                    toolbarButtons
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 0) {
+                        planStats
+                        Spacer(minLength: 16)
+                        toolbarButtons
                     }
-                    if unknownDatePlanCount > 0 {
-                        PlanStat(icon: "calendar.badge.exclamationmark",
-                                 value: "\(unknownDatePlanCount)",
-                                 label: "need dates",
-                                 color: Color(red: 0.8, green: 0.65, blue: 0.0))
+                    HStack(spacing: 12) {
+                        filterPicker
+                        searchField
+                            .frame(minWidth: 140, maxWidth: .infinity)
                     }
                 }
-
-                Spacer()
-
-                Picker("Show", selection: $filterStatus) {
-                    ForEach(FilterStatus.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 390)
-
-                TextField("Search photos…", text: $searchQuery)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-                    .padding(.leading, 12)
-
-                Button {
-                    showFolderTree = true
-                } label: {
-                    Image(systemName: "folder.fill.badge.questionmark")
-                }
-                .help("Preview folder structure")
-                .padding(.leading, 8)
-
-                Menu {
-                    Button("Include Shown") { setDisplayedIncluded(true) }
-                    Button("Exclude Shown") { setDisplayedIncluded(false) }
-                    Divider()
-                    Button("Save Detailed Report (.CSV)") { exportCSV() }
-                } label: {
-                    Image(systemName: "checklist")
-                }
-                .help("More actions")
-                .padding(.leading, 6)
-
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
@@ -297,7 +379,10 @@ struct PreviewView: View {
                     .width(min: 220, ideal: 340)
 
                     TableColumn("") { plan in
-                        if plan.destinationAbsPath.contains("/Duplicates/") {
+                        if Self.isDamaged(plan) {
+                            Label("Damaged", systemImage: "exclamationmark.triangle")
+                                .font(.caption2).foregroundStyle(.red)
+                        } else if plan.destinationAbsPath.contains("/Duplicates/") {
                             Label("Duplicate", systemImage: "square.on.square")
                                 .font(.caption2).foregroundStyle(.orange)
                         } else if plan.destinationAbsPath.contains("/Unknown Date/") {
@@ -411,6 +496,7 @@ struct PreviewView: View {
                 excludedCount: excludedPlans.count,
                 duplicateCount: duplicatePlanCount,
                 unknownDateCount: unknownDatePlanCount,
+                damagedCount: damagedPlanCount,
                 operation: nav.organizationConfig.fileOperation,
                 destinationPath: destinationSummary,
                 onCancel: { showingConfirmation = false },
@@ -523,6 +609,9 @@ struct PreviewView: View {
             try? context.save()
 
             plans = built
+            missingPlaceCount = session.files.filter {
+                !$0.hasGPS && !$0.isScreenshot && $0.damageReason == nil && $0.mediaKind != .archive
+            }.count
             isPlanning = false
         }
     }
@@ -573,6 +662,7 @@ struct ApplyPreflightSheet: View {
     let excludedCount: Int
     let duplicateCount: Int
     let unknownDateCount: Int
+    var damagedCount: Int = 0
     let operation: FileOperation
     let destinationPath: String
     let onCancel: () -> Void
@@ -620,7 +710,7 @@ struct ApplyPreflightSheet: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
-                if duplicateCount > 0 || unknownDateCount > 0 {
+                if duplicateCount > 0 || unknownDateCount > 0 || damagedCount > 0 {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Attention points")
                             .font(.subheadline)
@@ -632,6 +722,11 @@ struct ApplyPreflightSheet: View {
                         }
                         if unknownDateCount > 0 {
                             Text("• \(unknownDateCount) file(s) still have no confirmed date and will remain in Unknown Date.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if damagedCount > 0 {
+                            Text("• \(damagedCount) file(s) can't be opened and will be set aside in Needs Review/\(MediaValidator.folderName). Nothing is deleted.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1284,5 +1379,307 @@ struct FolderRowLabel: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
+    }
+}
+
+// MARK: ─── Places for files without GPS ───────────────────────────────────────
+
+/// Lets the person give a place to photos and videos that have none: accept
+/// places suggested from items taken around the same time, or type a place
+/// for whole days. Files are never changed — the place only shapes folders.
+struct LocationReviewSheet: View {
+    let files: [MediaFile]
+    let onDone: (_ changed: Bool) -> Void
+
+    @Environment(\.modelContext) private var context
+
+    private enum Tab: String, CaseIterable {
+        case suggested = "Suggested"
+        case manual = "Add Manually"
+    }
+
+    private struct DayGroup: Identifiable {
+        let id: String
+        let title: String
+        let fileIDs: [UUID]
+    }
+
+    private struct FoundPlace {
+        let name: String
+        let latitude: Double
+        let longitude: Double
+    }
+
+    @State private var tab: Tab = .suggested
+    @State private var suggestions: [LocationRecovery.Suggestion] = []
+    @State private var accepted: Set<UUID> = []
+    @State private var placeNames: [UUID: String] = [:]
+    @State private var geocoder = ReverseGeocoder()
+
+    @State private var days: [DayGroup] = []
+    @State private var selectedDays: Set<String> = []
+    @State private var placeQuery = ""
+    @State private var foundPlace: FoundPlace?
+    @State private var isSearching = false
+    @State private var searchError: String?
+
+    private var filesByID: [UUID: MediaFile] {
+        Dictionary(uniqueKeysWithValues: files.map { ($0.id, $0) })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Places for photos without location")
+                .font(.title2.weight(.bold))
+            Text("Foldiq uses places only for folder names. Your files are never changed.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            Picker("Mode", selection: $tab) {
+                ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            switch tab {
+            case .suggested: suggestedList
+            case .manual:    manualEntry
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { onDone(false) }
+                    .keyboardShortcut(.cancelAction)
+                Button(applyTitle) { apply() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canApply)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 560, minHeight: 480)
+        .onAppear(perform: prepare)
+    }
+
+    // MARK: Suggested
+
+    @ViewBuilder
+    private var suggestedList: some View {
+        if suggestions.isEmpty {
+            Text("No suggestions: none of these items was taken within two hours of a photo or video that has a location. You can still add a place by hand.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            HStack {
+                Text("Each place comes from the closest item in time that has one. Uncheck any that look wrong.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(accepted.count == suggestions.count ? "Select None" : "Select All") {
+                    accepted = accepted.count == suggestions.count ? [] : Set(suggestions.map(\.fileID))
+                }
+                .buttonStyle(.link)
+            }
+            List(suggestions) { suggestion in
+                Toggle(isOn: isAccepted(suggestion)) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(filesByID[suggestion.fileID]?.filename ?? "")
+                                .fontWeight(.medium)
+                            Text("Same place as \(suggestion.sourceFilename) · \(minutesText(suggestion.minutesApart))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(placeNames[suggestion.fileID] ?? "…")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .task { await loadPlaceName(for: suggestion) }
+            }
+        }
+    }
+
+    private func isAccepted(_ suggestion: LocationRecovery.Suggestion) -> Binding<Bool> {
+        Binding(
+            get: { accepted.contains(suggestion.fileID) },
+            set: { isOn in
+                if isOn { accepted.insert(suggestion.fileID) } else { accepted.remove(suggestion.fileID) }
+            }
+        )
+    }
+
+    private func minutesText(_ minutes: Int) -> String {
+        minutes < 1 ? "same minute" : (minutes == 1 ? "1 min apart" : "\(minutes) min apart")
+    }
+
+    private func loadPlaceName(for suggestion: LocationRecovery.Suggestion) async {
+        guard placeNames[suggestion.fileID] == nil else { return }
+        let place = await geocoder.geocode(latitude: suggestion.latitude, longitude: suggestion.longitude)
+        let parts = [place.city, place.state, place.country].compactMap { $0 }.prefix(2)
+        placeNames[suggestion.fileID] = parts.isEmpty ? "Unnamed place" : parts.joined(separator: ", ")
+    }
+
+    // MARK: Manual
+
+    @ViewBuilder
+    private var manualEntry: some View {
+        HStack {
+            TextField("Type a place, e.g. Lisbon, Portugal", text: $placeQuery)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(findPlace)
+            Button(isSearching ? "Finding…" : "Find", action: findPlace)
+                .disabled(isSearching || placeQuery.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        if let foundPlace {
+            Label(foundPlace.name, systemImage: "mappin.circle.fill")
+                .foregroundStyle(.green)
+        } else if let searchError {
+            Text(searchError)
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+
+        if days.isEmpty {
+            Text("Every item already has a place.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            Text("Choose the days this place applies to.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            List(days) { day in
+                Toggle(isOn: isSelected(day)) {
+                    HStack {
+                        Text(day.title)
+                        Spacer()
+                        Text(day.fileIDs.count == 1 ? "1 item" : "\(day.fileIDs.count) items")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+            }
+        }
+    }
+
+    private func isSelected(_ day: DayGroup) -> Binding<Bool> {
+        Binding(
+            get: { selectedDays.contains(day.id) },
+            set: { isOn in
+                if isOn { selectedDays.insert(day.id) } else { selectedDays.remove(day.id) }
+            }
+        )
+    }
+
+    private func findPlace() {
+        let query = placeQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, !isSearching else { return }
+        isSearching = true
+        searchError = nil
+        foundPlace = nil
+        Task {
+            do {
+                let placemarks = try await CLGeocoder().geocodeAddressString(query)
+                if let placemark = placemarks.first, let location = placemark.location {
+                    var parts: [String] = []
+                    for part in [placemark.locality ?? placemark.name, placemark.administrativeArea, placemark.country]
+                        .compactMap({ $0 }) where !parts.contains(part) {
+                        parts.append(part)
+                    }
+                    foundPlace = FoundPlace(
+                        name: parts.joined(separator: ", "),
+                        latitude: location.coordinate.latitude,
+                        longitude: location.coordinate.longitude
+                    )
+                } else {
+                    searchError = "No place found for “\(query)”. Try adding the country."
+                }
+            } catch {
+                searchError = "Couldn't look up “\(query)”. Check your internet connection and try again."
+            }
+            isSearching = false
+        }
+    }
+
+    // MARK: Apply
+
+    private var applyTitle: String {
+        switch tab {
+        case .suggested:
+            return accepted.count == 1 ? "Use 1 Place" : "Use \(accepted.count) Places"
+        case .manual:
+            let count = manualFileIDs.count
+            return count == 1 ? "Add Place to 1 Item" : "Add Place to \(count) Items"
+        }
+    }
+
+    private var manualFileIDs: [UUID] {
+        days.filter { selectedDays.contains($0.id) }.flatMap(\.fileIDs)
+    }
+
+    private var canApply: Bool {
+        switch tab {
+        case .suggested: return !accepted.isEmpty
+        case .manual:    return foundPlace != nil && !manualFileIDs.isEmpty
+        }
+    }
+
+    private func apply() {
+        let byID = filesByID
+        switch tab {
+        case .suggested:
+            for suggestion in suggestions where accepted.contains(suggestion.fileID) {
+                guard let file = byID[suggestion.fileID] else { continue }
+                file.latitude = suggestion.latitude
+                file.longitude = suggestion.longitude
+                file.locationNote = "Same place as \(suggestion.sourceFilename) (\(minutesText(suggestion.minutesApart)))"
+            }
+        case .manual:
+            guard let foundPlace else { return }
+            for id in manualFileIDs {
+                guard let file = byID[id] else { continue }
+                file.latitude = foundPlace.latitude
+                file.longitude = foundPlace.longitude
+                file.locationNote = "Added by you: \(foundPlace.name)"
+            }
+        }
+        try? context.save()
+        onDone(true)
+    }
+
+    // MARK: Setup
+
+    private func prepare() {
+        let points = LocationRecovery.points(from: files)
+        suggestions = LocationRecovery.suggestions(missing: points.missing, known: points.known)
+            .sorted { lhs, rhs in
+                let lhsDate = filesByID[lhs.fileID]?.bestDate ?? .distantPast
+                let rhsDate = filesByID[rhs.fileID]?.bestDate ?? .distantPast
+                return lhsDate < rhsDate
+            }
+        accepted = Set(suggestions.map(\.fileID))
+        if suggestions.isEmpty { tab = .manual }
+
+        // Items still without a place, grouped by the day they were taken.
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        formatter.timeStyle = .none
+        var groups: [String: (date: Date?, ids: [UUID])] = [:]
+        for file in files where !file.hasGPS && !file.isScreenshot && file.damageReason == nil && file.mediaKind != .archive {
+            let date = file.bestDate
+            let key = date.map { DateFileNaming.stem(for: Calendar.current.startOfDay(for: $0)) } ?? "no-date"
+            groups[key, default: (date.map { Calendar.current.startOfDay(for: $0) }, [])].ids.append(file.id)
+        }
+        days = groups
+            .sorted { ($0.value.date ?? .distantFuture) < ($1.value.date ?? .distantFuture) }
+            .map { key, value in
+                DayGroup(
+                    id: key,
+                    title: value.date.map { formatter.string(from: $0) } ?? "No date",
+                    fileIDs: value.ids
+                )
+            }
     }
 }

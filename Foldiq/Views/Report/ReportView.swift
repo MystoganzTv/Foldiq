@@ -20,6 +20,10 @@ struct ReportView: View {
     @State private var undoProgress = FileMover.ApplyProgress(done: 0, total: 1, currentFile: "", errors: [])
     @State private var showUndoConfirm = false
     @State private var exportFeedback: FeedbackMessage?
+    /// The review invitation lives at the bottom of the report on purpose: by the
+    /// time it is on screen the person has scrolled past Undo and chosen not to
+    /// use it, which is the first moment they have actually trusted the result.
+    @State private var showRatingInvite = false
 
     // Post-org stats
     @State private var orgStats: OrgStats = OrgStats()
@@ -102,7 +106,10 @@ struct ReportView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: isUndoing)
         .animation(.easeInOut(duration: 0.3), value: undoComplete)
-        .onAppear { loadData() }
+        .onAppear {
+            loadData()
+            showRatingInvite = AppDistribution.isAppStore && ManualRatingInvitePolicy.shouldShowInvite()
+        }
         .alert(item: $exportFeedback) { item in
             if let revealURL = item.revealURL {
                 Alert(
@@ -328,7 +335,7 @@ struct ReportView: View {
                 }
 
                 // ── Undo section ───────────────────────────────────────────
-                if let manifest = manifests.first, !manifest.wasUndone {
+                if !UndoManifest.pendingUndoOrder(manifests).isEmpty {
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Undo Organization", systemImage: "arrow.uturn.backward.circle")
@@ -389,6 +396,12 @@ struct ReportView: View {
                             }
                         }
                     }
+                }
+
+                // ── Review invitation ──────────────────────────────────────
+                if showRatingInvite, errors.isEmpty, !done.isEmpty {
+                    Divider()
+                    RatingInviteCard { showRatingInvite = false }
                 }
 
                 // ── Start over ─────────────────────────────────────────────
@@ -571,24 +584,33 @@ struct ReportView: View {
     }
 
     private func performUndo() {
-        guard let manifest = manifests.first else { return }
+        // Every run of this session — the first Apply and any "Retry Failed
+        // Files" — newest first. Undoing only one of them used to leave the
+        // other run's files organized, and its record was then thrown away.
+        let pending = UndoManifest.pendingUndoOrder(manifests)
+        guard !pending.isEmpty else { return }
         guard let session = nav.scanSession else { return }
         let outputRoot = nav.organizationConfig.outputRoot(forSelectedRoot: session.rootURL)
-        manifest.stateRaw = "undoing"
+        for manifest in pending { manifest.stateRaw = "undoing" }
         try? context.save()
         isUndoing = true
         let startedAt = Date()
         Task {
-            let result = await mover.undo(
-                manifest: manifest,
-                outputRoot: outputRoot,
-                checkpoint: { try context.save() }
-            ) { p in
-                self.undoProgress = p
+            var result = FileMover.UndoResult(restored: 0, errors: [])
+            for manifest in pending {
+                let partial = await mover.undo(
+                    manifest: manifest,
+                    outputRoot: outputRoot,
+                    checkpoint: { try context.save() }
+                ) { p in
+                    self.undoProgress = p
+                }
+                try? context.save()
+                manifest.stateRaw = partial.errors.isEmpty ? "undone" : "needsAttention"
+                try? context.save()
+                result.restored += partial.restored
+                result.errors += partial.errors
             }
-            try? context.save()
-            manifest.stateRaw = result.errors.isEmpty ? "undone" : "needsAttention"
-            try? context.save()
             isUndoing    = false
             undoRestoredCount = result.restored
             undoComplete = result.errors.isEmpty

@@ -23,7 +23,7 @@ struct ScanView: View {
     var body: some View {
         VStack(spacing: 0) {
             if coordinator.phase == .done, let session = nav.scanSession {
-                ScanResultsPanel(session: session)
+                ScanResultsPanel(session: session, takeoutDatesRecovered: coordinator.takeoutDatesRecovered)
                     .transition(.opacity)
             } else {
                 ScanProgressPanel(
@@ -219,7 +219,10 @@ struct ScanProgressPanel: View {
 
 struct ScanResultsPanel: View {
     let session: ScanSession
+    var takeoutDatesRecovered: Int = 0
     @EnvironmentObject private var nav: AppNavigator
+
+    private var duplicateBytes: Int64 { DuplicateSpace.reclaimableBytes(in: session.files) }
 
     @State private var drillCategory: FileCategory?
 
@@ -263,6 +266,31 @@ struct ScanResultsPanel: View {
                 TappableStatCard(icon: "doc.on.doc",           label: "Total Files",      value: session.totalFiles,             color: .green)  { drillCategory = .allFiles }
             }
             .padding(.horizontal, 40)
+
+            if duplicateBytes > 0 || takeoutDatesRecovered > 0 {
+                VStack(alignment: .leading, spacing: 8) {
+                    if duplicateBytes > 0 {
+                        Label {
+                            Text("**\(DuplicateSpace.formatted(duplicateBytes))** in duplicate copies. Foldiq sets them aside in Duplicates/ — delete that folder once you've checked it to get the space back.")
+                        } icon: {
+                            Image(systemName: "externaldrive.badge.minus").foregroundStyle(.orange)
+                        }
+                    }
+                    if takeoutDatesRecovered > 0 {
+                        Label {
+                            Text("**\(takeoutDatesRecovered.formatted())** capture dates recovered from Google Takeout .json files.")
+                        } icon: {
+                            Image(systemName: "calendar.badge.checkmark").foregroundStyle(.green)
+                        }
+                    }
+                }
+                .font(.callout)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 40)
+                .padding(.top, 16)
+            }
 
             Spacer()
 

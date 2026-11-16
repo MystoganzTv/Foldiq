@@ -274,29 +274,184 @@ final class OrganizationPlannerTests: XCTestCase {
         XCTAssertEqual(plans[0].status, .skipped)
     }
 
-    func testReviewPromptRequiresASuccessfulOrganizationAndOnlyRequestsOnce() {
+    // MARK: - Review prompt policy
+
+    func testReviewPromptIgnoresRunsThatOrganizedNothing() {
+        withCleanDefaults { defaults in
+            XCTAssertFalse(
+                AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                    successfulItemCount: 0,
+                    defaults: defaults
+                )
+            )
+        }
+    }
+
+    func testReviewPromptWaitsForASecondSuccessfulOrganization() {
+        withCleanDefaults { defaults in
+            let day0 = Date(timeIntervalSince1970: 1_700_000_000)
+
+            // The very first run is the worst possible moment to ask: the person
+            // has just moved thousands of files and has not checked them yet.
+            XCTAssertFalse(
+                AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                    successfulItemCount: 400,
+                    defaults: defaults,
+                    now: day0
+                )
+            )
+            XCTAssertTrue(
+                AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                    successfulItemCount: 400,
+                    defaults: defaults,
+                    now: day0.addingTimeInterval(86_400)
+                )
+            )
+        }
+    }
+
+    func testReviewPromptIgnoresTinyTrialRuns() {
+        withCleanDefaults { defaults in
+            let day0 = Date(timeIntervalSince1970: 1_700_000_000)
+
+            // Two runs, but only three files total — nothing was proven yet.
+            for offset in 0..<2 {
+                XCTAssertFalse(
+                    AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                        successfulItemCount: 3,
+                        defaults: defaults,
+                        now: day0.addingTimeInterval(Double(offset) * 86_400)
+                    )
+                )
+            }
+        }
+    }
+
+    func testReviewPromptSpacesAttemptsAndKeepsThreePerYear() {
+        withCleanDefaults { defaults in
+            let day0 = Date(timeIntervalSince1970: 1_700_000_000)
+            func run(onDay day: Double) -> Bool {
+                AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                    successfulItemCount: 100,
+                    defaults: defaults,
+                    now: day0.addingTimeInterval(day * 86_400)
+                )
+            }
+
+            XCTAssertFalse(run(onDay: 0))    // first success, not eligible yet
+            XCTAssertTrue(run(onDay: 1))     // attempt 1
+            XCTAssertFalse(run(onDay: 10))   // too soon after attempt 1
+            XCTAssertTrue(run(onDay: 50))    // attempt 2
+            XCTAssertTrue(run(onDay: 120))   // attempt 3
+            XCTAssertFalse(run(onDay: 200))  // yearly budget spent
+            XCTAssertTrue(run(onDay: 380))   // attempt 1 has aged out of the year
+        }
+    }
+
+    /// The bug this policy was written to fix: `requestReview()` can be silently
+    /// refused by StoreKit, and the old code treated that as "already asked",
+    /// permanently. Anyone carrying the old flag gets their chances back.
+    func testLegacySingleRequestFlagBecomesOneSpentAttemptRatherThanASilentBan() {
+        withCleanDefaults { defaults in
+            defaults.set(true, forKey: "hasRequestedReviewAfterSuccessfulOrganization")
+            let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+            XCTAssertTrue(
+                AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                    successfulItemCount: 300,
+                    defaults: defaults,
+                    now: now
+                )
+            )
+            XCTAssertNil(defaults.object(forKey: "hasRequestedReviewAfterSuccessfulOrganization"))
+        }
+    }
+
+    func testManualInviteStaysQuietWhileApplesOwnDialogIsStillFresh() {
+        withCleanDefaults { defaults in
+            let day0 = Date(timeIntervalSince1970: 1_700_000_000)
+            _ = AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                successfulItemCount: 300, defaults: defaults, now: day0
+            )
+            XCTAssertTrue(
+                AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                    successfulItemCount: 300,
+                    defaults: defaults,
+                    now: day0.addingTimeInterval(86_400)
+                )
+            )
+
+            // StoreKit was just asked — do not stack a second ask on top of it.
+            XCTAssertFalse(
+                ManualRatingInvitePolicy.shouldShowInvite(
+                    defaults: defaults,
+                    now: day0.addingTimeInterval(2 * 86_400)
+                )
+            )
+            XCTAssertTrue(
+                ManualRatingInvitePolicy.shouldShowInvite(
+                    defaults: defaults,
+                    now: day0.addingTimeInterval(20 * 86_400)
+                )
+            )
+        }
+    }
+
+    func testManualInviteTreatsNotNowAsNotNowAndNotNever() {
+        withCleanDefaults { defaults in
+            let day0 = Date(timeIntervalSince1970: 1_700_000_000)
+            _ = AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                successfulItemCount: 300, defaults: defaults, now: day0
+            )
+
+            let afterTheDialogCoolsOff = day0.addingTimeInterval(30 * 86_400)
+            XCTAssertTrue(ManualRatingInvitePolicy.shouldShowInvite(defaults: defaults, now: afterTheDialogCoolsOff))
+
+            ManualRatingInvitePolicy.recordDismissal(defaults: defaults, now: afterTheDialogCoolsOff)
+            XCTAssertFalse(
+                ManualRatingInvitePolicy.shouldShowInvite(
+                    defaults: defaults,
+                    now: afterTheDialogCoolsOff.addingTimeInterval(10 * 86_400)
+                )
+            )
+            XCTAssertTrue(
+                ManualRatingInvitePolicy.shouldShowInvite(
+                    defaults: defaults,
+                    now: afterTheDialogCoolsOff.addingTimeInterval(61 * 86_400)
+                )
+            )
+        }
+    }
+
+    func testManualInviteStopsOnceSomeoneOpensTheReviewComposer() {
+        withCleanDefaults { defaults in
+            let day0 = Date(timeIntervalSince1970: 1_700_000_000)
+            _ = AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
+                successfulItemCount: 300, defaults: defaults, now: day0
+            )
+
+            ManualRatingInvitePolicy.recordReviewComposerOpened(defaults: defaults)
+            XCTAssertFalse(
+                ManualRatingInvitePolicy.shouldShowInvite(
+                    defaults: defaults,
+                    now: day0.addingTimeInterval(400 * 86_400)
+                )
+            )
+        }
+    }
+
+    func testWriteReviewLinkOpensTheReviewComposerDirectly() {
+        XCTAssertEqual(
+            AppStoreLinks.writeReview.absoluteString,
+            "https://apps.apple.com/app/id6772513569?action=write-review"
+        )
+    }
+
+    private func withCleanDefaults(_ body: (UserDefaults) -> Void) {
         let suiteName = "AppReviewPromptPolicyTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        XCTAssertFalse(
-            AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
-                successfulItemCount: 0,
-                defaults: defaults
-            )
-        )
-        XCTAssertTrue(
-            AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
-                successfulItemCount: 12,
-                defaults: defaults
-            )
-        )
-        XCTAssertFalse(
-            AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
-                successfulItemCount: 4,
-                defaults: defaults
-            )
-        )
+        body(defaults)
     }
 }
 
@@ -344,4 +499,12 @@ private func isoDate(_ value: String) -> Date {
     formatter.timeZone = TimeZone(secondsFromGMT: 0)
     formatter.dateFormat = "yyyy-MM-dd"
     return formatter.date(from: value)!
+
+    func testWebUpdateComparesVersionsNumerically() {
+        XCTAssertTrue(WebUpdateChecker.isNewer("2.0", than: "1.0.22"))
+        XCTAssertTrue(WebUpdateChecker.isNewer("1.0.10", than: "1.0.9"))
+        XCTAssertFalse(WebUpdateChecker.isNewer("1.0.22", than: "1.0.22"))
+        XCTAssertFalse(WebUpdateChecker.isNewer("1.0", than: "1.0.0"))
+        XCTAssertFalse(WebUpdateChecker.isNewer("1.0.9", than: "1.0.10"))
+    }
 }

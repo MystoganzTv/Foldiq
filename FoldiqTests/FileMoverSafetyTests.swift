@@ -1,4 +1,5 @@
 import XCTest
+import SwiftData
 @testable import Foldiq
 
 final class FileMoverSafetyTests: XCTestCase {
@@ -182,5 +183,71 @@ final class FileMoverSafetyTests: XCTestCase {
         )
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: organized.path))
+    }
+
+    // MARK: Retry runs and leftover files
+
+    func testUndoReversesEveryRunOfTheSessionNewestFirst() {
+        let session = UUID()
+        let first = UndoManifest(sessionID: session, rootPath: "/Photos", operation: .move)
+        first.createdAt = Date(timeIntervalSince1970: 1_000)
+        let retry = UndoManifest(sessionID: session, rootPath: "/Photos", operation: .move)
+        retry.createdAt = Date(timeIntervalSince1970: 2_000)
+        let alreadyUndone = UndoManifest(sessionID: session, rootPath: "/Photos", operation: .move)
+        alreadyUndone.createdAt = Date(timeIntervalSince1970: 3_000)
+        alreadyUndone.wasUndone = true
+
+        let order = UndoManifest.pendingUndoOrder([first, alreadyUndone, retry])
+        XCTAssertEqual(order.map(\.id), [retry.id, first.id])
+    }
+
+    @MainActor
+    func testLeftoverFilesSetAsideAreRecordedSoUndoPutsThemBack() async throws {
+        let schema = Schema([MediaFile.self, ScanSession.self, OrganizationPlan.self, UndoManifest.self, UndoEntry.self])
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+        let context = ModelContext(container)
+
+        let output = try temporaryDirectory().appendingPathComponent("Organized Media", isDirectory: true)
+        let planned = output.appendingPathComponent("2024/2024-08 August/photo.jpg")
+        let leftover = output.appendingPathComponent("Old Folder/leftover.jpg")
+        for url in [planned, leftover] {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(url.lastPathComponent.utf8).write(to: url)
+        }
+
+        let manifest = UndoManifest(sessionID: UUID(), rootPath: output.path, operation: .move)
+        context.insert(manifest)
+        try context.save()
+
+        let result = await FileMover().shelveResidualFilesForReview(
+            under: [output],
+            expectedDestinationPaths: [planned.path],
+            outputFolderName: "Organized Media",
+            reviewFolderName: "Needs Review",
+            manifest: manifest,
+            checkpoint: { try context.save() }
+        )
+
+        let shelved = output.appendingPathComponent("Needs Review/Old Folder/leftover.jpg")
+        XCTAssertEqual(result.moved, 1)
+        XCTAssertTrue(result.errors.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: shelved.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: planned.path))
+
+        let entry = try XCTUnwrap(manifest.entries.first)
+        XCTAssertEqual(manifest.entries.count, 1)
+        XCTAssertTrue(entry.wasCompleted)
+        XCTAssertEqual(entry.newPath, shelved.path)
+
+        try FileMover.undoEntry(
+            organizedURL: shelved,
+            originalURL: leftover,
+            operation: entry.operation,
+            isFromArchive: entry.isFromArchive,
+            expectedHash: entry.contentHash,
+            outputRoot: output
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: leftover.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: shelved.path))
     }
 }

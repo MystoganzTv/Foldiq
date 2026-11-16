@@ -17,6 +17,8 @@ final class ScanCoordinator: ObservableObject {
     @Published var phaseItemCount = 0
     @Published var currentFile    = ""
     @Published var errorMessage: String?
+    /// Capture dates recovered from Google Takeout .json files in the last scan.
+    @Published var takeoutDatesRecovered = 0
 
     enum Phase: String {
         case idle        = "Ready"
@@ -61,6 +63,7 @@ final class ScanCoordinator: ObservableObject {
                     includeVideos: config.includeVideos,
                     includeArchives: config.includeArchives,
                     excludedFolderNames: [config.outputFolderName],
+                    photosScope: config.photosScope,
                     onProgress: { [weak self] p in
                         self?.currentFile = p.currentPath
                     },
@@ -117,6 +120,8 @@ final class ScanCoordinator: ObservableObject {
         phase = .extracting
         processedCount = 0
         phaseItemCount = discovered.count
+        takeoutDatesRecovered = 0
+        let takeoutSidecars = TakeoutSidecarIndex.build(for: discovered)
 
         for (idx, disc) in discovered.enumerated() {
             // Honour cancellation every 25 files
@@ -131,9 +136,31 @@ final class ScanCoordinator: ObservableObject {
             processedCount = idx + 1
             currentFile    = disc.filename
 
-            let meta = await Task.detached(priority: .utility) {
-                await MetadataExtractor().extract(from: disc.url, kind: disc.kind)
+            let checked = await Task.detached(priority: .utility) {
+                let meta = await MetadataExtractor().extract(from: disc.url, kind: disc.kind)
+                let problem = await MediaValidator.problem(at: disc.url, kind: disc.kind, fileSize: disc.fileSize)
+                return (meta: meta, problem: problem)
             }.value
+            var meta = checked.meta
+
+            // Google Photos exports keep the real capture time in a .json file
+            // next to the photo. Use it when the file itself has no embedded date.
+            if disc.kind != .archive, !takeoutSidecars.isEmpty,
+               !meta.hasEmbeddedDate || meta.latitude == nil,
+               let sidecar = takeoutSidecars.lookup(mediaURL: disc.url, tempDirectory: disc.tempDirectoryURL),
+               meta.apply(sidecar) {
+                takeoutDatesRecovered += 1
+            }
+
+            // Photos knows when and where every item was taken, even when the
+            // file carries no date of its own. Embedded camera dates still win.
+            if disc.photosCaptureDate != nil || disc.photosLatitude != nil {
+                meta.apply(TakeoutSidecar(
+                    date: disc.photosCaptureDate,
+                    latitude: disc.photosLatitude,
+                    longitude: disc.photosLongitude
+                ))
+            }
 
             let file = MediaFile(
                 filePath:  disc.filePath,
@@ -155,6 +182,7 @@ final class ScanCoordinator: ObservableObject {
             file.longitude        = meta.longitude
             file.isScreenshot     = disc.isScreenshot
             file.archiveSourcePath = disc.archiveSourceURL?.path   // NEW
+            file.damageReason     = checked.problem
             file.session          = session
 
             context.insert(file)
@@ -194,7 +222,9 @@ final class ScanCoordinator: ObservableObject {
         }
 
         // 6. Update session stats
-        let archiveSourcePaths = Set(discovered.compactMap { $0.archiveSourceURL?.path })
+        let archiveSourcePaths = Set(discovered.compactMap { $0.archiveSourceURL }
+            .filter { !PhotosLibrarySupport.isPhotosLibrary($0) }
+            .map(\.path))
         session.photoCount             = allFiles.filter { $0.mediaKind == .photo }.count
         session.videoCount             = allFiles.filter { $0.mediaKind == .video }.count
         session.duplicateCount         = allFiles.filter { $0.isDuplicate }.count

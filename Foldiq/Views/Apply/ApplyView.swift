@@ -259,18 +259,32 @@ struct ApplyView: View {
                 itemCount: plans.count
             )
             if completedWithoutErrors && nav.organizationConfig.fileOperation == .move {
-                reviewShelvedFiles = await mover.shelveResidualFilesForReview(
+                let shelved = await mover.shelveResidualFilesForReview(
                     under: nav.selectedFolderURLs,
                     expectedDestinationPaths: Set(plans.map(\.destinationAbsPath)),
                     outputFolderName: nav.organizationConfig.outputFolderName,
-                    reviewFolderName: nav.organizationConfig.reviewFolderName
+                    reviewFolderName: nav.organizationConfig.reviewFolderName,
+                    manifest: m,
+                    checkpoint: { try context.save() }
                 )
+                reviewShelvedFiles = shelved.moved
+                if !shelved.errors.isEmpty {
+                    progress.errors += shelved.errors
+                }
+                m.stateRaw = m.entries.contains(where: { !$0.wasCompleted })
+                    ? "needsAttention"
+                    : "complete"
+                try? context.save()
                 cleanedEmptyFolders = await mover.removeEmptyFolders(
                     under: nav.selectedFolderURLs,
                     skipping: nav.organizationConfig.outputFolderName
                 )
             }
-            let shouldRequestReview = completedWithoutErrors &&
+            // Deliberately looser than `completedWithoutErrors`: a run where the
+            // person excluded a few duplicates still moved every file it promised
+            // to move, and used to be disqualified from ever asking for a review.
+            let nothingWentWrong = progress.errors.isEmpty && !m.entries.isEmpty
+            let shouldRequestReview = nothingWentWrong && AppDistribution.isAppStore &&
                 AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
                     successfulItemCount: m.entries.count
                 )

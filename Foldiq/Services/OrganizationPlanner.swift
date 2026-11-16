@@ -40,6 +40,9 @@ actor OrganizationPlanner {
         // Track reserved destination paths to handle filename collisions.
         var reservedPaths = Set<String>()
 
+        // Optional "Rename files by capture date". Files left out keep their name.
+        let renamedFiles = DateFileNaming.plannedNames(for: files, config: config)
+
         for (idx, file) in files.enumerated() {
             // Cooperative cancellation — checked every batch so the UI stays responsive.
             if Task.isCancelled { return plans }
@@ -57,7 +60,7 @@ actor OrganizationPlanner {
             )
 
             // Resolve collision-safe filename
-            var destURL = folder.appendingPathComponent(file.filename)
+            var destURL = folder.appendingPathComponent(renamedFiles[file.id] ?? file.filename)
             destURL = resolveCollision(destURL, reserved: &reservedPaths)
             reservedPaths.insert(destURL.path)
 
@@ -66,12 +69,18 @@ actor OrganizationPlanner {
             // @Model from here causes EXC_BAD_ACCESS. The caller applies the update
             // on @MainActor after receiving the plans.
 
+            // Never move a file out of an Apple Photos library — that would
+            // break the library. Those files are always copied.
+            let operation: FileOperation = PhotosLibrarySupport.isInsidePhotosLibrary(file.filePath)
+                ? .copy
+                : config.fileOperation
+
             let plan = OrganizationPlan(
                 sessionID: session.id,
                 mediaFileID: file.id,
                 source: file.filePath,
                 destination: destURL.path,
-                op: config.fileOperation
+                op: operation
             )
             plan.archiveSourcePath = file.archiveSourcePath
             if file.isUserExcluded {
@@ -96,6 +105,14 @@ actor OrganizationPlanner {
             return outputRoot
                 .appendingPathComponent("Duplicates")
                 .appendingPathComponent("To Review")
+        }
+
+        // Files that can't be opened get their own review folder in every mode,
+        // so they never hide among good photos.
+        if file.damageReason != nil {
+            return outputRoot
+                .appendingPathComponent(config.reviewFolderName)
+                .appendingPathComponent(MediaValidator.folderName)
         }
 
         if config.mode == .byLocation {

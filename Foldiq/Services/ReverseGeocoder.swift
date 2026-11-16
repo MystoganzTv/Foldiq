@@ -108,3 +108,112 @@ extension String {
         return components(separatedBy: illegal).joined(separator: "_")
     }
 }
+
+// MARK: ─── Location recovery ──────────────────────────────────────────────────
+
+/// Suggests a place for photos and videos without GPS, taken from the closest
+/// item in time that has one — typically a camera without GPS used alongside
+/// a phone. Nothing is applied on its own: the person reviews every suggestion,
+/// and files are never changed (the place only shapes folder names).
+enum LocationRecovery {
+    struct Point: Sendable {
+        let id: UUID
+        let date: Date
+        let filename: String
+        let camera: String?
+        let latitude: Double?
+        let longitude: Double?
+    }
+
+    struct Suggestion: Identifiable, Sendable, Equatable {
+        let fileID: UUID
+        let latitude: Double
+        let longitude: Double
+        let sourceFilename: String
+        let minutesApart: Int
+        var id: UUID { fileID }
+    }
+
+    /// How far apart in time two items can be and still share a place.
+    static let window: TimeInterval = 2 * 60 * 60
+    /// When the closest items before and after are this far apart, the person
+    /// was on the move, and only a very close match in time is trusted.
+    static let travellingDistance: CLLocationDistance = 25_000
+    static let closeEnoughWhileTravelling: TimeInterval = 20 * 60
+
+    static func suggestions(missing: [Point], known: [Point]) -> [Suggestion] {
+        let located = known
+            .filter { $0.latitude != nil && $0.longitude != nil }
+            .sorted { $0.date < $1.date }
+        guard !located.isEmpty else { return [] }
+        let dates = located.map(\.date)
+
+        return missing.compactMap { item -> Suggestion? in
+            // The first located item taken at or after this one.
+            var low = 0
+            var high = dates.count
+            while low < high {
+                let middle = (low + high) / 2
+                if dates[middle] < item.date { low = middle + 1 } else { high = middle }
+            }
+            let before = low > 0 ? located[low - 1] : nil
+            let after = low < located.count ? located[low] : nil
+
+            let candidates = [before, after]
+                .compactMap { $0 }
+                .filter { abs($0.date.timeIntervalSince(item.date)) <= window }
+            guard let best = candidates.min(by: { lhs, rhs in
+                let lhsGap = abs(lhs.date.timeIntervalSince(item.date))
+                let rhsGap = abs(rhs.date.timeIntervalSince(item.date))
+                if lhsGap != rhsGap { return lhsGap < rhsGap }
+                return lhs.camera == item.camera && rhs.camera != item.camera
+            }) else { return nil }
+
+            let gap = abs(best.date.timeIntervalSince(item.date))
+            if candidates.count == 2, let before, let after,
+               distance(before, after) > travellingDistance,
+               gap > closeEnoughWhileTravelling {
+                return nil
+            }
+
+            return Suggestion(
+                fileID: item.id,
+                latitude: best.latitude ?? 0,
+                longitude: best.longitude ?? 0,
+                sourceFilename: best.filename,
+                minutesApart: Int((gap / 60).rounded())
+            )
+        }
+    }
+
+    /// Photos and videos with a date and no GPS that are worth a place
+    /// (screenshots and damaged files aren't), and the items that have one.
+    static func points(from files: [MediaFile]) -> (missing: [Point], known: [Point]) {
+        var missing: [Point] = []
+        var known: [Point] = []
+        for file in files where file.mediaKind != .archive && file.damageReason == nil {
+            guard let date = file.bestDate else { continue }
+            let point = Point(
+                id: file.id,
+                date: date,
+                filename: file.filename,
+                camera: file.cameraModel,
+                latitude: file.latitude,
+                longitude: file.longitude
+            )
+            if file.hasGPS {
+                known.append(point)
+            } else if !file.isScreenshot {
+                missing.append(point)
+            }
+        }
+        return (missing, known)
+    }
+
+    private static func distance(_ first: Point, _ second: Point) -> CLLocationDistance {
+        guard let lat1 = first.latitude, let lon1 = first.longitude,
+              let lat2 = second.latitude, let lon2 = second.longitude else { return 0 }
+        return CLLocation(latitude: lat1, longitude: lon1)
+            .distance(from: CLLocation(latitude: lat2, longitude: lon2))
+    }
+}
