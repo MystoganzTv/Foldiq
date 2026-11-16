@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 
-export const EVENT_NAMES = new Set(['scan_completed', 'apply_completed', 'undo_completed']);
+export const EVENT_NAMES = new Set(['scan_completed', 'apply_completed', 'undo_completed', 'app_crashed']);
+// Crash pings are counted on their own, never as failed operations.
+export const CRASH_EVENT = 'app_crashed';
 export const PLATFORMS = new Set(['ios', 'macos', 'windows']);
 export const DURATION_BUCKETS = new Set(['under_30s', '30s_2m', '2m_5m', '5m_15m', 'over_15m']);
 export const ITEM_BUCKETS = new Set(['0', '1_49', '50_199', '200_999', '1000_4999', '5000_plus']);
@@ -36,11 +38,17 @@ export function normalizeTelemetry(body, hashSalt = process.env.TELEMETRY_HASH_S
 }
 
 export function aggregateTelemetry(rows = []) {
-  const result = { events: rows.length, activeInstalls: 0, successRate: null, byPlatform: {}, byEvent: {} };
+  const result = { events: 0, activeInstalls: 0, successRate: null, byPlatform: {}, byEvent: {}, crashes: { total: 0, byPlatform: {} } };
   const installs = new Set();
   let successes = 0;
   for (const row of rows) {
     installs.add(row.install_hash);
+    if (row.event_name === CRASH_EVENT) {
+      result.crashes.total++;
+      result.crashes.byPlatform[row.platform] = (result.crashes.byPlatform[row.platform] || 0) + 1;
+      continue;
+    }
+    result.events++;
     if (row.success) successes++;
     result.byPlatform[row.platform] = (result.byPlatform[row.platform] || 0) + 1;
     const current = result.byEvent[row.event_name] || { total: 0, successful: 0 };
@@ -49,6 +57,6 @@ export function aggregateTelemetry(rows = []) {
     result.byEvent[row.event_name] = current;
   }
   result.activeInstalls = installs.size;
-  result.successRate = rows.length ? Math.round((successes / rows.length) * 1000) / 10 : null;
+  result.successRate = result.events ? Math.round((successes / result.events) * 1000) / 10 : null;
   return result;
 }

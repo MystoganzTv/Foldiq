@@ -12,6 +12,7 @@ const geocoder = require('./services/geocoder');
 const preferences = require('./services/preferences');
 const rating = require('./services/rating');
 const telemetry = require('./services/telemetry');
+const crashReporter = require('./services/crash-reporter');
 
 let mainWindow;
 let activeManifestPaths = [];
@@ -43,6 +44,76 @@ function locationCachePath() {
 
 function telemetryIdPath() {
   return path.join(app.getPath('userData'), 'anonymous-install-id');
+}
+
+function crashLogPath() {
+  return path.join(app.getPath('userData'), 'logs', 'crashes.jsonl');
+}
+
+function readDiagnosticLogs() {
+  let logContent = '';
+  try { logContent = require('fs').readFileSync(diagnosticsPath(), 'utf8'); } catch {}
+  const crashes = crashReporter.readCrashLog(crashLogPath());
+  return crashes ? `${logContent}\n${crashes}` : logContent;
+}
+
+let rendererReloads = [];
+
+// Installed before anything else can throw, so even a crash during startup is logged.
+crashReporter.install({
+  app,
+  logPath: crashLogPath(),
+  appVersion: app.getVersion(),
+  sendAnonymousCrash: uptimeMs => {
+    let enabled = false;
+    try { enabled = preferences.readPreferences(preferencesPath()).shareAnonymousUsageData; } catch {}
+    return telemetry.sendCrash({ enabled, idPath: telemetryIdPath(), appVersion: app.getVersion(), uptimeMs });
+  },
+  onRendererGone: webContents => {
+    // The window went blank: reload it instead of leaving the user on an empty screen.
+    // At most 3 reloads a minute, so a page that crashes on load can't loop forever.
+    const now = Date.now();
+    rendererReloads = rendererReloads.filter(at => now - at < 60000);
+    if (rendererReloads.length >= 3) return;
+    rendererReloads.push(now);
+    if (mainWindow && !mainWindow.isDestroyed() && webContents === mainWindow.webContents) {
+      if (isDev) mainWindow.loadURL('http://localhost:5173');
+      else mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+      offerCrashDiagnostics();
+    }
+  },
+  // Same behaviour as Electron's default handler (the app keeps running), but with
+  // a message a customer can act on instead of a raw stack trace.
+  onMainError: () => offerCrashDiagnostics(),
+});
+
+let crashPromptOpen = false;
+
+// Tells the user something went wrong and offers to open the support form with the
+// (path-free) diagnostics filled in. Nothing is sent unless they submit that form.
+function offerCrashDiagnostics() {
+  if (crashPromptOpen || !app.isReady()) return;
+  crashPromptOpen = true;
+  const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+  const options = {
+    type: 'warning',
+    title: 'Foldiq',
+    message: 'Foldiq ran into a problem',
+    detail: 'Something went wrong inside Foldiq.\n\n'
+      + 'You can send a diagnostic report so we can fix it. It contains no photos, file names or folder paths.',
+    buttons: ['Send diagnostics', 'Close'],
+    defaultId: 0,
+    cancelId: 1,
+  };
+  const shown = window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options);
+  shown
+    .then(async ({ response }) => {
+      if (response !== 0) return;
+      const logContent = readDiagnosticLogs();
+      await shell.openExternal(buildSupportWebURL({ logContent, appVersion: app.getVersion() }));
+    })
+    .catch(() => {})
+    .finally(() => { crashPromptOpen = false; });
 }
 
 function recordAnonymousOperation(eventName, startedAt, itemCount, success) {
@@ -369,8 +440,7 @@ ipcMain.handle('rating:openReviewForm', async () => {
 });
 
 ipcMain.handle('support:openDiagnosticsForm', async () => {
-  let logContent = '';
-  try { logContent = require('fs').readFileSync(diagnosticsPath(), 'utf8'); } catch {}
+  const logContent = readDiagnosticLogs();
   const options = { logContent, appVersion: app.getVersion() };
   clipboard.writeText(buildDiagnosticSummary(options));
   await shell.openExternal(buildSupportWebURL(options));
@@ -378,8 +448,7 @@ ipcMain.handle('support:openDiagnosticsForm', async () => {
 });
 
 ipcMain.handle('support:copyDiagnostics', async () => {
-  let logContent = '';
-  try { logContent = require('fs').readFileSync(diagnosticsPath(), 'utf8'); } catch {}
+  const logContent = readDiagnosticLogs();
   clipboard.writeText(buildDiagnosticSummary({ logContent, appVersion: app.getVersion() }));
   return true;
 });

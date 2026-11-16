@@ -46,3 +46,20 @@ test('owner metrics calculate detailed external sales without exposing buyer ide
   assert.equal(res.body.windows.recentPurchases[0].country,'US');
   assert.equal(JSON.stringify(res.body).includes('buyer@example.com'),false);
 });
+
+test('crash pings are accepted and counted apart from operation success', async () => {
+  const { aggregateTelemetry } = await import('../lib/telemetry.js');
+  const crash = normalizeTelemetry({ ...validEvent, eventId: '33333333-3333-4333-8333-333333333333', eventName: 'app_crashed', success: false, durationBucket: 'under_30s', itemCountBucket: '0' });
+  assert.equal(crash.event_name, 'app_crashed');
+  const summary = aggregateTelemetry([
+    { install_hash: 'a', event_name: 'apply_completed', platform: 'windows', success: true },
+    { install_hash: 'a', event_name: 'app_crashed', platform: 'windows', success: false },
+    { install_hash: 'b', event_name: 'app_crashed', platform: 'windows', success: false },
+  ]);
+  assert.equal(summary.events, 1);
+  assert.equal(summary.successRate, 100);
+  assert.equal(summary.crashes.total, 2);
+  assert.equal(summary.crashes.byPlatform.windows, 2);
+  assert.equal(summary.activeInstalls, 2);
+  assert.equal(summary.byEvent.app_crashed, undefined);
+});
