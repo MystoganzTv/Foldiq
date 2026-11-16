@@ -1165,17 +1165,12 @@ private struct QuickLookPreviewSheet: PlatformQuickLookRepresentable {
     let url: URL
 
     #if os(macOS)
-    func makeNSView(context: Context) -> QLPreviewView {
-        guard let previewView = QLPreviewView(frame: .zero, style: .normal) else {
-            preconditionFailure("Failed to create QLPreviewView")
-        }
-        previewView.autostarts = true
-        previewView.previewItem = url as NSURL
-        return previewView
+    func makeNSView(context: Context) -> NSView {
+        QuickLookPreviewFactory.makeView(for: url)
     }
 
-    func updateNSView(_ nsView: QLPreviewView, context: Context) {
-        nsView.previewItem = url as NSURL
+    func updateNSView(_ nsView: NSView, context: Context) {
+        QuickLookPreviewFactory.update(nsView, for: url)
     }
     #else
     func makeCoordinator() -> Coordinator {
