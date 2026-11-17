@@ -110,9 +110,11 @@ One-time purchase. No subscription.
 
 ### Search terms
 
-photo organizer · organize photos by date · exif date · duplicate photos · google takeout photos · photo sorter · video organizer
+photo organizer · organize photos by date · exif date · duplicate photos · sort photo exports · photo sorter · video organizer
 
 (Partner Center limits the number and length of terms; trim if its counter complains.)
+
+No other companies' product names here: certification on 2026-11-17 rejected "google takeout photos" under policy 10.1.3 (Search Terms). Maximum seven terms, all relevant to Foldiq.
 
 ## Still missing before submitting
 
