@@ -3,7 +3,11 @@
 // the download link via Resend, plus a sale notification to the owner. Stripe's
 // own "Successful payments" email is the authoritative payment receipt.
 //
-// IMPORTANT: bodyParser is disabled so Stripe can verify the raw request body.
+// IMPORTANT: Stripe signs the exact bytes it sends (pretty-printed JSON). This
+// function is a Web handler (export POST) so it reads those bytes with
+// request.arrayBuffer(). The old Node handler read req.body, which Vercel has
+// already parsed into an object; re-serialising it with JSON.stringify changes
+// the whitespace, so every real Stripe event failed signature verification.
 //
 // Required env vars (Vercel → Project → Settings → Environment Variables):
 //   STRIPE_SECRET_KEY       — sk_live_...
@@ -15,13 +19,6 @@ import Stripe from 'stripe';
 import { Resend } from 'resend';
 import { channelFromMetadata } from '../lib/attribution.js';
 
-// Disable Vercel's automatic body parsing — Stripe needs the raw bytes.
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -31,34 +28,6 @@ const RECEIPTS_FROM_EMAIL = process.env.RECEIPTS_FROM_EMAIL || 'Foldiq <receipts
 
 // Both installers are served by a payment-verified endpoint backed by a
 // private GitHub release (Foldiq-Setup.exe and the notarized Foldiq.dmg).
-
-// Vercel may expose the body directly or leave it on the request stream,
-// depending on the function runtime. Stripe must receive the exact bytes when
-// possible; the parsed-object fallback covers Vercel runtimes that consume the
-// stream before invoking the function.
-export async function readRawBody(req) {
-  if (Buffer.isBuffer(req.body)) {
-    return req.body;
-  }
-
-  if (req.body instanceof Uint8Array) {
-    return Buffer.from(req.body);
-  }
-
-  if (typeof req.body === 'string') {
-    return Buffer.from(req.body);
-  }
-
-  if (req.body && typeof req.body === 'object') {
-    return Buffer.from(JSON.stringify(req.body));
-  }
-
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  return Buffer.concat(chunks);
-}
 
 export function escapeHTML(value) {
   return String(value ?? '')
@@ -202,14 +171,9 @@ export function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date,
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method not allowed');
-    return;
-  }
-
-  const rawBody = await readRawBody(req);
-  const sig = req.headers['stripe-signature'];
+// Verifies and handles one Stripe event. Returns { status, body } so the
+// logic can be tested without a running server.
+export async function processStripeWebhook(rawBody, sig) {
   let stripeEvent;
 
   try {
@@ -220,13 +184,11 @@ export default async function handler(req, res) {
     );
   } catch (err) {
     console.error('Webhook signature failed:', err.message);
-    res.status(400).send(`Webhook Error: ${err.message}`);
-    return;
+    return { status: 400, body: `Webhook Error: ${err.message}` };
   }
 
   if (stripeEvent.type !== 'checkout.session.completed') {
-    res.status(200).send('Ignored');
-    return;
+    return { status: 200, body: 'Ignored' };
   }
 
   const session = stripeEvent.data.object;
@@ -245,8 +207,7 @@ export default async function handler(req, res) {
 
   if (!customerEmail) {
     console.error('No customer email found in session');
-    res.status(200).send('No email');
-    return;
+    return { status: 200, body: 'No email' };
   }
 
   const html = buildInvoiceHTML({
@@ -296,9 +257,20 @@ export default async function handler(req, res) {
     }
 
     console.log(`Order email sent for checkout session ${session.id}`);
-    res.status(200).send('OK');
+    return { status: 200, body: 'OK' };
   } catch (err) {
     console.error('Email send failed:', err.message);
-    res.status(500).send('Email failed');
+    return { status: 500, body: 'Email failed' };
   }
+}
+
+// Vercel Web handler: the request body is untouched, so the signature check
+// sees exactly what Stripe signed. Other methods get a 405 from Vercel.
+export async function POST(request) {
+  const rawBody = Buffer.from(await request.arrayBuffer());
+  const { status, body } = await processStripeWebhook(rawBody, request.headers.get('stripe-signature'));
+  return new Response(body, {
+    status,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
 }

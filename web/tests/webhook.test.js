@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { Readable } from 'node:stream';
 import test from 'node:test';
 import Stripe from 'stripe';
 
@@ -7,58 +6,51 @@ process.env.STRIPE_SECRET_KEY ||= 'sk_test_placeholder';
 process.env.RESEND_API_KEY ||= 're_test_placeholder';
 process.env.STRIPE_WEBHOOK_SECRET ||= 'whsec_foldiq_test';
 
-const { buildInvoiceHTML, default: webhookHandler, escapeHTML, readRawBody } = await import('../api/webhook.js');
+const { buildInvoiceHTML, POST, escapeHTML } = await import('../api/webhook.js');
 
-test('readRawBody preserves direct body representations', async () => {
-  const json = '{"id":"evt_test","type":"foldiq.webhook.smoke"}';
-
-  assert.equal((await readRawBody({ body: Buffer.from(json) })).toString(), json);
-  assert.equal((await readRawBody({ body: new Uint8Array(Buffer.from(json)) })).toString(), json);
-  assert.equal((await readRawBody({ body: json })).toString(), json);
-  assert.equal(
-    (await readRawBody({ body: { id: 'evt_test', type: 'foldiq.webhook.smoke' } })).toString(),
-    json
-  );
-});
-
-test('readRawBody falls back to an unconsumed request stream', async () => {
-  const request = Readable.from(['{"id":', '"evt_stream"}']);
-  request.body = undefined;
-
-  assert.equal((await readRawBody(request)).toString(), '{"id":"evt_stream"}');
-});
-
-test('handler verifies a signed event when Vercel supplies a parsed body', async () => {
-  const payload = JSON.stringify({
-    id: 'evt_foldiq_smoke',
-    type: 'foldiq.webhook.smoke',
-    data: { object: {} },
-  });
+// Real Stripe deliveries are pretty-printed JSON. The old handler re-serialised
+// Vercel's parsed req.body, which dropped this whitespace and made every live
+// event fail with "No signatures found matching the expected signature".
+function signedStripeRequest(event, { tamper = false } = {}) {
+  const payload = JSON.stringify(event, null, 2);
   const signature = Stripe.webhooks.generateTestHeaderString({
     payload,
     secret: process.env.STRIPE_WEBHOOK_SECRET,
   });
-  const response = {
-    statusCode: 0,
-    body: '',
-    status(code) {
-      this.statusCode = code;
-      return this;
-    },
-    send(body) {
-      this.body = body;
-      return this;
-    },
-  };
-
-  await webhookHandler({
+  return new Request('https://foldiq.app/api/webhook', {
     method: 'POST',
-    body: JSON.parse(payload),
-    headers: { 'stripe-signature': signature },
-  }, response);
+    headers: { 'content-type': 'application/json', 'stripe-signature': signature },
+    body: tamper ? payload.replace('foldiq.webhook.smoke', 'foldiq.webhook.other') : payload,
+  });
+}
 
-  assert.equal(response.statusCode, 200);
-  assert.equal(response.body, 'Ignored');
+test('a pretty-printed Stripe event passes signature verification', async () => {
+  const response = await POST(signedStripeRequest({
+    id: 'evt_foldiq_smoke',
+    object: 'event',
+    type: 'foldiq.webhook.smoke',
+    data: { object: {} },
+  }));
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'Ignored');
+});
+
+test('a modified body is rejected', async () => {
+  const response = await POST(signedStripeRequest({
+    id: 'evt_foldiq_smoke',
+    object: 'event',
+    type: 'foldiq.webhook.smoke',
+    data: { object: {} },
+  }, { tamper: true }));
+
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /No signatures found/);
+});
+
+test('a request without a Stripe signature is rejected', async () => {
+  const response = await POST(new Request('https://foldiq.app/api/webhook', { method: 'POST', body: '{}' }));
+  assert.equal(response.status, 400);
 });
 
 test('email template escapes Stripe-controlled customer fields', () => {
