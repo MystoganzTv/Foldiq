@@ -170,6 +170,54 @@ export function buildInvoiceHTML({ customerName, customerEmail, invoiceId, date,
 </html>`;
 }
 
+// Internal sale notification for the owner. Deliberately separate from the
+// customer's receipt: a short summary plus the IDs needed to find the payment.
+export function buildOwnerSaleHTML({
+  amount, platform, channel, campaign, referrer, country,
+  customerEmail, customerName, date, paymentIntent, checkoutSessionId, livemode = true,
+}) {
+  const platformLabel = platform === 'mac' ? 'Mac' : 'Windows';
+  const stripeBase = livemode === false
+    ? 'https://dashboard.stripe.com/test/payments/'
+    : 'https://dashboard.stripe.com/payments/';
+  const stripeLink = paymentIntent ? `${stripeBase}${encodeURIComponent(paymentIntent)}` : '';
+  const row = (label, value) => `
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:#64748B;width:110px;vertical-align:top;">${label}</td>
+            <td style="padding:8px 0;font-size:14px;color:#0F172A;">${escapeHTML(value || '—')}</td>
+          </tr>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+<body style="margin:0;padding:0;background:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F1F5F9;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#FFFFFF;border-radius:12px;padding:28px;">
+        <tr><td>
+          <p style="margin:0;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#10B981;font-weight:600;">New sale · Foldiq for ${platformLabel}</p>
+          <p style="margin:6px 0 20px;font-size:30px;font-weight:700;color:#0F172A;">${escapeHTML(amount)}</p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #E2E8F0;">
+            ${row('Customer', customerName ? `${customerName} · ${customerEmail}` : customerEmail)}
+            ${row('Channel', channel)}
+            ${row('Campaign', campaign)}
+            ${row('Referrer', referrer)}
+            ${row('Country', country)}
+            ${row('Date', date)}
+          </table>
+          ${stripeLink ? `<p style="margin:20px 0 0;"><a href="${stripeLink}" style="display:inline-block;background:#0F172A;color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px;">Open payment in Stripe</a></p>` : ''}
+          <p style="margin:20px 0 0;font-size:11px;color:#94A3B8;line-height:1.6;font-family:Menlo,Consolas,monospace;word-break:break-all;">
+            ${escapeHTML(paymentIntent || '—')}<br/>${escapeHTML(checkoutSessionId)}
+          </p>
+          <p style="margin:16px 0 0;font-size:12px;color:#94A3B8;">The customer was sent their receipt and download link separately.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 // Verifies and handles one Stripe event. Returns { status, body } so the
 // logic can be tested without a running server.
@@ -239,15 +287,20 @@ export async function processStripeWebhook(rawBody, sig) {
         from: RECEIPTS_FROM_EMAIL,
         to: OWNER_EMAIL,
         subject: `[New Sale] Foldiq ${platform} ${amount} · ${channel} — ${customerEmail.replace(/[\r\n]/g, ' ')}`,
-        html: `<p style="font-family:monospace;font-size:13px;color:#475569;">
-                 platform: ${escapeHTML(platform)}<br/>
-                 channel: ${escapeHTML(channel)}<br/>
-                 campaign: ${escapeHTML(session.metadata?.attribution_campaign || '—')}<br/>
-                 referrer: ${escapeHTML(session.metadata?.attribution_referrer || '—')}<br/>
-                 payment_intent: ${escapeHTML(session.payment_intent || '—')}<br/>
-                 checkout_session: ${escapeHTML(session.id)}<br/>
-                 country: ${escapeHTML(session.customer_details?.address?.country || '—')}
-               </p>${html}`,
+        html: buildOwnerSaleHTML({
+          amount,
+          platform,
+          channel,
+          campaign: session.metadata?.attribution_campaign,
+          referrer: session.metadata?.attribution_referrer,
+          country: session.customer_details?.address?.country,
+          customerEmail,
+          customerName,
+          date,
+          paymentIntent: session.payment_intent,
+          checkoutSessionId: session.id,
+          livemode: session.livemode,
+        }),
       }, {
         idempotencyKey: `foldiq-owner-sale-${session.id}`,
       });

@@ -6,7 +6,7 @@ process.env.STRIPE_SECRET_KEY ||= 'sk_test_placeholder';
 process.env.RESEND_API_KEY ||= 're_test_placeholder';
 process.env.STRIPE_WEBHOOK_SECRET ||= 'whsec_foldiq_test';
 
-const { buildInvoiceHTML, POST, escapeHTML } = await import('../api/webhook.js');
+const { buildInvoiceHTML, buildOwnerSaleHTML, POST, escapeHTML } = await import('../api/webhook.js');
 
 // Real Stripe deliveries are pretty-printed JSON. The old handler re-serialised
 // Vercel's parsed req.body, which dropped this whitespace and made every live
@@ -93,4 +93,22 @@ test('a Mac order email links to the verified Mac download, not the App Store', 
   assert.match(html, /\/api\/download\?session_id=cs_test_mac123/);
   assert.match(html, /Download Foldiq for Mac/);
   assert.doesNotMatch(html, /apps\.apple\.com/);
+});
+
+test('owner sale notification is a summary, not a copy of the customer receipt', () => {
+  const html = buildOwnerSaleHTML({
+    amount: '$19.99',
+    platform: 'mac',
+    channel: 'direct',
+    customerEmail: 'buyer@example.com',
+    customerName: '<b>x</b>',
+    date: 'November 17, 2026',
+    paymentIntent: 'pi_123',
+    checkoutSessionId: 'cs_live_abc',
+  });
+
+  assert.match(html, /New sale · Foldiq for Mac/);
+  assert.match(html, /https:\/\/dashboard\.stripe\.com\/payments\/pi_123/);
+  assert.doesNotMatch(html, /Thanks for your purchase/);
+  assert.doesNotMatch(html, /<b>x<\/b>/);
 });
