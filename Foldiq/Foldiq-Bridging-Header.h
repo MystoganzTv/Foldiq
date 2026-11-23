@@ -3,13 +3,12 @@
 
 #include <stddef.h>
 
-/// Inflate raw-DEFLATE bytes from a ZIP entry (compression method 8).
-/// @param inputBuf     Compressed bytes (raw DEFLATE, no zlib header/trailer).
-/// @param inputSize    Number of compressed bytes.
-/// @param outputSize   Expected uncompressed size (from the ZIP local file header).
-/// @param outputBuf    On success: points to a malloc'd buffer the caller must free().
-/// @return             Number of decompressed bytes written, or 0 on failure.
-size_t foldiq_inflate(const unsigned char *inputBuf, size_t inputSize,
-                     size_t outputSize, unsigned char **outputBuf);
+/// Inflate raw-DEFLATE bytes from a ZIP entry (compression method 8) straight
+/// into an open file, in 1 MB pieces. Works for entries larger than 4 GB.
+/// @param inputBuf   Compressed bytes (raw DEFLATE, no zlib header/trailer).
+/// @param inputSize  Number of compressed bytes.
+/// @param fd         Open, writable file descriptor; it is not closed.
+/// @return           Number of bytes written, or -1 on corrupt data or a write error.
+long long foldiq_inflate_to_fd(const unsigned char *inputBuf, size_t inputSize, int fd);
 
 #endif /* Foldiq_Bridging_Header_h */

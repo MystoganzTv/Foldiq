@@ -18,6 +18,12 @@ struct ApplyView: View {
     @State private var cleanedEmptyFolders = 0
     @State private var reviewShelvedFiles = 0
 
+    // Stopping partway: asked for by the person, honoured between two files.
+    @State private var showStopConfirm = false
+    @State private var stopRequested = false
+    @State private var wasStopped = false
+    @State private var organizedBeforeStop = 0
+
     // Elapsed time counter
     @State private var elapsedSeconds = 0
     private let elapsedTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -28,19 +34,23 @@ struct ApplyView: View {
 
     private var completionTitle: String {
         guard isComplete else {
+            if stopRequested { return "Stopping…" }
             return nav.organizationConfig.fileOperation == .move ? "Moving Files…" : "Copying Files…"
         }
+        if wasStopped { return "Stopped" }
         guard hasErrors else { return "Done!" }
         return (manifest?.entries.isEmpty ?? true) ? "Nothing Was Organized" : "Finished with Errors"
     }
 
     private var statusIcon: String {
         if !isComplete { return "arrow.triangle.2.circlepath.circle" }
+        if wasStopped { return "stop.circle.fill" }
         return hasErrors ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
     }
 
     private var statusColor: Color {
         if !isComplete { return .blue }
+        if wasStopped { return .orange }
         return hasErrors ? .orange : .green
     }
 
@@ -67,11 +77,21 @@ struct ApplyView: View {
                     .font(.largeTitle).fontWeight(.bold)
 
                 if !isComplete {
-                    Text(nav.organizationConfig.fileOperation == .move
+                    Text(stopRequested
+                         ? "Finishing the current file, then stopping. Nothing is left half-copied."
+                         : nav.organizationConfig.fileOperation == .move
                          ? "Files are being moved into the organized library."
                          : "Files are being copied into the organized library.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                }
+
+                if isComplete, wasStopped {
+                    Text(stoppedSummary)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 460)
                 }
 
                 if isComplete, cleanedEmptyFolders > 0 {
@@ -129,6 +149,29 @@ struct ApplyView: View {
 
             Spacer()
 
+            // Stop partway: big libraries can take hours.
+            if !isComplete {
+                Button(stopRequested ? "Stopping…" : "Stop") {
+                    showStopConfirm = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(stopRequested)
+                .padding(.bottom, 40)
+                .confirmationDialog(
+                    "Stop organizing?",
+                    isPresented: $showStopConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Stop After This File", role: .destructive) {
+                        stopRequested = true
+                    }
+                    Button("Keep Going", role: .cancel) {}
+                } message: {
+                    Text(stopConfirmMessage)
+                }
+            }
+
             // Continue (enabled only when done)
             if isComplete {
                 Button {
@@ -155,6 +198,19 @@ struct ApplyView: View {
     }
 
     // MARK: - Helpers
+
+    private var stopConfirmMessage: String {
+        let finished = nav.organizationConfig.fileOperation == .move
+            ? "Files already moved stay in the organized library"
+            : "Copies already made stay in the organized library"
+        return finished + ", and you can undo them from the report. The rest stay where they are, and you can continue later from the report."
+    }
+
+    private var stoppedSummary: String {
+        let left = max(progress.total - organizedBeforeStop, 0)
+        let verb = nav.organizationConfig.fileOperation == .move ? "moved" : "copied"
+        return "\(organizedBeforeStop) of \(progress.total) files were \(verb). The other \(left) were not touched — continue or undo from the report."
+    }
 
     private var elapsedFormatted: String {
         let m = elapsedSeconds / 60
@@ -240,9 +296,12 @@ struct ApplyView: View {
         let planCount = plans.count
         let expectedDestinationPaths = Set(plans.map(\.destinationAbsPath))
         Task {
-            await mover.apply(plans: plans, manifest: m, checkpoint: {
-                try context.save()
-            }) { p in
+            let stopped = await mover.apply(
+                plans: plans,
+                manifest: m,
+                checkpoint: { try context.save() },
+                shouldStop: { self.stopRequested }
+            ) { p in
                 self.progress = p
             }
             // Keep an interrupted/ambiguous operation recoverable. Ordinary per-file
@@ -253,7 +312,10 @@ struct ApplyView: View {
                 : "complete"
             try? context.save()
             // Delete temp extraction dirs now that the files have been moved/copied.
-            if progress.errors.isEmpty {
+            // A stopped run still needs them: the files it didn't reach may live
+            // there, and "Continue Organizing" picks those up. Restart and quit
+            // delete them otherwise.
+            if progress.errors.isEmpty && !stopped {
                 await mover.cleanupTempDirs(tempDirs)
                 nav.archiveTempDirs = []
             }
@@ -264,7 +326,9 @@ struct ApplyView: View {
                 elapsed: Date().timeIntervalSince(startedAt),
                 itemCount: planCount
             )
-            if completedWithoutErrors && nav.organizationConfig.fileOperation == .move {
+            // After a stop the unorganized files are expected to still be there:
+            // they must not be swept into Needs Review as leftovers.
+            if completedWithoutErrors && !stopped && nav.organizationConfig.fileOperation == .move {
                 let shelved = await mover.shelveResidualFilesForReview(
                     under: nav.selectedFolderURLs,
                     expectedDestinationPaths: expectedDestinationPaths,
@@ -289,11 +353,15 @@ struct ApplyView: View {
             // Deliberately looser than `completedWithoutErrors`: a run where the
             // person excluded a few duplicates still moved every file it promised
             // to move, and used to be disqualified from ever asking for a review.
-            let nothingWentWrong = progress.errors.isEmpty && !m.entries.isEmpty
+            let nothingWentWrong = progress.errors.isEmpty && !stopped && journaledCount > 0
             let shouldRequestReview = nothingWentWrong && AppDistribution.isAppStore &&
                 AppReviewPromptPolicy.shouldRequestAfterSuccessfulOrganization(
                     successfulItemCount: journaledCount
                 )
+            organizedBeforeStop = plans.reduce(0) { count, plan in
+                count + (plan.isUsable && plan.status == .done ? 1 : 0)
+            }
+            wasStopped = stopped
             isComplete = true
 
             if shouldRequestReview {

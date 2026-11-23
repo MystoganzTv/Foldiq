@@ -250,4 +250,120 @@ final class FileMoverSafetyTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: leftover.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: shelved.path))
     }
+
+    // MARK: - Stopping partway (big libraries)
+
+    @MainActor
+    func testStoppingLeavesTheRestPendingAndContinuingFinishesThem() async throws {
+        let schema = Schema([MediaFile.self, ScanSession.self, OrganizationPlan.self, UndoManifest.self, UndoEntry.self])
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+        let context = ModelContext(container)
+
+        let root = try temporaryDirectory()
+        let sessionID = UUID()
+        var plans: [OrganizationPlan] = []
+        for index in 1...3 {
+            let source = root.appendingPathComponent("source/photo\(index).jpg")
+            let destination = root.appendingPathComponent("Organized Media/2026/photo\(index).jpg")
+            try FileManager.default.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("photo \(index)".utf8).write(to: source)
+            let plan = OrganizationPlan(
+                sessionID: sessionID,
+                mediaFileID: UUID(),
+                source: source.path,
+                destination: destination.path,
+                op: .move
+            )
+            context.insert(plan)
+            plans.append(plan)
+        }
+        let firstRun = UndoManifest(sessionID: sessionID, rootPath: root.path, operation: .move)
+        context.insert(firstRun)
+        try context.save()
+
+        // Stop is asked before every file: let the first one through, then stop.
+        var asked = 0
+        let stopped = await FileMover().apply(
+            plans: plans,
+            manifest: firstRun,
+            checkpoint: { try context.save() },
+            shouldStop: { asked += 1; return asked > 1 }
+        ) { _ in }
+
+        XCTAssertTrue(stopped)
+        XCTAssertEqual(plans.map(\.status), [.done, .pending, .pending])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: plans[0].destinationAbsPath))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: plans[0].sourceAbsPath))
+        for plan in plans.dropFirst() {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: plan.sourceAbsPath))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: plan.destinationAbsPath))
+        }
+        XCTAssertEqual(firstRun.entries.count, 1)
+        XCTAssertTrue(try XCTUnwrap(firstRun.entries.first).wasCompleted)
+
+        // The finished file's result must be saved even though the run stopped.
+        let saved = try context.fetch(FetchDescriptor<OrganizationPlan>())
+        XCTAssertEqual(saved.filter { $0.status == .done }.count, 1)
+
+        // "Continue Organizing" applies the pending plans in a second run.
+        let pending = plans.filter { $0.status == .pending }
+        let secondRun = UndoManifest(sessionID: sessionID, rootPath: root.path, operation: .move)
+        context.insert(secondRun)
+        try context.save()
+        let stoppedAgain = await FileMover().apply(
+            plans: pending,
+            manifest: secondRun,
+            checkpoint: { try context.save() }
+        ) { _ in }
+
+        XCTAssertFalse(stoppedAgain)
+        XCTAssertEqual(plans.map(\.status), [.done, .done, .done])
+        XCTAssertEqual(secondRun.entries.count, 2)
+        XCTAssertTrue(secondRun.entries.allSatisfy(\.wasCompleted))
+        for plan in plans {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: plan.destinationAbsPath))
+        }
+    }
+
+    @MainActor
+    func testAFileThatCannotBeReadLeavesNoJournalEntry() async throws {
+        let schema = Schema([MediaFile.self, ScanSession.self, OrganizationPlan.self, UndoManifest.self, UndoEntry.self])
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+        let context = ModelContext(container)
+
+        let root = try temporaryDirectory()
+        let good = root.appendingPathComponent("source/good.jpg")
+        try FileManager.default.createDirectory(at: good.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("good".utf8).write(to: good)
+        let missing = root.appendingPathComponent("source/missing.jpg")
+
+        let sessionID = UUID()
+        let plans = [missing, good].map { source in
+            OrganizationPlan(
+                sessionID: sessionID,
+                mediaFileID: UUID(),
+                source: source.path,
+                destination: root.appendingPathComponent("Organized Media/\(source.lastPathComponent)").path,
+                op: .copy
+            )
+        }
+        plans.forEach { context.insert($0) }
+        let manifest = UndoManifest(sessionID: sessionID, rootPath: root.path, operation: .copy)
+        context.insert(manifest)
+        try context.save()
+
+        var lastProgress: FileMover.ApplyProgress?
+        let stopped = await FileMover().apply(
+            plans: plans,
+            manifest: manifest,
+            checkpoint: { try context.save() }
+        ) { lastProgress = $0 }
+
+        XCTAssertFalse(stopped)
+        XCTAssertEqual(plans.map(\.status), [.error, .done])
+        XCTAssertEqual(manifest.entries.count, 1)
+        XCTAssertEqual(manifest.entries.first?.originalPath, good.path)
+        XCTAssertEqual(lastProgress?.done, 2)
+        XCTAssertEqual(lastProgress?.errors.count, 1)
+    }
 }

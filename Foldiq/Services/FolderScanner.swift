@@ -110,6 +110,12 @@ actor FolderScanner {
             if includeArchives && MediaTypes.archiveExtensions.contains(ext) {
                 do {
                     let result = try await archiveExtractor.extract(fileURL)
+                    let countBefore = results.count
+                    defer {
+                        // No media inside: no file points at the folder, so nothing
+                        // else would ever delete it.
+                        if results.count == countBefore { TempWorkspace.remove(result.tempDirectory) }
+                    }
                     for mediaURL in result.mediaURLs {
                         let mediaExt = mediaURL.pathExtension.lowercased()
                         guard let mediaKind = MediaTypes.kind(for: mediaExt) else { continue }
@@ -295,6 +301,10 @@ actor FolderScanner {
             ))
         }
 
+        if files.isEmpty {
+            // No media inside: no file points at the folder, so nothing else would delete it.
+            TempWorkspace.remove(result.tempDirectory)
+        }
         await onProgress(ScanProgress(scannedCount: 1, foundCount: files.count, currentPath: url.path))
         return files
     }
@@ -342,9 +352,7 @@ enum SystemPhotosStager {
             throw ScanError.photosLibraryEmpty(libraryURL.lastPathComponent)
         }
 
-        let stagingRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Foldiq-Photos-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+        let stagingRoot = try TempWorkspace.create(prefix: TempWorkspace.photosPrefix)
 
         var files: [DiscoveredFile] = []
         var failedCount = 0
@@ -382,12 +390,18 @@ enum SystemPhotosStager {
             }
         }
 
+        // Cancelled (the person went back): nothing will use these copies.
+        // Removed here, after the last in-flight copy has finished writing.
+        if Task.isCancelled {
+            TempWorkspace.remove(stagingRoot)
+            throw CancellationError()
+        }
         if ranOutOfSpace {
-            try? FileManager.default.removeItem(at: stagingRoot)
+            TempWorkspace.remove(stagingRoot)
             throw ScanError.notEnoughSpaceForPhotos
         }
         if files.isEmpty {
-            try? FileManager.default.removeItem(at: stagingRoot)
+            TempWorkspace.remove(stagingRoot)
             throw ScanError.photosLibraryEmpty(libraryURL.lastPathComponent)
         }
         return Result(files: files, failedCount: failedCount)

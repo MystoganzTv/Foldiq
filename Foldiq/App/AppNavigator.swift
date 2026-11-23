@@ -48,8 +48,8 @@ final class AppNavigator: ObservableObject {
     @Published var organizationConfig: OrganizationConfig = .load() {
         didSet { organizationConfig.save() }
     }
-    /// Temp directories created when extracting archives during scan.
-    /// Cleaned up by FileMover after apply, or discarded on restart.
+    /// Temp directories created during scan: Photos copies and archive extractions.
+    /// Cleaned up by FileMover after apply, on restart, or when the app quits.
     var archiveTempDirs: [URL] = []
     private var securityScopedURLs: Set<URL> = []
 
@@ -99,13 +99,16 @@ final class AppNavigator: ObservableObject {
     }
 
     func restart() {
-        // Clean up any leftover archive extraction temp dirs
-        let dirs = archiveTempDirs
+        // Delete the Photos copies and archive extractions of this session.
+        // Also catches folders a cancelled or failed scan never handed over,
+        // such as a half-copied Photos library. Snapshotted now, so a scan the
+        // person starts next keeps its own folder.
+        let dirs = Set(archiveTempDirs + TempWorkspace.ownedWorkspaces())
         archiveTempDirs = []
         if !dirs.isEmpty {
             Task.detached(priority: .background) {
                 for dir in dirs {
-                    try? FileManager.default.removeItem(at: dir)
+                    TempWorkspace.remove(dir)
                 }
             }
         }

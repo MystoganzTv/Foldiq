@@ -14,7 +14,12 @@ import SevenZip
 private let kLocalFileSig:   UInt32 = 0x04034b50
 private let kCentralDirSig:  UInt32 = 0x02014b50
 private let kEndOfCentralSig: UInt32 = 0x06054b50
-private let kMaxArchiveEntries = 100_000
+private let kZip64EndOfCentralSig: UInt32 = 0x06064b50
+private let kZip64LocatorSig: UInt32 = 0x07064b50
+private let kZip64ExtraFieldID: UInt16 = 0x0001
+/// Google Takeout splits exports into ZIPs of up to 50 GB, which can hold well
+/// over 100,000 photos plus a .json sidecar for each.
+private let kMaxArchiveEntries = 1_000_000
 private let kMaxArchiveMediaBytes: UInt64 = 500 * 1024 * 1024 * 1024
 private let kDiskReserveBytes: Int64 = 1024 * 1024 * 1024
 
@@ -40,6 +45,16 @@ private extension Data {
             return CFSwapInt32LittleToHost(v)
         }
     }
+
+    /// Read a little-endian UInt64 at byte offset `off`.
+    func u64LE(at off: Int) -> UInt64 {
+        guard off >= 0, off + 8 <= count else { return 0 }
+        return withUnsafeBytes { ptr in
+            var v: UInt64 = 0
+            memcpy(&v, ptr.baseAddress!.advanced(by: off), 8)
+            return CFSwapInt64LittleToHost(v)
+        }
+    }
 }
 
 // MARK: ─── ZipEntry ───────────────────────────────────────────────────────────
@@ -48,9 +63,10 @@ private struct ZipEntry {
     let filename: String
     let isDirectory: Bool
     let compressionMethod: UInt16   // 0 = STORE, 8 = DEFLATE
-    let compressedSize: UInt32
-    let uncompressedSize: UInt32
-    let localHeaderOffset: UInt32
+    // 64-bit so ZIP64 archives (Google Takeout exports over 4 GB) work.
+    let compressedSize: UInt64
+    let uncompressedSize: UInt64
+    let localHeaderOffset: UInt64
 }
 
 // MARK: ─── ZipError ───────────────────────────────────────────────────────────
@@ -116,10 +132,7 @@ actor ArchiveExtractor {
             throw ArchiveError.unsupportedFormat(ext)
         }
 
-        let fm = FileManager.default
-        let tempDir = fm.temporaryDirectory
-            .appendingPathComponent("foldiq_\(UUID().uuidString)", isDirectory: true)
-        try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let tempDir = try TempWorkspace.create(prefix: TempWorkspace.archivePrefix)
 
         do {
             if ext == "zip" {
@@ -138,7 +151,7 @@ actor ArchiveExtractor {
                 #endif
             }
         } catch {
-            try? fm.removeItem(at: tempDir)
+            TempWorkspace.remove(tempDir)
             if let archiveError = error as? ArchiveError { throw archiveError }
             throw ArchiveError.extractionFailed(error.localizedDescription)
         }
@@ -198,18 +211,37 @@ actor ArchiveExtractor {
             try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
 
             let raw = try compressedData(for: entry, in: zipData)
-            let fileData: Data
+            try writeEntry(entry, raw: raw, to: destURL)
+        }
+    }
 
-            switch entry.compressionMethod {
-            case 0:   // STORE — no compression
-                fileData = raw
-            case 8:   // DEFLATE
-                fileData = try deflateDecompress(raw, uncompressedSize: Int(entry.uncompressedSize))
-            default:
-                throw ZipError.unsupportedCompression(entry.compressionMethod)
+    /// Writes one entry to disk without holding the whole file in memory, so a
+    /// multi-gigabyte video inside a Takeout export doesn't need gigabytes of RAM.
+    /// A partial file left by a failure is removed with the temp folder.
+    private func writeEntry(_ entry: ZipEntry, raw: Data, to destURL: URL) throws {
+        guard entry.compressionMethod == 0 || entry.compressionMethod == 8 else {
+            throw ZipError.unsupportedCompression(entry.compressionMethod)
+        }
+        guard FileManager.default.createFile(atPath: destURL.path, contents: nil) else {
+            throw ZipError.invalidFormat("could not create \(destURL.lastPathComponent)")
+        }
+        let handle = try FileHandle(forWritingTo: destURL)
+        defer { try? handle.close() }
+
+        let written: UInt64
+        if entry.compressionMethod == 0 {   // STORE — no compression
+            try handle.write(contentsOf: raw)
+            written = UInt64(raw.count)
+        } else {                            // DEFLATE
+            let result: Int64 = raw.withUnsafeBytes { rawPtr in
+                guard let ptr = rawPtr.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return -1 }
+                return foldiq_inflate_to_fd(ptr, raw.count, handle.fileDescriptor)
             }
-
-            try fileData.write(to: destURL, options: .atomic)
+            guard result >= 0 else { throw ZipError.decompressionFailed }
+            written = UInt64(result)
+        }
+        guard written == entry.uncompressedSize else {
+            throw ZipError.invalidFormat("\(entry.filename) is \(written) bytes, expected \(entry.uncompressedSize)")
         }
     }
 
@@ -455,14 +487,34 @@ actor ArchiveExtractor {
             throw ZipError.invalidFormat("EOCD signature not found")
         }
 
-        let cdCount  = Int(data.u16LE(at: eocd + 10))   // total entries in central dir
-        let cdOffset = Int(data.u32LE(at: eocd + 16))   // offset of central dir
-        guard cdCount <= kMaxArchiveEntries else {
+        var cdCount  = UInt64(data.u16LE(at: eocd + 10))   // total entries in central dir
+        var cdOffset = UInt64(data.u32LE(at: eocd + 16))   // offset of central dir
+
+        // ZIP64: a locator right before the EOCD points at a ZIP64 end record
+        // with 64-bit counts and offsets. Takeout exports over 4 GB use it.
+        if eocd >= 20, data.u32LE(at: eocd - 20) == kZip64LocatorSig {
+            let recordOffset = data.u64LE(at: eocd - 12)
+            guard recordOffset <= UInt64(eocd - 20),
+                  let record = Int(exactly: recordOffset),
+                  record + 56 <= data.count,
+                  data.u32LE(at: record) == kZip64EndOfCentralSig else {
+                throw ZipError.invalidFormat("ZIP64 end record not found")
+            }
+            cdCount  = data.u64LE(at: record + 32)
+            cdOffset = data.u64LE(at: record + 48)
+        } else if cdCount == 0xFFFF || cdOffset == 0xFFFF_FFFF {
+            throw ZipError.invalidFormat("ZIP64 locator missing")
+        }
+
+        guard cdCount <= UInt64(kMaxArchiveEntries) else {
             throw ZipError.invalidFormat("too many archive entries")
+        }
+        guard cdOffset <= UInt64(data.count), let cdStart = Int(exactly: cdOffset) else {
+            throw ZipError.invalidFormat("central directory out of bounds")
         }
 
         var entries: [ZipEntry] = []
-        var pos = cdOffset
+        var pos = cdStart
 
         for _ in 0 ..< cdCount {
             guard pos + 46 <= data.count else {
@@ -480,15 +532,37 @@ actor ArchiveExtractor {
             }
 
             let compressionMethod = data.u16LE(at: pos + 10)
-            let compressedSize    = data.u32LE(at: pos + 20)
-            let uncompressedSize  = data.u32LE(at: pos + 24)
+            let compressedSize32  = data.u32LE(at: pos + 20)
+            let uncompressedSize32 = data.u32LE(at: pos + 24)
             let fileNameLen       = Int(data.u16LE(at: pos + 28))
             let extraLen          = Int(data.u16LE(at: pos + 30))
             let commentLen        = Int(data.u16LE(at: pos + 32))
-            let localHeaderOffset = data.u32LE(at: pos + 42)
+            let localHeaderOffset32 = data.u32LE(at: pos + 42)
 
             guard pos + 46 + fileNameLen + extraLen + commentLen <= data.count else {
                 throw ZipError.invalidFormat("central directory entry out of bounds")
+            }
+
+            // ZIP64: a field set to 0xFFFFFFFF has its real 64-bit value in the
+            // 0x0001 extra field, in this order: uncompressed, compressed, offset.
+            var uncompressedSize  = UInt64(uncompressedSize32)
+            var compressedSize    = UInt64(compressedSize32)
+            var localHeaderOffset = UInt64(localHeaderOffset32)
+            if uncompressedSize32 == 0xFFFF_FFFF || compressedSize32 == 0xFFFF_FFFF || localHeaderOffset32 == 0xFFFF_FFFF {
+                guard let zip64 = zip64Field(in: data, from: pos + 46 + fileNameLen, length: extraLen) else {
+                    throw ZipError.invalidFormat("ZIP64 extra field missing")
+                }
+                var cursor = zip64.lowerBound
+                func next() throws -> UInt64 {
+                    guard cursor + 8 <= zip64.upperBound else {
+                        throw ZipError.invalidFormat("ZIP64 extra field too short")
+                    }
+                    defer { cursor += 8 }
+                    return data.u64LE(at: cursor)
+                }
+                if uncompressedSize32 == 0xFFFF_FFFF { uncompressedSize = try next() }
+                if compressedSize32 == 0xFFFF_FFFF { compressedSize = try next() }
+                if localHeaderOffset32 == 0xFFFF_FFFF { localHeaderOffset = try next() }
             }
             let nameRange = (pos + 46) ..< (pos + 46 + fileNameLen)
             let filename = String(data: data[nameRange], encoding: .utf8)
@@ -512,8 +586,27 @@ actor ArchiveExtractor {
         return entries
     }
 
+    /// Byte range of the ZIP64 (0x0001) extra field's data, if present.
+    private func zip64Field(in data: Data, from start: Int, length: Int) -> Range<Int>? {
+        var cursor = start
+        let end = start + length
+        while cursor + 4 <= end {
+            let id = data.u16LE(at: cursor)
+            let size = Int(data.u16LE(at: cursor + 2))
+            let fieldStart = cursor + 4
+            guard fieldStart + size <= end else { return nil }
+            if id == kZip64ExtraFieldID { return fieldStart ..< fieldStart + size }
+            cursor = fieldStart + size
+        }
+        return nil
+    }
+
     /// Read the compressed data for `entry` from the ZIP file bytes.
     private func compressedData(for entry: ZipEntry, in data: Data) throws -> Data {
+        guard entry.localHeaderOffset <= UInt64(data.count),
+              entry.compressedSize <= UInt64(data.count) else {
+            throw ZipError.invalidFormat("local header out of bounds")
+        }
         let lhOffset = Int(entry.localHeaderOffset)
         guard lhOffset + 30 <= data.count else {
             throw ZipError.invalidFormat("local header out of bounds")
@@ -535,26 +628,6 @@ actor ArchiveExtractor {
     }
 
     /// Decompress raw DEFLATE data using system libz via the C bridge.
-    private func deflateDecompress(_ compressed: Data, uncompressedSize: Int) throws -> Data {
-        guard uncompressedSize > 0 else { return Data() }
-
-        return try compressed.withUnsafeBytes { rawPtr -> Data in
-            guard let ptr = rawPtr.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw ZipError.decompressionFailed
-            }
-
-            var outPtr: UnsafeMutablePointer<UInt8>? = nil
-            let written = foldiq_inflate(ptr, compressed.count, uncompressedSize, &outPtr)
-
-            guard written > 0, let out = outPtr else {
-                throw ZipError.decompressionFailed
-            }
-
-            // Take ownership of the malloc'd buffer into a Data object that frees it.
-            return Data(bytesNoCopy: out, count: written, deallocator: .free)
-        }
-    }
-
     // MARK: - Media Collection
 
     /// Walk `dir` recursively and return URLs of recognised photo/video files.

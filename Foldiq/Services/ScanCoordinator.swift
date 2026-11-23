@@ -123,74 +123,55 @@ final class ScanCoordinator: ObservableObject {
         takeoutDatesRecovered = 0
         let takeoutSidecars = TakeoutSidecarIndex.build(for: discovered)
 
-        for (idx, disc) in discovered.enumerated() {
-            // Honour cancellation on every file. Cancelling (or leaving the scan
-            // screen) sends the user back to Welcome, which purges scan data; a
-            // late write to that deleted session traps inside SwiftData.
-            if Task.isCancelled || !session.isUsable {
-                return abandon(session, in: context)
+        // Several files are read at once: on 100,000 photos, reading them one
+        // after another left the disk idle most of the time. Results are
+        // recorded strictly in discovery order, so the outcome is identical.
+        let workers = Self.inspectionWorkerCount
+        // Finished results waiting for a slower file ahead of them. The window
+        // keeps that buffer small even when one file takes long (a huge video).
+        let window = workers * 16
+        var stopped = false
+
+        await withTaskGroup(of: (Int, InspectedFile).self) { group in
+            var nextToStart = 0
+            var nextToRecord = 0
+            var finished: [Int: InspectedFile] = [:]
+
+            func startMore() {
+                while nextToStart < discovered.count,
+                      nextToStart - nextToRecord < window,
+                      nextToStart - nextToRecord - finished.count < workers {
+                    let index = nextToStart
+                    let disc = discovered[index]
+                    nextToStart += 1
+                    group.addTask { (index, await Self.inspect(disc)) }
+                }
             }
 
-            processedCount = idx + 1
-            currentFile    = disc.filename
-
-            let checked = await Task.detached(priority: .utility) {
-                let meta = await MetadataExtractor().extract(from: disc.url, kind: disc.kind)
-                let problem = await MediaValidator.problem(at: disc.url, kind: disc.kind, fileSize: disc.fileSize)
-                return (meta: meta, problem: problem)
-            }.value
-            // The await above is where a cancel/purge can slip in.
-            if Task.isCancelled || !session.isUsable {
-                return abandon(session, in: context)
+            startMore()
+            while let (index, result) = await group.next() {
+                // Honour cancellation on every file. Cancelling (or leaving the
+                // scan screen) sends the user back to Welcome, which purges scan
+                // data; a late write to that deleted session traps inside SwiftData.
+                if Task.isCancelled || !session.isUsable {
+                    stopped = true
+                    group.cancelAll()
+                    break
+                }
+                finished[index] = result
+                while let ready = finished.removeValue(forKey: nextToRecord) {
+                    let disc = discovered[nextToRecord]
+                    nextToRecord += 1
+                    processedCount = nextToRecord
+                    currentFile    = disc.filename
+                    record(disc, ready, session: session, sidecars: takeoutSidecars, context: context)
+                    if nextToRecord % 200 == 0 { try? context.save() }
+                }
+                startMore()
             }
-
-            var meta = checked.meta
-
-            // Google Photos exports keep the real capture time in a .json file
-            // next to the photo. Use it when the file itself has no embedded date.
-            if disc.kind != .archive, !takeoutSidecars.isEmpty,
-               !meta.hasEmbeddedDate || meta.latitude == nil,
-               let sidecar = takeoutSidecars.lookup(mediaURL: disc.url, tempDirectory: disc.tempDirectoryURL),
-               meta.apply(sidecar) {
-                takeoutDatesRecovered += 1
-            }
-
-            // Photos knows when and where every item was taken, even when the
-            // file carries no date of its own. Embedded camera dates still win.
-            if disc.photosCaptureDate != nil || disc.photosLatitude != nil {
-                meta.apply(TakeoutSidecar(
-                    date: disc.photosCaptureDate,
-                    latitude: disc.photosLatitude,
-                    longitude: disc.photosLongitude
-                ))
-            }
-
-            let file = MediaFile(
-                filePath:  disc.filePath,
-                filename:  disc.filename,
-                ext:       disc.fileExtension,
-                kind:      disc.kind,
-                fileSize:  disc.fileSize
-            )
-
-            file.dateTaken        = meta.dateTaken
-            file.dateCreated      = disc.creationDate
-            file.dateModified     = disc.modificationDate
-            file.cameraMake       = meta.cameraMake
-            file.cameraModel      = meta.cameraModel
-            file.pixelWidth       = meta.pixelWidth
-            file.pixelHeight      = meta.pixelHeight
-            file.durationSeconds  = meta.durationSeconds
-            file.latitude         = meta.latitude
-            file.longitude        = meta.longitude
-            file.isScreenshot     = disc.isScreenshot
-            file.archiveSourcePath = disc.archiveSourceURL?.path   // NEW
-            file.damageReason     = checked.problem
-            file.session          = session
-
-            context.insert(file)
-
-            if (idx + 1) % 200 == 0 { try? context.save() }
+        }
+        if stopped || Task.isCancelled || !session.isUsable {
+            return abandon(session, in: context)
         }
         try? context.save()
 
@@ -249,6 +230,83 @@ final class ScanCoordinator: ObservableObject {
         _ = groupCount
         phase = .done
         return session
+    }
+
+    // MARK: - Reading each file
+
+    /// What reading one file produced. Plain values, so it can be made off the
+    /// main actor and handed back.
+    struct InspectedFile {
+        let meta: ExtractedMetadata
+        let problem: String?
+    }
+
+    /// Files read at the same time. Reading is mostly waiting for the disk (or
+    /// a NAS), so a few readers keep it busy without crowding the machine.
+    nonisolated static var inspectionWorkerCount: Int {
+        min(max(ProcessInfo.processInfo.activeProcessorCount / 2, 2), 6)
+    }
+
+    /// Reads metadata and checks that the file opens. Runs off the main actor.
+    nonisolated private static func inspect(_ disc: DiscoveredFile) async -> InspectedFile {
+        let meta = await MetadataExtractor().extract(from: disc.url, kind: disc.kind)
+        let problem = await MediaValidator.problem(at: disc.url, kind: disc.kind, fileSize: disc.fileSize)
+        return InspectedFile(meta: meta, problem: problem)
+    }
+
+    /// Turns one read file into a MediaFile of the session (main actor only).
+    private func record(
+        _ disc: DiscoveredFile,
+        _ inspected: InspectedFile,
+        session: ScanSession,
+        sidecars takeoutSidecars: TakeoutSidecarIndex,
+        context: ModelContext
+    ) {
+        var meta = inspected.meta
+
+        // Google Photos exports keep the real capture time in a .json file
+        // next to the photo. Use it when the file itself has no embedded date.
+        if disc.kind != .archive, !takeoutSidecars.isEmpty,
+           !meta.hasEmbeddedDate || meta.latitude == nil,
+           let sidecar = takeoutSidecars.lookup(mediaURL: disc.url, tempDirectory: disc.tempDirectoryURL),
+           meta.apply(sidecar) {
+            takeoutDatesRecovered += 1
+        }
+
+        // Photos knows when and where every item was taken, even when the
+        // file carries no date of its own. Embedded camera dates still win.
+        if disc.photosCaptureDate != nil || disc.photosLatitude != nil {
+            meta.apply(TakeoutSidecar(
+                date: disc.photosCaptureDate,
+                latitude: disc.photosLatitude,
+                longitude: disc.photosLongitude
+            ))
+        }
+
+        let file = MediaFile(
+            filePath:  disc.filePath,
+            filename:  disc.filename,
+            ext:       disc.fileExtension,
+            kind:      disc.kind,
+            fileSize:  disc.fileSize
+        )
+
+        file.dateTaken        = meta.dateTaken
+        file.dateCreated      = disc.creationDate
+        file.dateModified     = disc.modificationDate
+        file.cameraMake       = meta.cameraMake
+        file.cameraModel      = meta.cameraModel
+        file.pixelWidth       = meta.pixelWidth
+        file.pixelHeight      = meta.pixelHeight
+        file.durationSeconds  = meta.durationSeconds
+        file.latitude         = meta.latitude
+        file.longitude        = meta.longitude
+        file.isScreenshot     = disc.isScreenshot
+        file.archiveSourcePath = disc.archiveSourceURL?.path
+        file.damageReason     = inspected.problem
+        file.session          = session
+
+        context.insert(file)
     }
 
     /// Stops a cancelled scan: removes its partial session unless the Welcome

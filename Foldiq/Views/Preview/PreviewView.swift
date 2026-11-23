@@ -71,68 +71,98 @@ struct PreviewView: View {
     enum SortColumn: String { case source, destination, status }
 
     // MARK: - Filtered & sorted plans
+    //
+    // Worked out once per change, not on every redraw. With 100,000 files the
+    // body used to filter and sort the whole plan several times per update —
+    // even for selecting a row — and every read of a SwiftData property costs.
 
-    var displayedPlans: [OrganizationPlan] {
-        var result = plans
+    /// The rows the table shows, filtered and sorted.
+    @State private var shownPlans: [OrganizationPlan] = []
+    @State private var counts = PlanCounts()
 
-        if !searchQuery.isEmpty {
-            let q = searchQuery.lowercased()
-            result = result.filter {
-                $0.sourceAbsPath.lowercased().contains(q) ||
-                $0.destinationAbsPath.lowercased().contains(q)
+    struct PlanCounts {
+        var included = 0
+        var excluded = 0
+        var duplicates = 0
+        var unknownDate = 0
+        var damaged = 0
+
+        init() {}
+
+        init(_ plans: [OrganizationPlan]) {
+            for plan in plans where plan.isUsable {
+                guard plan.status != .skipped else { excluded += 1; continue }
+                included += 1
+                let destination = plan.destinationAbsPath
+                if destination.contains("/Duplicates/") { duplicates += 1 }
+                if destination.contains("/Unknown Date/") { unknownDate += 1 }
+                if PreviewView.isDamaged(destination: destination) { damaged += 1 }
             }
         }
-
-        switch filterStatus {
-        case .all: break
-        case .included:
-            result = result.filter { $0.status != .skipped }
-        case .excluded:
-            result = result.filter { $0.status == .skipped }
-        case .duplicate:
-            result = result.filter { $0.destinationAbsPath.contains("/Duplicates/") }
-        case .unknownDate:
-            result = result.filter { $0.destinationAbsPath.contains("/Unknown Date/") }
-        case .damaged:
-            result = result.filter { Self.isDamaged($0) }
-        }
-
-        result.sort {
-            let lhs: String
-            let rhs: String
-            switch sortColumn {
-            case .source:      lhs = $0.sourceAbsPath;      rhs = $1.sourceAbsPath
-            case .destination: lhs = $0.destinationAbsPath; rhs = $1.destinationAbsPath
-            case .status:      lhs = $0.statusRaw;          rhs = $1.statusRaw
-            }
-            return sortAscending ? lhs < rhs : lhs > rhs
-        }
-
-        return result
     }
 
+    var displayedPlans: [OrganizationPlan] { shownPlans }
+
+    /// Only for the folder tree sheet, which is built when it opens.
     var includedPlans: [OrganizationPlan] {
-        plans.filter { $0.status != .skipped }
+        plans.filter { $0.isUsable && $0.status != .skipped }
     }
 
-    var excludedPlans: [OrganizationPlan] {
-        plans.filter { $0.status == .skipped }
-    }
-
-    var duplicatePlanCount: Int {
-        includedPlans.filter { $0.destinationAbsPath.contains("/Duplicates/") }.count
-    }
-
-    var unknownDatePlanCount: Int {
-        includedPlans.filter { $0.destinationAbsPath.contains("/Unknown Date/") }.count
-    }
-
-    var damagedPlanCount: Int {
-        includedPlans.filter { Self.isDamaged($0) }.count
-    }
+    var duplicatePlanCount: Int { counts.duplicates }
+    var unknownDatePlanCount: Int { counts.unknownDate }
+    var damagedPlanCount: Int { counts.damaged }
 
     static func isDamaged(_ plan: OrganizationPlan) -> Bool {
-        plan.destinationAbsPath.contains("/\(MediaValidator.folderName)/")
+        isDamaged(destination: plan.destinationAbsPath)
+    }
+
+    static func isDamaged(destination: String) -> Bool {
+        destination.contains("/\(MediaValidator.folderName)/")
+    }
+
+    /// Recomputes the table rows and the counts. Call after `plans`, a plan's
+    /// status or destination, the filter, the search or the sort changes.
+    private func refreshDerived() {
+        counts = PlanCounts(plans)
+
+        let query = searchQuery.lowercased()
+        var rows: [(plan: OrganizationPlan, key: String)] = []
+        rows.reserveCapacity(plans.count)
+
+        for plan in plans where plan.isUsable {
+            let source = plan.sourceAbsPath
+            let destination = plan.destinationAbsPath
+            let skipped = plan.status == .skipped
+
+            if !query.isEmpty,
+               !source.lowercased().contains(query),
+               !destination.lowercased().contains(query) {
+                continue
+            }
+
+            let matches: Bool
+            switch filterStatus {
+            case .all:         matches = true
+            case .included:    matches = !skipped
+            case .excluded:    matches = skipped
+            case .duplicate:   matches = destination.contains("/Duplicates/")
+            case .unknownDate: matches = destination.contains("/Unknown Date/")
+            case .damaged:     matches = Self.isDamaged(destination: destination)
+            }
+            guard matches else { continue }
+
+            let key: String
+            switch sortColumn {
+            case .source:      key = source
+            case .destination: key = destination
+            case .status:      key = plan.statusRaw
+            }
+            rows.append((plan, key))
+        }
+
+        let ascending = sortAscending
+        rows.sort { ascending ? $0.key < $1.key : $0.key > $1.key }
+        shownPlans = rows.map(\.plan)
     }
 
     var destinationSummary: String {
@@ -160,6 +190,16 @@ struct PreviewView: View {
         }
         .onAppear { buildPlan() }
         .onDisappear { planTask?.cancel() }
+        .onChange(of: filterStatus) { _, _ in refreshDerived() }
+        .onChange(of: sortColumn) { _, _ in refreshDerived() }
+        .onChange(of: sortAscending) { _, _ in refreshDerived() }
+        .task(id: searchQuery) {
+            // Typing a word shouldn't re-filter 100,000 rows per letter.
+            guard !isPlanning else { return }
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            refreshDerived()
+        }
         .sheet(isPresented: $showLocationReview) {
             if let session = nav.scanSession {
                 LocationReviewSheet(files: session.files) { changed in
@@ -223,13 +263,13 @@ struct PreviewView: View {
         HStack(spacing: 16) {
             PlanStat(
                 icon: "checkmark.circle.fill",
-                value: "\(includedPlans.count)",
+                value: "\(counts.included)",
                 label: "ready",
                 color: .green
             )
             PlanStat(
                 icon: "minus.circle.fill",
-                value: "\(excludedPlans.count)",
+                value: "\(counts.excluded)",
                 label: "left alone",
                 color: .secondary
             )
@@ -445,6 +485,7 @@ struct PreviewView: View {
                             onDateAssigned: { updatedPlan in
                                 if let idx = plans.firstIndex(where: { $0.id == updatedPlan.id }) {
                                     plans[idx] = updatedPlan
+                                    refreshDerived()
                                 }
                             },
                             onInclusionChanged: { updatedPlan in
@@ -467,7 +508,7 @@ struct PreviewView: View {
 
                 Spacer()
 
-                Text("\(includedPlans.count) ready · \(excludedPlans.count) left alone")
+                Text("\(counts.included) ready · \(counts.excluded) left alone")
                     .font(.caption).foregroundStyle(.secondary)
 
                 Spacer()
@@ -478,22 +519,22 @@ struct PreviewView: View {
                     HStack {
                         Image(systemName: nav.organizationConfig.fileOperation == .move
                               ? "arrow.right.circle.fill" : "doc.on.doc.fill")
-                        Text("Organize \(includedPlans.count) Files")
+                        Text("Organize \(counts.included) Files")
                             .fontWeight(.semibold)
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .tint(nav.organizationConfig.fileOperation == .move ? .blue : .green)
-                .disabled(includedPlans.isEmpty)
+                .disabled(counts.included == 0)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
         }
         .sheet(isPresented: $showingConfirmation) {
             ApplyPreflightSheet(
-                planCount: includedPlans.count,
-                excludedCount: excludedPlans.count,
+                planCount: counts.included,
+                excludedCount: counts.excluded,
                 duplicateCount: duplicatePlanCount,
                 unknownDateCount: unknownDatePlanCount,
                 damagedCount: damagedPlanCount,
@@ -540,9 +581,10 @@ struct PreviewView: View {
             plan.status = included ? .pending : .skipped
         }
         try? context.save()
-        // SwiftData models are reference types. Reassigning the array makes the
-        // aggregate counts and filters update immediately as well.
+        // SwiftData models are reference types: the rows and counts have to be
+        // worked out again for the new statuses.
         plans = Array(plans)
+        refreshDerived()
     }
 
     private func friendlyDestination(for plan: OrganizationPlan) -> String {
@@ -609,6 +651,7 @@ struct PreviewView: View {
             try? context.save()
 
             plans = built
+            refreshDerived()
             missingPlaceCount = session.files.filter {
                 !$0.hasGPS && !$0.isScreenshot && $0.damageReason == nil && $0.mediaKind != .archive
             }.count

@@ -3,6 +3,9 @@
 
 import SwiftUI
 import SwiftData
+#if os(macOS)
+import AppKit
+#endif
 
 @main
 struct FoldiqApp: App {
@@ -22,6 +25,24 @@ struct FoldiqApp: App {
     let container: ModelContainer = FoldiqStore.makeContainer()
 
     @StateObject private var nav = AppNavigator()
+
+    init() {
+        // Copies of the Photos library and archive extractions left behind by a
+        // quit or crash can be tens of gigabytes. Delete them on launch, and
+        // delete this session's own when the app quits.
+        Task.detached(priority: .utility) {
+            TempWorkspace.sweepAbandoned()
+        }
+        #if os(macOS)
+        _ = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: nil
+        ) { _ in
+            TempWorkspace.removeAllOwned()
+        }
+        #endif
+    }
 
     var body: some Scene {
         #if os(macOS)

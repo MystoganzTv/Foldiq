@@ -36,17 +36,32 @@ final class FileMover {
     // MARK: - Apply
 
     /// Execute all plans in `plans`. Updates plan statuses and appends UndoEntries.
+    ///
+    /// `shouldStop` is asked before each file. When it returns true the run ends
+    /// between two files — never halfway through one — and every plan not
+    /// reached stays `.pending`, so the same plans can be applied again later.
+    /// Returns true when the run was stopped that way.
+    @discardableResult
     func apply(
         plans: [OrganizationPlan],
         manifest: UndoManifest,
         checkpoint: @MainActor @escaping () throws -> Void = {},
+        shouldStop: @MainActor () -> Bool = { false },
         onProgress: @MainActor @escaping (ApplyProgress) -> Void
-    ) async {
+    ) async -> Bool {
         let total = plans.count
         var done = 0
         var errors: [String] = []
+        var stopped = false
+        // Redrawing the screen for every file costs more than copying a small
+        // photo, so live progress is published at most ten times a second.
+        var lastProgressAt = Date.distantPast
 
         for plan in plans {
+            if shouldStop() {
+                stopped = true
+                break
+            }
             done += 1
 
             // The journal must exist before any file is touched; without it there
@@ -54,13 +69,15 @@ final class FileMover {
             guard manifest.isUsable else { break }
             guard plan.isUsable else { continue }
 
-            // Report progress for every file so the UI shows real-time file names.
-            let p = ApplyProgress(
-                done: done, total: total,
-                currentFile: plan.sourceURL.lastPathComponent,
-                errors: errors
-            )
-            onProgress(p)   // already @MainActor, no await needed
+            let now = Date()
+            if done == 1 || done == total || now.timeIntervalSince(lastProgressAt) >= 0.1 {
+                lastProgressAt = now
+                onProgress(ApplyProgress(
+                    done: done, total: total,
+                    currentFile: plan.sourceURL.lastPathComponent,
+                    errors: errors
+                ))
+            }
 
             // Create destination directory tree (fast metadata op, fine on main)
             let destDir = plan.destinationURL.deletingLastPathComponent()
@@ -91,6 +108,7 @@ final class FileMover {
             let op      = plan.operation
 
             // Hash + file I/O: both off the main thread, sequential (hash before move)
+            var journaled: UndoEntry?
             do {
                 // 1. Hash while the file is still at its source path
                 let hash = await Task.detached(priority: .utility) {
@@ -128,6 +146,7 @@ final class FileMover {
                     Self.discard(entry, from: manifest)
                     throw error
                 }
+                journaled = entry
 
                 // 2. Move or copy
                 try await Task.detached(priority: .utility) {
@@ -147,8 +166,12 @@ final class FileMover {
                     plan.status    = .done
                     plan.appliedAt = Date()
                 }
-
-                try checkpoint()
+                // No save here: the next file's intent checkpoint saves this
+                // result too, and the final checkpoint below covers the last
+                // file. Saving twice per file was a large share of the time on
+                // big libraries. A crash in between leaves this entry marked
+                // not completed, which Undo already resolves by checking both
+                // locations — the same as a crash during the operation itself.
 
             } catch {
                 let human = Self.humanizeError(error)
@@ -157,29 +180,32 @@ final class FileMover {
                     plan.errorMessage = human
                 }
                 errors.append(srcURL.lastPathComponent + ": " + human)
-                // Remove a journal entry only when no destination exists and
-                // the original is still present. Every ambiguous state remains
-                // recorded for safe recovery.
-                if manifest.isUsable,
+                // Remove this file's journal entry only when no destination
+                // exists and the original is still present. Every ambiguous
+                // state remains recorded for safe recovery. (The entry is held
+                // directly: the relationship array has no reliable order, and
+                // reading it would load every entry of a huge run.)
+                if let entry = journaled, entry.isUsable, !entry.wasCompleted,
+                   manifest.isUsable,
                    FileManager.default.fileExists(atPath: srcPath),
-                   !FileManager.default.fileExists(atPath: destPath),
-                   let last = manifest.entries.last,
-                   last.originalPath == srcPath,
-                   last.newPath == destPath {
-                    Self.discard(last, from: manifest)
-                    try? checkpoint()
+                   !FileManager.default.fileExists(atPath: destPath) {
+                    Self.discard(entry, from: manifest)
                 }
+                try? checkpoint()
             }
         }
 
-        // The live update above happens before each operation so the active file
-        // is visible. Publish a final snapshot as well, including any last error.
+        // Persist the last file's result (see the note after the operation).
+        try? checkpoint()
+
+        // Publish a final snapshot, including any last error.
         onProgress(ApplyProgress(
             done: done,
             total: total,
-            currentFile: plans.last?.sourceURL.lastPathComponent ?? "",
+            currentFile: stopped ? "" : (plans.last?.sourceURL.lastPathComponent ?? ""),
             errors: errors
         ))
+        return stopped
     }
 
     // MARK: - Error humanization
@@ -422,7 +448,7 @@ final class FileMover {
         guard !dirs.isEmpty else { return }
         await Task.detached(priority: .background) {
             for dir in dirs {
-                try? FileManager.default.removeItem(at: dir)
+                TempWorkspace.remove(dir)
             }
         }.value
     }
@@ -516,7 +542,12 @@ final class FileMover {
         reviewFolderName: String
     ) -> [(source: URL, destination: URL)] {
         let fm = FileManager.default
+        let rootPath = root.resolvingSymlinksInPath().path
         let reviewRoot = root.appendingPathComponent(reviewFolderName)
+        let reviewPath = reviewRoot.resolvingSymlinksInPath().path
+        let expectedPaths = Set(expectedDestinationPaths.map {
+            URL(fileURLWithPath: $0).resolvingSymlinksInPath().path
+        })
 
         guard let enumerator = fm.enumerator(
             at: root,
@@ -527,13 +558,14 @@ final class FileMover {
         var moves: [(source: URL, destination: URL)] = []
         var reserved = Set<String>()
         for case let fileURL as URL in enumerator {
-            let path = fileURL.path
-            if path.hasPrefix(reviewRoot.path + "/") { continue }
+            let parentPath = fileURL.deletingLastPathComponent().resolvingSymlinksInPath().path
+            let path = parentPath + "/" + fileURL.lastPathComponent
+            guard path.hasPrefix(rootPath + "/"), !path.hasPrefix(reviewPath + "/") else { continue }
             let values = try? fileURL.resourceValues(forKeys: [.isDirectoryKey])
             if values?.isDirectory == true { continue }
-            if expectedDestinationPaths.contains(path) { continue }
+            if expectedPaths.contains(path) { continue }
 
-            let relativePath = String(path.dropFirst(root.path.count + 1))
+            let relativePath = String(path.dropFirst(rootPath.count + 1))
             var destination = resolveFileCollision(reviewRoot.appendingPathComponent(relativePath))
             var counter = 1
             while reserved.contains(destination.path) {
@@ -649,18 +681,17 @@ extension URL {
 
     /// Compute SHA-256 of file contents. Returns nil if file is unreadable.
     func sha256() -> String? {
-        guard let stream = InputStream(url: self) else { return nil }
-        stream.open()
-        defer { stream.close() }
+        do {
+            let file = try FileHandle(forReadingFrom: self)
+            defer { try? file.close() }
 
-        var hasher = SHA256()
-        var buffer = [UInt8](repeating: 0, count: 1_048_576)
-        while stream.hasBytesAvailable {
-            let count = stream.read(&buffer, maxLength: buffer.count)
-            if count < 0 { return nil }
-            if count == 0 { break }
-            hasher.update(data: Data(buffer[0..<count]))
+            var hasher = SHA256()
+            while let chunk = try file.read(upToCount: 1_048_576), !chunk.isEmpty {
+                hasher.update(data: chunk)
+            }
+            return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        } catch {
+            return nil
         }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }

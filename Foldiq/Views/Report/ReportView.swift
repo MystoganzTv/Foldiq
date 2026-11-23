@@ -51,9 +51,39 @@ struct ReportView: View {
         let revealURL: URL?
     }
 
-    var done:    [OrganizationPlan] { plans.filter { $0.status == .done } }
-    var skipped: [OrganizationPlan] { plans.filter { $0.status == .skipped } }
-    var errors:  [OrganizationPlan] { plans.filter { $0.status == .error } }
+    /// Plans sorted by status once per load. On a library of 100,000 files,
+    /// filtering every time the screen redraws made the report sluggish.
+    struct PlanBuckets {
+        var done: [OrganizationPlan] = []
+        var skipped: [OrganizationPlan] = []
+        var errors: [OrganizationPlan] = []
+        /// Not reached because the person stopped the run partway.
+        var notReached: [OrganizationPlan] = []
+
+        init() {}
+
+        init(_ plans: [OrganizationPlan]) {
+            for plan in plans where plan.isUsable {
+                switch plan.status {
+                case .done:    done.append(plan)
+                case .skipped: skipped.append(plan)
+                case .error:   errors.append(plan)
+                case .pending: notReached.append(plan)
+                }
+            }
+        }
+    }
+
+    @State private var buckets = PlanBuckets()
+
+    var done:    [OrganizationPlan] { buckets.done }
+    var skipped: [OrganizationPlan] { buckets.skipped }
+    var errors:  [OrganizationPlan] { buckets.errors }
+    var notReached: [OrganizationPlan] { buckets.notReached }
+
+    /// The error list is a plain stack, not a lazy list: showing every failure
+    /// of a huge run (a full disk fails them all) would freeze the window.
+    private static let maxListedErrors = 200
 
     /// Undo moves files back in Move mode, but *deletes* the organized duplicates
     /// in Copy mode. Every label below has to match what actually happens on disk.
@@ -140,9 +170,9 @@ struct ReportView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 10) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green).font(.title)
-                            Text("Organization Complete")
+                            Image(systemName: notReached.isEmpty ? "checkmark.circle.fill" : "stop.circle.fill")
+                                .foregroundStyle(notReached.isEmpty ? .green : .orange).font(.title)
+                            Text(notReached.isEmpty ? "Organization Complete" : "Organization Stopped")
                                 .font(.largeTitle).fontWeight(.bold)
                         }
                         if let session = nav.scanSession {
@@ -234,7 +264,7 @@ struct ReportView: View {
                                 let maxCount = orgStats.yearBreakdown.map(\.count).max() ?? 1
                                 ForEach(orgStats.yearBreakdown, id: \.year) { item in
                                     HStack(spacing: 8) {
-                                        Text("\(item.year)")
+                                        Text(verbatim: String(item.year))
                                             .font(.caption).monospacedDigit()
                                             .frame(width: 38, alignment: .leading)
                                         GeometryReader { geo in
@@ -276,6 +306,26 @@ struct ReportView: View {
                     .background(.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
                 }
 
+                // ── Stopped partway ────────────────────────────────────────
+                if !notReached.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Not Organized Yet", systemImage: "pause.circle.fill")
+                            .font(.headline).foregroundStyle(.orange)
+                        Text(notReachedMessage)
+                            .font(.callout).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button {
+                            continueOrganizing()
+                        } label: {
+                            Label("Continue Organizing", systemImage: "play.fill")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                }
+
                 // ── Errors list ────────────────────────────────────────────
                 if !errors.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
@@ -298,7 +348,12 @@ struct ReportView: View {
                             .buttonStyle(.bordered)
                         }
 
-                        ForEach(errors) { plan in
+                        if errors.count > Self.maxListedErrors {
+                            Text("Showing the first \(Self.maxListedErrors) of \(errors.count) errors. Copy Failed Paths includes all of them.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+
+                        ForEach(errors.prefix(Self.maxListedErrors)) { plan in
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack(alignment: .top, spacing: 8) {
                                     Image(systemName: "xmark.circle")
@@ -507,6 +562,7 @@ struct ReportView: View {
             predicate: #Predicate { $0.sessionID == sid }
         )
         plans = (try? context.fetch(planDesc)) ?? []
+        buckets = PlanBuckets(plans)
 
         let mDesc = FetchDescriptor<UndoManifest>(
             predicate: #Predicate { $0.sessionID == sid }
@@ -611,6 +667,7 @@ struct ReportView: View {
                 result.restored += partial.restored
                 result.errors += partial.errors
             }
+            buckets      = PlanBuckets(plans)
             isUndoing    = false
             undoRestoredCount = result.restored
             undoComplete = result.errors.isEmpty
@@ -649,6 +706,21 @@ struct ReportView: View {
                 revealURL: nil
             )
         }
+    }
+
+    private var notReachedMessage: String {
+        let count = notReached.count
+        if count == 1 {
+            return "You stopped before 1 file was reached. It is still where it was. Continue to organize it into the same library — Undo will reverse both runs together."
+        }
+        return "You stopped before \(count) files were reached. They are still where they were. Continue to organize them into the same library — Undo will reverse both runs together."
+    }
+
+    /// The files a stopped run never reached are still pending; Apply picks up
+    /// every pending plan of the session and journals them in a new run.
+    private func continueOrganizing() {
+        guard !notReached.isEmpty else { return }
+        nav.go(to: .apply)
     }
 
     private func retryFailedPlans() {

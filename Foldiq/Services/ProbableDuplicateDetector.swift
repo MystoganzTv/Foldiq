@@ -128,7 +128,8 @@ final class ProbableDuplicateDetector {
 
         var nextPosition = 0
         var completed = 0
-        let workerCount = min(2, visualIndexes.count)
+        // Up to four pictures decoded at once on machines with the cores for it.
+        let workerCount = min(DuplicateDetector.workerCount, visualIndexes.count)
         await withTaskGroup(of: (Int, [UInt64]?).self) { group in
             func enqueueNext() {
                 guard nextPosition < visualIndexes.count else { return }

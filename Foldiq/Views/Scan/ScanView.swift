@@ -60,6 +60,13 @@ struct ScanView: View {
                 nav.scanSession = session
                 // Store archive temp dirs so ApplyView can clean them up after apply.
                 nav.archiveTempDirs = coordinator.archiveTempDirs
+            } else if !Task.isCancelled {
+                // The scan failed: nothing will use what it copied or extracted.
+                // (A cancelled scan is cleaned up by restart() and the stager.)
+                let leftovers = coordinator.archiveTempDirs
+                Task.detached(priority: .background) {
+                    for dir in leftovers { TempWorkspace.remove(dir) }
+                }
             }
             if !Task.isCancelled {
                 AnonymousTelemetry.send(

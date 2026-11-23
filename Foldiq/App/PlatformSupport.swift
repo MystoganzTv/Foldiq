@@ -402,3 +402,144 @@ struct RatingInviteCard: View {
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }
 }
+
+// MARK: ─── Temporary workspaces ───────────────────────────────────────────────
+
+/// Scratch folders Foldiq creates in its temporary directory: copies of the
+/// Photos library staged for organizing, and media extracted from archives.
+/// They can be as large as the whole library, so none may outlive its use.
+///
+/// Each folder holds a lock file that the process which created it keeps
+/// locked for as long as it needs the folder. The lock is released when that
+/// process quits or crashes, so a later launch can tell a folder left behind
+/// from one still in use by another running copy of Foldiq (App Store, web and
+/// Xcode copies all share the same sandbox container).
+enum TempWorkspace {
+    static let photosPrefix = "Foldiq-Photos-"
+    static let archivePrefix = "foldiq_"
+    static let lockFileName = ".foldiq-workspace-lock"
+
+    /// Folders made by versions without a lock file are only removed once they
+    /// have not changed for this long, so an older copy that is still running
+    /// keeps its folder.
+    static let unlockedGracePeriod: TimeInterval = 24 * 60 * 60
+
+    private static let prefixes = [photosPrefix, archivePrefix]
+    private static let registry = Registry()
+
+    /// Creates an empty, locked workspace folder named `<prefix><UUID>`.
+    static func create(prefix: String, in parent: URL = FileManager.default.temporaryDirectory) throws -> URL {
+        let url = parent.appendingPathComponent(prefix + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+
+        let lockPath = url.appendingPathComponent(lockFileName).path
+        let fd = open(lockPath, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        if fd >= 0 {
+            if flock(fd, LOCK_EX | LOCK_NB) == 0 {
+                registry.add(key(for: url), fd: fd)
+            } else {
+                // An unlocked lock file would let another launch delete a folder
+                // in use; without one the grace period protects it instead.
+                close(fd)
+                unlink(lockPath)
+            }
+        }
+        return url
+    }
+
+    /// Deletes a workspace and releases its lock. Safe to call more than once
+    /// and for folders this process doesn't own.
+    static func remove(_ url: URL) {
+        let path = key(for: url)   // before deleting, while every component still resolves
+        try? FileManager.default.removeItem(at: url)
+        if let fd = registry.take(path) {
+            close(fd)
+        }
+    }
+
+    /// Workspaces this process created and hasn't removed yet.
+    static func ownedWorkspaces() -> [URL] {
+        registry.paths().map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    /// Deletes every workspace this process created. Called when the app quits.
+    static func removeAllOwned() {
+        for url in ownedWorkspaces() {
+            remove(url)
+        }
+    }
+
+    /// Deletes workspaces left behind by a copy of Foldiq that is no longer
+    /// running. Called once at launch. Returns the folders it removed.
+    @discardableResult
+    static func sweepAbandoned(
+        in parent: URL = FileManager.default.temporaryDirectory,
+        now: Date = Date()
+    ) -> [URL] {
+        let fileManager = FileManager.default
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey, .contentModificationDateKey]
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: parent,
+            includingPropertiesForKeys: keys
+        ) else { return [] }
+
+        var removed: [URL] = []
+        for url in entries {
+            let name = url.lastPathComponent
+            guard prefixes.contains(where: { prefix in
+                name.hasPrefix(prefix) && UUID(uuidString: String(name.dropFirst(prefix.count))) != nil
+            }) else { continue }
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            guard values?.isDirectory == true, values?.isSymbolicLink == false else { continue }
+            guard !registry.contains(key(for: url)) else { continue }
+
+            let lockPath = url.appendingPathComponent(lockFileName).path
+            if fileManager.fileExists(atPath: lockPath) {
+                let fd = open(lockPath, O_RDWR | O_CLOEXEC)
+                guard fd >= 0 else { continue }
+                defer { close(fd) }
+                // Still locked: another running copy of Foldiq is using it.
+                guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { continue }
+                try? fileManager.removeItem(at: url)
+            } else {
+                guard let modified = values?.contentModificationDate,
+                      now.timeIntervalSince(modified) >= unlockedGracePeriod else { continue }
+                try? fileManager.removeItem(at: url)
+            }
+            if !fileManager.fileExists(atPath: url.path) {
+                removed.append(url)
+            }
+        }
+        return removed
+    }
+
+    private static func key(for url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    /// Lock file descriptors of the workspaces this process owns, by path.
+    private final class Registry: @unchecked Sendable {
+        private let lock = NSLock()
+        private var descriptors: [String: Int32] = [:]
+
+        func add(_ path: String, fd: Int32) {
+            lock.lock(); defer { lock.unlock() }
+            descriptors[path] = fd
+        }
+
+        func take(_ path: String) -> Int32? {
+            lock.lock(); defer { lock.unlock() }
+            return descriptors.removeValue(forKey: path)
+        }
+
+        func contains(_ path: String) -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            return descriptors[path] != nil
+        }
+
+        func paths() -> [String] {
+            lock.lock(); defer { lock.unlock() }
+            return Array(descriptors.keys)
+        }
+    }
+}

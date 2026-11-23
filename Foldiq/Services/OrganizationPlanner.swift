@@ -39,6 +39,10 @@ actor OrganizationPlanner {
 
         // Track reserved destination paths to handle filename collisions.
         var reservedPaths = Set<String>()
+        // Where the _1, _2… search resumes for each name. Cameras restart their
+        // numbering, so a big library can hold thousands of IMG_0001.JPG; starting
+        // from _1 every time made planning slow down with the square of that.
+        var nextSuffix: [String: Int] = [:]
 
         // Optional "Rename files by capture date". Files left out keep their name.
         let renamedFiles = DateFileNaming.plannedNames(for: files, config: config)
@@ -61,7 +65,7 @@ actor OrganizationPlanner {
 
             // Resolve collision-safe filename
             var destURL = folder.appendingPathComponent(renamedFiles[file.id] ?? file.filename)
-            destURL = resolveCollision(destURL, reserved: &reservedPaths)
+            destURL = Self.resolveCollision(destURL, reserved: &reservedPaths, nextSuffix: &nextSuffix)
             reservedPaths.insert(destURL.path)
 
             // NOTE: Do NOT write file.plannedDestinationPath here.
@@ -251,20 +255,30 @@ actor OrganizationPlanner {
     // MARK: ─── Collision Resolution ───────────────────────────────────────────
 
     /// If `url` is already reserved on disk or in our plan, append _1, _2, … until unique.
-    private func resolveCollision(_ url: URL, reserved: inout Set<String>) -> URL {
-        guard reserved.contains(url.path) || FileManager.default.fileExists(atPath: url.path) else {
+    ///
+    /// Every suffix below the remembered one is already taken (reserved by this
+    /// plan or present on disk), so resuming there gives the same names as
+    /// counting from _1 — without re-checking them each time.
+    static func resolveCollision(
+        _ url: URL,
+        reserved: inout Set<String>,
+        nextSuffix: inout [String: Int]
+    ) -> URL {
+        let path = url.path
+        guard reserved.contains(path) || FileManager.default.fileExists(atPath: path) else {
             return url
         }
         let dir  = url.deletingLastPathComponent()
         let name = url.deletingPathExtension().lastPathComponent
         let ext  = url.pathExtension
-        var counter = 1
+        var counter = nextSuffix[path] ?? 1
         var candidate = url
         repeat {
             let newName = ext.isEmpty ? "\(name)_\(counter)" : "\(name)_\(counter).\(ext)"
             candidate = dir.appendingPathComponent(newName)
             counter += 1
         } while reserved.contains(candidate.path) || FileManager.default.fileExists(atPath: candidate.path)
+        nextSuffix[path] = counter
         return candidate
     }
 }

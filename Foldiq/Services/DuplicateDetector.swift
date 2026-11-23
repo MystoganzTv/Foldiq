@@ -67,22 +67,41 @@ final class DuplicateDetector {
         }
 
         // ── 3. Hash candidates (only same-size buckets) off main thread ───
+        // A few files are hashed at once: hashing is mostly waiting for the
+        // disk, and one at a time left it idle on big libraries.
+        let candidates = bySize.values.filter { $0.count > 1 }.flatMap { $0 }
         var idToHash: [UUID: String] = [:]
+        idToHash.reserveCapacity(candidates.count)
         var processed = 0
+        let workers = Self.workerCount
 
-        for (_, bucket) in bySize where bucket.count > 1 {
-            for snap in bucket {
+        await withTaskGroup(of: (UUID, URL, String?).self) { group in
+            var nextToStart = 0
+            var inFlight = 0
+
+            func startMore() {
+                while nextToStart < candidates.count, inFlight < workers {
+                    let snap = candidates[nextToStart]   // Sendable ✓
+                    nextToStart += 1
+                    inFlight += 1
+                    group.addTask { (snap.id, snap.url, Self.hashFile(at: snap.url)) }
+                }
+            }
+
+            startMore()
+            while let (id, url, hash) = await group.next() {
+                inFlight -= 1
+                if Task.isCancelled {
+                    group.cancelAll()
+                    break
+                }
+                if let hash { idToHash[id] = hash }
                 processed += 1
-                if processed % 10 == 0 {
-                    let p = Progress(processed: processed, total: total,
-                                     currentFile: snap.url.lastPathComponent)
-                    onProgress(p)   // already @MainActor
+                if processed % 10 == 0 || processed == total {
+                    onProgress(Progress(processed: processed, total: total,
+                                        currentFile: url.lastPathComponent))
                 }
-
-                // Hashing runs off the main thread; snap is Sendable ✓
-                if let hash = await Self.computeHash(url: snap.url) {
-                    idToHash[snap.id] = hash
-                }
+                startMore()
             }
         }
 
@@ -129,13 +148,18 @@ final class DuplicateDetector {
 
     // MARK: - Hash computation (off main thread)
 
-    private static func computeHash(url: URL) async -> String? {
-        return await Task.detached(priority: .utility) {
-            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
-                return nil
-            }
-            let digest = SHA256.hash(data: data)
-            return digest.map { String(format: "%02x", $0) }.joined()
-        }.value
+    /// Files hashed at the same time.
+    static var workerCount: Int {
+        min(max(ProcessInfo.processInfo.activeProcessorCount / 2, 2), 4)
+    }
+
+    /// SHA-256 of the whole file, or nil when it can't be read. Blocking; only
+    /// called from child tasks, never on the main actor.
+    static func hashFile(at url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
+            return nil
+        }
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
